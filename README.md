@@ -48,14 +48,17 @@ deep_autoviml is a powerful library with a very simple design goal:
 > to experiment with and build  tensorflow.keras
 > preprocessing layers and models.
 
-![how_deep](deep_3.jpg)
-
 ## Technology
 
-deep_autoviml uses a number of open source projects to work properly:
+deep_autoviml uses the latest in Tensorflow (2.4.1+) and Keras modeling: the Keras preprocessing layers which enable you to encapsulate feature engineering and preprocessing into the model itself. This makes the process for training and predictions the same: just feed input data (in the form of tf.data.Datasets) and the model will take care of preprocessing. 
 
-- [tensorflow](https://www.tensorflow.org/) - we use TF 2.4.1 and later versions only
+![how_deep](deep_4.jpg)
+
+To perform its preprocessing on the model itself, deep_autoviml uses the following:
+- [tensorflow](https://www.tensorflow.org/) - we use TF 2.4.1+ and later versions only
 - [tf.keras](https://www.tensorflow.org/api_docs/python/tf/keras) - we use the awesome tf.keras library with its latest features to add preprocessing layers to the model directly
+
+In addition, to select the best hyper parameters for the model, it uses a new open source library:
 - [storm-tuner](https://github.com/ben-arnao/StoRM) - storm-tuner is an amazing new library that enables us to quickly fine tune our keras sequential models with hyperparameters and find a performant model within a few trials.
 
 ## Install
@@ -88,11 +91,12 @@ from deep_autoviml import deep_autoviml as deepauto
 Load a data set (any .csv or .gzip or .gz or .txt file) into deep_autoviml and it will split it into Train and Validation  datasets inside. You only need to provide a target variable, a project_name to store files in your local machine and leave the rest to defaults:
 
 ```
-model, cat_vocab_dict = deepauto.run(train, target, keras_model_type="auto",project_name="deep_autoviml",
-                        keras_options={}, model_options={}, save_model_flag=True, use_my_model='', verbose=0)
+model, cat_vocab_dict = deepauto.run(train, target, keras_model_type="auto",
+            project_name="deep_autoviml", keras_options={}, model_options={}, 
+            save_model_flag=True, use_my_model='', verbose=0)
 ```
 
-Once deep_autoviml writes your saved model file to disk in the current directory under project_name folder, you can call it from anywhere (including cloud) for predictions like this using the model and cat_vocab_dict generated above:
+Once deep_autoviml writes your saved model and cat_vocab_dict files to disk in the project_name directory, you can load it from anywhere (including cloud) for predictions like this using the model and cat_vocab_dict generated above:
 
 ```
 predictions = deepauto.predict_model(model, project_name, test_dataset=test,
@@ -112,9 +116,11 @@ predictions = deepauto.predict_model(model, project_name, test_dataset=test,
 - `use_my_model`: bring your own mode that you have defined previously. This model must be a keras Sequential model with NO input layers or output layers! We will add those layers. Just specify your hidden layers (Dense, Conv1D, Conv2D, etc.), dropouts, activations, etc. If you don't want to use this option, just leave it as "empty string".
 - `verbose`: must be 0, 1 or 2. Can also be True or False.
 
+![how_deep](deep_3.jpg)
+
 ## Tips
 You can use the following tricks to make deep_autoviml work best for you:
-- `model_options = {"model_use_case":'pipeline'}`: If you only want keras preprocessing layers (i.e. data Pipeline) then set the model_use_case to pipeline and Deep Auto_ViML will not build a model but just return keras input and preprocessing layers. You can add these inputs and output layers to any sequential model you want and build your own custom model.
+- `model_options = {"model_use_case":'pipeline'}`: If you only want keras preprocessing layers (i.e. keras pipeline) then set the model_use_case input to "pipeline" and Deep Auto_ViML will not build a model but just return the keras input and preprocessing layers. You can use these inputs and output layers to any sequential model you choose and build your own custom model.
 - `model_options = {max_trials:5}`: Always start with a small number of max_trials in model_options dictionary or a dataframe. Start with 5 trials and increase it by 20 each time to see if performance improves. Stop when performance of the model doesn't improve any more. This takes time.
 - `model_options = {'cat_feat_cross_flag':True}`: default is False but change it to True and see if adding feature crosses with your categorical features helps improve the model. However, this will explode the number of features in your model. Be careful.
 - `model_options = {'nlp_char_limit':20}`: If you want to run NLP Text preprocessing on any column, set this character limit low and deep_autoviml will then detect that column as an NLP column automatically. The default is 30 chars.
