@@ -27,7 +27,7 @@ deep autoviml is meant for:
 - they can discard the model yet keep the pipeline for further fine-tuning and model building of their own
 - ✨Open Source  ✨
 
-![how_it_works](deep_1.jpg)
+![why_deep](deep_2.jpg)
 
 ## Features
 
@@ -39,16 +39,14 @@ deep autoviml is meant for:
 - Since your model contains the preprocessing layers built-in, you just need to provide Tf serving with raw data to test and you will get back predictions in return
 - Export documents as Markdown, HTML and PDF
 
-![why_deep](deep_2.jpg)
+![how_it_works](deep_1.jpg)
 
-deep_autoviml is a powerful library with a very simple interface:
+deep_autoviml is a powerful library with a very simple design goal:
 
 > The overriding design goal for deep_autoviml 
-> syntax was to make it as easy
-> as possible to use. The idea that 
-> building a tensorflow model and pipeline
-> should be complex and take extensive time,
-> is no longer correct with deep_autoviml.
+> syntax was to make it as easy as possible
+> to experiment with and build  tensorflow.keras
+> preprocessing layers and models.
 
 ![how_deep](deep_3.jpg)
 
@@ -84,16 +82,22 @@ deep_autoviml requires only a single line of code to get started. You can howeve
 Instructions on how to use them are linked below.
 
 ```
-from deep_autoviml import deep_autoviml as deep
+from deep_autoviml import deep_autoviml as deepauto
 ```
 
 Load a data set (any .csv or .gzip or .gz or .txt file) into deep_autoviml and it will split it into Train and Validation  datasets inside. You only need to provide a target variable, a project_name to store files in your local machine and leave the rest to defaults:
 
 ```
-output = deepauto.run(train, target, keras_model_type="auto",project_name="deep_autoviml", keras_options={}, model_options={}, save_model_flag=True, use_my_model='', verbose=0)
+model, cat_vocab_dict = deepauto.run(train, target, keras_model_type="auto",project_name="deep_autoviml",
+                        keras_options={}, model_options={}, save_model_flag=True, use_my_model='', verbose=0)
 ```
 
-Finally, deep_autoviml writes your saved model file to disk in the current directory under project_name folder.
+Once deep_autoviml writes your saved model file to disk in the current directory under project_name folder, you can call it from anywhere (including cloud) for predictions like this using the model and cat_vocab_dict generated above:
+
+```
+predictions = deepauto.predict_model(model, project_name, test_dataset=test,
+                                 keras_model_type=keras_model_type, cat_vocab_dict=cat_vocab_dict)
+```
 
 ## API
 **Arguments**
