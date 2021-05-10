@@ -28,8 +28,12 @@ np.set_printoptions(precision=3, suppress=True)
 ############################################################################################
 # TensorFlow ≥2.4 is required
 import tensorflow as tf
-np.random.seed(42)
-tf.random.set_seed(42)
+import os
+def set_seed(seed=31415):
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
 from tensorflow.keras import layers
 from tensorflow import keras
 from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup, CategoryCrossing
@@ -92,6 +96,7 @@ from tensorflow.keras import callbacks
 ###   You can also pip install storm-tuner --upgrade to get the latest version ##########
 from storm_tuner import Tuner
 #########################################################################################
+set_seed()
 class OneCycleScheduler(keras.callbacks.Callback):
     def __init__(self, iterations, max_rate, start_rate=None,
                  last_iterations=None, last_rate=None):
