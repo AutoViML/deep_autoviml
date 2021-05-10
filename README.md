@@ -42,11 +42,11 @@ These are the main features that distinguish deep_autoviml from other libraries:
 
 deep_autoviml is a powerful new deep learning library with a very simple design goal:
 
->       The overriding design goal for deep_autoviml 
->       was to make it as easy as possible for novices 
->       and experts to experiment with and build tensorflow.keras
->       preprocessing pipelines and models in as few lines of code
->       as possible.
+>           The overriding design goal for deep_autoviml 
+>           was to make it as easy as possible for novices and 
+>           experts alike to experiment with and build tensorflow.keras
+>           preprocessing pipelines and models in as few lines of code
+>           as possible.
 
 ## Technology
 
