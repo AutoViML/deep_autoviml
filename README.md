@@ -22,41 +22,39 @@
 
 ## Background
 deep_autoviml is a tensorflow >2.4-enabled, keras-ready, model and pipeline building utility.
-deep autoviml is meant for:
-- data engineers, data scientists and ml engineers to quickly prototype TF 2.4.1+ models and pipelines for any data set, any size
-- they can discard the model yet keep the pipeline for further fine-tuning and model building of their own
-- ✨Open Source  ✨
+deep autoviml is meant for data engineers, data scientists and ml engineers to quickly prototype TF 2.4.1+ models and pipelines for any data set, any size. 
+- ✨It is also Open Source under Apache 2.o licence  ✨
 
 ![why_deep](deep_2.jpg)
 
 ## Features
-
-- Import a CSV file(s) and watch deep_autoviml quickly convert it into a keras preprocessing pipeline and a functional model in one line of code
-- Uses the powerful but fast, [STORM tuner](https://github.com/ben-arnao/StoRM) to quickly search for best hyperparameters of the keras model
-- if you want to fine tune the model, you can increase change the model_options or keras_options dictionaries to provide your own custom tuning
+These are the main features that distinguish deep_autoviml from other libraries:
+- It uses Keras Preprocessing Layers which are more intuitive, and are included inside your model to simplify deployment
+- The pipeline is returned to you to use as inputs in your own functional model (if you so wish)
+- It can import any csv, txt or gzip file or file patterns (that fit multiple files) and it can scale to any data set of any size due to tf.data.Dataset's superior data pipelining features (such as cache, prefetch, batch, etc.)
+- It uses an amazing new tuner called [STORM tuner](https://github.com/ben-arnao/StoRM) that quickly searches for the best hyperparameters for your keras model in fewer than 25 trials
+- If you want to fine tune your model even further, you can fiddle with a wide variety of model options or keras options using **kwargs like dictionaries
 - You can import your own custom Sequential model and watch it transform it into a functional model with additional preprocessing and output layers and train the model with your data 
 - You can save the model on your local machine or copy it to a GCS (or any cloud provider's) storage and serve it from there using TF Serving 
-- Since your model contains the preprocessing layers built-in, you just need to provide Tf serving with raw data to test and you will get back predictions in return
-- Export documents as Markdown, HTML and PDF
+- Since your model contains the preprocessing layers built-in, you just need to provide your Tensorflow serving model with raw data to test and get back predictions in the same format as your training labels.
 
 ![how_it_works](deep_1.jpg)
 
-deep_autoviml is a powerful library with a very simple design goal:
+deep_autoviml is a powerful new deep learning library with a very simple design goal:
 
-> The overriding design goal for deep_autoviml 
-> syntax was to make it as easy as possible
-> to experiment with and build  tensorflow.keras
-> preprocessing layers and models.
+>       The overriding design goal for deep_autoviml 
+>       was to make it as easy as possible for novices 
+>       and experts to experiment with and build tensorflow.keras
+>       preprocessing pipelines and models in as few lines of code
+>       as possible.
 
 ## Technology
 
-deep_autoviml uses the latest in Tensorflow (2.4.1+) and Keras modeling: the Keras preprocessing layers which enable you to encapsulate feature engineering and preprocessing into the model itself. This makes the process for training and predictions the same: just feed input data (in the form of tf.data.Datasets) and the model will take care of preprocessing. 
+deep_autoviml uses the latest in tensorflow (2.4.1+) td.data.Datasets and tf.keras preprocessing technologies: the Keras preprocessing layers enable you to encapsulate feature engineering and preprocessing into the model itself. This makes the process for training and predictions the same: just feed input data (in the form of tf.data.Datasets) and the model will take care of all preprocessing before predictions. 
 
 ![how_deep](deep_4.jpg)
 
-To perform its preprocessing on the model itself, deep_autoviml uses the following:
-- [tensorflow](https://www.tensorflow.org/) - we use TF 2.4.1+ and later versions only
-- [tf.keras](https://www.tensorflow.org/api_docs/python/tf/keras) - we use the awesome tf.keras library with its latest features to add preprocessing layers to the model directly
+To perform its preprocessing on the model itself, deep_autoviml [tensorflow](https://www.tensorflow.org/) (TF 2.4.1+ and later versions) and [tf.keras](https://www.tensorflow.org/api_docs/python/tf/keras) experimental preprocessing layers: these layers are part of your saved model. They become part of the model's computational graph that can be optimized and executed on any device including GPU's and TPU's. By packaging everything as a single unit, we save the effort in reimplementing the preprocessing logic on the production server. The new model can take raw text directly without preprocessing. This avoids missing or incorrect configuration for the preprocesing_layer during production.
 
 In addition, to select the best hyper parameters for the model, it uses a new open source library:
 - [storm-tuner](https://github.com/ben-arnao/StoRM) - storm-tuner is an amazing new library that enables us to quickly fine tune our keras sequential models with hyperparameters and find a performant model within a few trials.
@@ -81,8 +79,7 @@ pip install git+https://github.com/AutoViML/deep_autoviml.git
 
 ## Usage
 
-deep_autoviml requires only a single line of code to get started. You can however, fine tune the model we build using multiple options as dictionaries named "model_options" and "keras_options". These two dictionaries enable you to fine tune hyperparameters for building the tf.keras model.
-Instructions on how to use them are linked below.
+deep_autoviml can be invoked with a simple import and run statement:
 
 ```
 from deep_autoviml import deep_autoviml as deepauto
@@ -100,11 +97,13 @@ Once deep_autoviml writes your saved model and cat_vocab_dict files to disk in t
 
 ```
 predictions = deepauto.predict_model(model, project_name, test_dataset=test,
-                                 keras_model_type=keras_model_type, cat_vocab_dict=cat_vocab_dict)
+            keras_model_type=keras_model_type, cat_vocab_dict=cat_vocab_dict)
 ```
 
 ## API
 **Arguments**
+
+deep_autoviml requires only a single line of code to get started. You can however, fine tune the model we build using multiple options using dictionaries named "model_options" and "keras_options". These two dictionaries act like **kwargs to enable you to fine tune hyperparameters for building our tf.keras model. Instructions on how to use them are provided below.
 
 - `train`: could be a datapath+filename or a pandas dataframe. Deep Auto_ViML even handles gz or gzip files. You must specify the full path and file name for it find and load it.
 - `target`: name of the target variable in the data set.
@@ -119,7 +118,7 @@ predictions = deepauto.predict_model(model, project_name, test_dataset=test,
 ![how_deep](deep_3.jpg)
 
 ## Tips
-You can use the following tricks to make deep_autoviml work best for you:
+You can use the following arguments in your input to make deep_autoviml work best for you:
 - `model_options = {"model_use_case":'pipeline'}`: If you only want keras preprocessing layers (i.e. keras pipeline) then set the model_use_case input to "pipeline" and Deep Auto_ViML will not build a model but just return the keras input and preprocessing layers. You can use these inputs and output layers to any sequential model you choose and build your own custom model.
 - `model_options = {max_trials:5}`: Always start with a small number of max_trials in model_options dictionary or a dataframe. Start with 5 trials and increase it by 20 each time to see if performance improves. Stop when performance of the model doesn't improve any more. This takes time.
 - `model_options = {'cat_feat_cross_flag':True}`: default is False but change it to True and see if adding feature crosses with your categorical features helps improve the model. However, this will explode the number of features in your model. Be careful.
