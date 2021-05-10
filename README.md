@@ -29,14 +29,14 @@ deep autoviml is meant for data engineers, data scientists and ml engineers to q
 
 ## Features
 These are the main features that distinguish deep_autoviml from other libraries:
-- It uses Keras Preprocessing Layers which are more intuitive, and are included inside your model to simplify deployment
-- The pipeline is returned to you to use as inputs in your own functional model (if you so wish)
+- It uses keras preprocessing layers which are more intuitive, and are included inside your model to simplify deployment
+- The pipeline is available to you to use as inputs in your own functional model (if you so wish - you must specify that option in the input - see below for "pipeline")
 - It can import any csv, txt or gzip file or file patterns (that fit multiple files) and it can scale to any data set of any size due to tf.data.Dataset's superior data pipelining features (such as cache, prefetch, batch, etc.)
 - It uses an amazing new tuner called [STORM tuner](https://github.com/ben-arnao/StoRM) that quickly searches for the best hyperparameters for your keras model in fewer than 25 trials
 - If you want to fine tune your model even further, you can fiddle with a wide variety of model options or keras options using **kwargs like dictionaries
 - You can import your own custom Sequential model and watch it transform it into a functional model with additional preprocessing and output layers and train the model with your data 
-- You can save the model on your local machine or copy it to a GCS (or any cloud provider's) storage and serve it from there using TF Serving 
-- Since your model contains the preprocessing layers built-in, you just need to provide your Tensorflow serving model with raw data to test and get back predictions in the same format as your training labels.
+- You can save the model on your local machine or copy it to any cloud provider's storage bucket and serve it from there using tensorflow Serving (TF.Serving)
+- Since your model contains preprocessing layers built-in, you just need to provide your Tensorflow serving model with raw data to test and get back predictions in the same format as your training labels.
 
 ![how_it_works](deep_1.jpg)
 
@@ -50,11 +50,11 @@ deep_autoviml is a powerful new deep learning library with a very simple design 
 
 ## Technology
 
-deep_autoviml uses the latest in tensorflow (2.4.1+) td.data.Datasets and tf.keras preprocessing technologies: the Keras preprocessing layers enable you to encapsulate feature engineering and preprocessing into the model itself. This makes the process for training and predictions the same: just feed input data (in the form of tf.data.Datasets) and the model will take care of all preprocessing before predictions. 
+deep_autoviml uses the latest in tensorflow (2.4.1+) td.data.Datasets and tf.keras preprocessing technologies: the Keras preprocessing layers enable you to encapsulate feature engineering and preprocessing into the model itself. This makes the process for training and predictions the same: just feed input data (in the form of files or dataframes) and the model will take care of all preprocessing before predictions. 
 
 ![how_deep](deep_4.jpg)
 
-To perform its preprocessing on the model itself, deep_autoviml [tensorflow](https://www.tensorflow.org/) (TF 2.4.1+ and later versions) and [tf.keras](https://www.tensorflow.org/api_docs/python/tf/keras) experimental preprocessing layers: these layers are part of your saved model. They become part of the model's computational graph that can be optimized and executed on any device including GPU's and TPU's. By packaging everything as a single unit, we save the effort in reimplementing the preprocessing logic on the production server. The new model can take raw text directly without preprocessing. This avoids missing or incorrect configuration for the preprocesing_layer during production.
+To perform its preprocessing on the model itself, deep_autoviml [tensorflow](https://www.tensorflow.org/) (TF 2.4.1+ and later versions) and [tf.keras](https://www.tensorflow.org/api_docs/python/tf/keras) experimental preprocessing layers: these layers are part of your saved model. They become part of the model's computational graph that can be optimized and executed on any device including GPU's and TPU's. By packaging everything as a single unit, we save the effort in reimplementing the preprocessing logic on the production server. The new model can take raw tabular data with numeric and categorical variables or strings text directly without any preprocessing. This avoids missing or incorrect configuration for the preprocesing_layer during production.
 
 In addition, to select the best hyper parameters for the model, it uses a new open source library:
 - [storm-tuner](https://github.com/ben-arnao/StoRM) - storm-tuner is an amazing new library that enables us to quickly fine tune our keras sequential models with hyperparameters and find a performant model within a few trials.
