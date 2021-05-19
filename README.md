@@ -72,7 +72,7 @@ pip install git+https://github.com/AutoViML/deep_autoviml.git
 ```
 
 ## Usage
-
+![usage](deep_5.jpg)
 deep_autoviml can be invoked with a simple import and run statement:
 
 ```
@@ -82,7 +82,7 @@ from deep_autoviml import deep_autoviml as deepauto
 Load a data set (any .csv or .gzip or .gz or .txt file) into deep_autoviml and it will split it into Train and Validation  datasets inside. You only need to provide a target variable, a project_name to store files in your local machine and leave the rest to defaults:
 
 ```
-model, cat_vocab_dict = deepauto.run(train, target, keras_model_type="auto",
+model, cat_vocab_dict = deepauto.fit(train, target, keras_model_type="auto",
             project_name="deep_autoviml", keras_options={}, model_options={}, 
             save_model_flag=True, use_my_model='', verbose=0)
 ```
@@ -90,7 +90,7 @@ model, cat_vocab_dict = deepauto.run(train, target, keras_model_type="auto",
 Once deep_autoviml writes your saved model and cat_vocab_dict files to disk in the project_name directory, you can load it from anywhere (including cloud) for predictions like this using the model and cat_vocab_dict generated above:
 
 ```
-predictions = deepauto.predict_model(model, project_name, test_dataset=test,
+predictions = deepauto.predict(model, project_name, test_dataset=test,
             keras_model_type=keras_model_type, cat_vocab_dict=cat_vocab_dict)
 ```
 

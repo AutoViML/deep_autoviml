@@ -216,7 +216,7 @@ def find_batch_size(DS_LEN):
     print('    Batch size selected as %d' %batch_len)
     return batch_len
 ###############################################################################################
-def predict_model(model_or_model_path, project_name, test_dataset, 
+def predict(model_or_model_path, project_name, test_dataset, 
                     keras_model_type, cat_vocab_dict=""):
     start_time = time.time()
     if not cat_vocab_dict:

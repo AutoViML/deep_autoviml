@@ -89,7 +89,7 @@ from deep_autoviml.modeling.create_model import create_model
 from deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
 from deep_autoviml.modeling.train_model import train_model
 from deep_autoviml.modeling.train_custom_model import train_custom_model
-from deep_autoviml.modeling.predict_model import predict_model
+from deep_autoviml.modeling.predict_model import predict
 
 # Utils
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset
@@ -152,7 +152,7 @@ def left_subtract(l1,l2):
             lst.append(i)
     return lst
 ##############################################################################################
-def run(train_data_or_file, target, keras_model_type="basic", project_name="deep_autoviml", 
+def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep_autoviml", 
                                 save_model_flag=True, model_options={},
                                 keras_options={}, use_my_model='', verbose=0):
     """

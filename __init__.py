@@ -33,12 +33,14 @@ else:
 version_number = __version__
 print("""
 %s deep_auto_viml version=%s Build deep learning models, pipelines, fast!
---- 
-model, dictionary = deep_auto_viml.run(train_data_or_file, target, keras_model_type)
----
-model.save_to_file_or_cloud(model_filename, gcp_project_id, gcp_bucket...)
----
-model = load_from_file_or_cloud(model_filename, gcp_project_id, gcp_bucket...)
-model.predict(test_data)
+from deep_autoviml import deep_autoviml as deepauto
+-------------------
+model, cat_vocab_dict = deepauto.fit(train, target, keras_model_type="auto",
+		project_name="deep_autoviml", keras_options={}, model_options={}, 
+		save_model_flag=True, use_my_model='', verbose=0)
+
+predictions = deepauto.predict(model, project_name, test_dataset=test,
+                                 keras_model_type=keras_model_type, 
+                                 cat_vocab_dict=cat_vocab_dict)
                                 """ %(module_type, version_number))
 ################################################################################
