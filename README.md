@@ -9,7 +9,7 @@
 ## Table of Contents
 <ul>
 <li><a href="#Motivation">Motivation</a></li>
-<li><a href="#how it works">How it works</a></li>
+<li><a href="#how_it_works">How it works</a></li>
 <li><a href="#technology">Technology</a></li>
 <li><a href="#install">Install</a></li>
 <li><a href="#usage">Usage</a></li>
