@@ -31,6 +31,7 @@ deep_autoviml is a tensorflow >2.4-enabled, keras-ready, model and pipeline buil
 deep autoviml is meant for data engineers, data scientists and ml engineers to quickly prototype and build tensorflow 2.4.1+ models and pipelines for any data set, any size using a single line of code.
 ![why_deep](deep_2.jpg)
 ## InnerWorking
+![how_it_works](deep_1.jpg)
 These are the main features that distinguish deep_autoviml from other libraries:
 - It uses keras preprocessing layers which are more intuitive, and are included inside your model to simplify deployment
 - The pipeline is available to you to use as inputs in your own functional model (if you so wish - you must specify that option in the input - see below for "pipeline")
@@ -40,8 +41,6 @@ These are the main features that distinguish deep_autoviml from other libraries:
 - You can import your own custom Sequential model and watch it transform it into a functional model with additional preprocessing and output layers and train the model with your data 
 - You can save the model on your local machine or copy it to any cloud provider's storage bucket and serve it from there using tensorflow Serving (TF.Serving)
 - Since your model contains preprocessing layers built-in, you just need to provide your Tensorflow serving model with raw data to test and get back predictions in the same format as your training labels.
-
-![how_it_works](deep_1.jpg)
 
 ## Technology
 
