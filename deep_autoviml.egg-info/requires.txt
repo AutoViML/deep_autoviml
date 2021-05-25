@@ -1,0 +1,11 @@
+emoji
+ipython
+jupyter
+matplotlib
+numpy
+pandas
+regex
+scikit-learn>=0.23.1
+storm-tuner
+tensorflow>=2.4.1
+xlrd
