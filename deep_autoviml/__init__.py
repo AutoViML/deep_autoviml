@@ -23,11 +23,6 @@
 # Version
 from .__version__ import __version__
 __all__ = ['data_load', 'models', 'modeling', 'preprocessing', 'utilities']
-import data_load
-import modeling
-import models
-import preprocessing
-import utilities
 
 from .deep_autoviml import fit
 from .modeling.predict_model import load_test_data, predict
@@ -38,7 +33,7 @@ else:
     module_type = 'Imported'
 version_number = __version__
 print("""
-%s deep_auto_viml version=%s Build deep learning models, pipelines, fast!
+%s deep_auto_viml version=%s
 from deep_autoviml import deep_autoviml as deepauto
 -------------------
 model, cat_vocab_dict = deepauto.fit(train, target, keras_model_type="auto",
