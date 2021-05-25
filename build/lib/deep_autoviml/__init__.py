@@ -22,12 +22,6 @@
 ################################################################################
 # Version
 from .__version__ import __version__
-__all__ = ['data_load', 'models', 'modeling', 'preprocessing', 'utilities']
-import data_load
-import modeling
-import models
-import preprocessing
-import utilities
 
 from .deep_autoviml import fit
 from .modeling.predict_model import load_test_data, predict

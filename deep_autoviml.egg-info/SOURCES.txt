@@ -1,5 +1,8 @@
 README.md
 setup.py
+deep_autoviml/__init__.py
+deep_autoviml/__version__.py
+deep_autoviml/deep_autoviml.py
 deep_autoviml.egg-info/PKG-INFO
 deep_autoviml.egg-info/SOURCES.txt
 deep_autoviml.egg-info/dependency_links.txt

@@ -20,7 +20,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="deep_autoviml",
-    version="0.0.9",
+    version="0.0.10",
     author="Ram Seshadri",
     # author_email="author@example.com",
     description="Automatically Build Deep Learning Models and Pipelines fast!",
@@ -28,7 +28,9 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     license='Apache License 2.0',
     url="https://github.com/AutoViML/deep_autoviml",
-    packages=setuptools.find_packages(exclude=("tests",)),
+    #packages=setuptools.find_packages(exclude=("tests",)),
+    packages = ['.','data_load','modeling','models','preprocessing','utilities'],
+    package_data={'data_load':['*'],'modeling':['*'],'models':['*'],'preprocessing':['*'],'utilities':['*']},
     install_requires=[
         "ipython",
         "jupyter",
