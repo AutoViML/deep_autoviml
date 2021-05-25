@@ -53,13 +53,13 @@ from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
 #####################################################################################
 # Utils
-from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
-from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
-from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
+from deep_autoviml.deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
+from deep_autoviml.deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
+from deep_autoviml.deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
 
-from deep_autoviml.data_load.extract import find_batch_size
-from deep_autoviml.modeling.create_model import check_keras_options
-#from deep_autoviml.modeling.one_cycle import OneCycleScheduler
+from deep_autoviml.deep_autoviml.data_load.extract import find_batch_size
+from deep_autoviml.deep_autoviml.modeling.create_model import check_keras_options
+from deep_autoviml.deep_autoviml.modeling.one_cycle import OneCycleScheduler
 #####################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
 from IPython.core.display import Image, display
@@ -96,31 +96,6 @@ from tensorflow.keras import callbacks
 ###   You can also pip install storm-tuner --upgrade to get the latest version ##########
 from storm_tuner import Tuner
 #########################################################################################
-set_seed()
-class OneCycleScheduler(keras.callbacks.Callback):
-    def __init__(self, iterations, max_rate, start_rate=None,
-                 last_iterations=None, last_rate=None):
-        self.iterations = iterations
-        self.max_rate = max_rate
-        self.start_rate = start_rate or max_rate / 10
-        self.last_iterations = last_iterations or iterations // 10 + 1
-        self.half_iteration = (iterations - self.last_iterations) // 2
-        self.last_rate = last_rate or self.start_rate / 1000
-        self.iteration = 0
-    def _interpolate(self, iter1, iter2, rate1, rate2):
-        return ((rate2 - rate1) * (self.iteration - iter1)
-                / (iter2 - iter1) + rate1)
-    def on_batch_begin(self, batch, logs):
-        if self.iteration < self.half_iteration:
-            rate = self._interpolate(0, self.half_iteration, self.start_rate, self.max_rate)
-        elif self.iteration < 2 * self.half_iteration:
-            rate = self._interpolate(self.half_iteration, 2 * self.half_iteration,
-                                     self.max_rate, self.start_rate)
-        else:
-            rate = self._interpolate(2 * self.half_iteration, self.iterations,
-                                     self.start_rate, self.last_rate)
-        self.iteration += 1
-        K.set_value(self.model.optimizer.lr, rate)
 #########################################################################################
 import os
 def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_only):
@@ -135,7 +110,8 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
                     patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.00001, cooldown=0, verbose=1)
 
     steps = 10
-    onecycle = OneCycleScheduler(iterations=steps, max_rate=0.05)
+    #onecycle = OneCycleScheduler(iterations=steps, max_rate=0.05)
+    onecycle = OneCycleScheduler(steps=steps, lr_max=0.1)
 
     lr_sched = callbacks.LearningRateScheduler(lambda epoch: 1e-4 * (0.75 ** np.floor(epoch / 2)))
 
@@ -193,7 +169,7 @@ def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, nu
     )
     return model
 ###############################################################################
-def build_model(hp):
+def build_model_storm(hp):
     model_body = Sequential()
 
     # example of model-wide unordered categorical parameter
@@ -259,7 +235,7 @@ class MyTuner(Tuner):
 
     def run_trial(self, trial, *args):
         hp = trial.hyperparameters
-        model_body = build_model(hp)
+        model_body = build_model_storm(hp)
         train_ds, valid_ds = args[0], args[1]
         epochs, steps =  args[2], args[3]
         inputs, meta_outputs = args[4], args[5]
@@ -419,7 +395,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print('    original datasize = %s, initial batchsize = %s' %(data_size, batch_size))
     NUMBER_OF_EPOCHS = check_keras_options(keras_options, "epochs", 100)
     learning_rate = 5e-1
-    steps = max(10, data_size//(batch_size*5))
+    steps = max(5, data_size//(batch_size*10))
     print('    recommended steps per epoch = %d' %steps)
     STEPS_PER_EPOCH = check_keras_options(keras_options, "steps_per_epoch", 
                         steps)
@@ -498,7 +474,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         ########   S T O R M   T U N E R   D E F I N E D     H E R E ########### 
         randomization_factor = 0.50
         tuner = MyTuner(project_dir=trials_saved_path,
-                    build_fn=build_model,
+                    build_fn=build_model_storm,
                     objective_direction=val_mode,
                     init_random=5,
                     max_iters=max_trials,
@@ -526,8 +502,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         ##### get the best model parameters now. Also split it into two models ###########
         hpq = tuner.get_best_config()
         try:
-            best_model = build_model(hpq)
-            deep_model = build_model(hpq)
+            best_model = build_model_storm(hpq)
+            deep_model = build_model_storm(hpq)
         except:
             ### Sometimes the tuner cannot find a config that works!
             deep_model = return_model_body(keras_options)
@@ -591,12 +567,13 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     #####    LEARNING RATE CHEDULING : Setup Learning Rate Multiple Ways #########
     ####################################################################################
     #### Onecycle is another fast way to find the best learning in large datasets ######
-    onecycle = OneCycleScheduler(iterations=steps, max_rate=0.05)
+    #onecycle = OneCycleScheduler(iterations=steps, max_rate=0.05)
+    onecycle = OneCycleScheduler(steps=steps, lr_max=0.1)
     ####  This lr_sched is a fast way to reduce LR but it can easily overfit quickly #####
     lr_sched = callbacks.LearningRateScheduler(lambda epoch: 1e-1 * (0.75 ** np.floor(epoch / 2)))
     ## RLR is the easiest one to handle as it reduces learning rate when there is no improvement ##
-    lr_patience = max(2,int(patience*0.5))
-    rlr = callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.95,
+    lr_patience = max(5,int(patience*0.5))
+    rlr = callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.99,
                     patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.001, cooldown=0, verbose=1)
     #### lr_decay originally used to give good results but not anymore #######
     lr_decay_cb = callbacks.LearningRateScheduler(
@@ -616,11 +593,11 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ####################################################################################
     print('\nTensorboard log directory can be found at: %s' %tensorboard_logpath)
     
-    train_ds = train_ds.unbatch().batch(best_batch)
+    #train_ds = train_ds.unbatch().batch(best_batch)
     train_ds = train_ds.shuffle(shuffle_size, 
                 reshuffle_each_iteration=False, seed=42).prefetch(best_batch).repeat()
 
-    valid_ds = valid_ds.unbatch().batch(best_batch)
+    #valid_ds = valid_ds.unbatch().batch(best_batch)
     valid_ds = valid_ds.prefetch(best_batch).repeat()
 
     ####################################################################################
@@ -630,10 +607,12 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     np.random.seed(42)
     tf.random.set_seed(42)
     NUMBER_OF_EPOCHS = 100
-    callbacks_list = [rlr, es, tb]
+    ### lr_decay_cb is not working so well. rlr works best so far.
+    callbacks_list = [onecycle, es, tb]
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
+    print('    Callbacks list: %s' %callbacks_list)
     ####  Do this with LR scheduling but NO early stopping since we want the model fully trained #####
-    history = best_model.fit(train_ds, validation_data=valid_ds,
+    history = best_model.fit(train_ds, validation_data=valid_ds, batch_size=best_batch,
                 epochs=NUMBER_OF_EPOCHS, steps_per_epoch=STEPS_PER_EPOCH, 
                 callbacks=callbacks_list, 
                 validation_steps=STEPS_PER_EPOCH,

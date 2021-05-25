@@ -70,30 +70,30 @@ from sklearn.metrics import roc_auc_score
 from collections import defaultdict
 ############################################################################################
 # data pipelines 
-from deep_autoviml.data_load.classify_features import classify_features
-from deep_autoviml.data_load.classify_features import classify_features_using_pandas
+from deep_autoviml.deep_autoviml.data_load.classify_features import classify_features
+from deep_autoviml.deep_autoviml.data_load.classify_features import classify_features_using_pandas
 
-from deep_autoviml.data_load.classify_features import EDA_classify_and_return_cols_by_type
-from deep_autoviml.data_load.classify_features import EDA_classify_features
-from deep_autoviml.data_load.extract import find_problem_type, transform_train_target
-from deep_autoviml.data_load.extract import load_train_data, load_train_data_file
-from deep_autoviml.data_load.extract import load_train_data_frame
+from deep_autoviml.deep_autoviml.data_load.classify_features import EDA_classify_and_return_cols_by_type
+from deep_autoviml.deep_autoviml.data_load.classify_features import EDA_classify_features
+from deep_autoviml.deep_autoviml.data_load.extract import find_problem_type, transform_train_target
+from deep_autoviml.deep_autoviml.data_load.extract import load_train_data, load_train_data_file
+from deep_autoviml.deep_autoviml.data_load.extract import load_train_data_frame
 
 # keras preprocessing
-from deep_autoviml.preprocessing.preprocessing import perform_preprocessing
-from deep_autoviml.preprocessing.preprocessing_tabular import preprocessing_tabular
-from deep_autoviml.preprocessing.preprocessing_nlp import preprocessing_nlp
+from deep_autoviml.deep_autoviml.preprocessing.preprocessing import perform_preprocessing
+from deep_autoviml.deep_autoviml.preprocessing.preprocessing_tabular import preprocessing_tabular
+from deep_autoviml.deep_autoviml.preprocessing.preprocessing_nlp import preprocessing_nlp
 
 # keras models and bring-your-own models
-from deep_autoviml.modeling.create_model import create_model
-from deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
-from deep_autoviml.modeling.train_model import train_model
-from deep_autoviml.modeling.train_custom_model import train_custom_model
-from deep_autoviml.modeling.predict_model import predict
+from deep_autoviml.deep_autoviml.modeling.create_model import create_model
+from deep_autoviml.deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
+from deep_autoviml.deep_autoviml.modeling.train_model import train_model
+from deep_autoviml.deep_autoviml.modeling.train_custom_model import train_custom_model
+from deep_autoviml.deep_autoviml.modeling.predict_model import predict
 
 # Utils
-from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset
-from deep_autoviml.utilities.utilities import print_one_row_from_tf_label
+from deep_autoviml.deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset
+from deep_autoviml.deep_autoviml.utilities.utilities import print_one_row_from_tf_label
 #############################################################################################
 import os
 def check_if_GPU_exists():

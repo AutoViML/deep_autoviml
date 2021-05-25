@@ -50,10 +50,10 @@ from tensorflow.keras import regularizers
 
 ############################################################################################
 # data pipelines 
-from deep_autoviml.data_load.classify_features import classify_features_using_pandas
+from deep_autoviml.deep_autoviml.data_load.classify_features import classify_features_using_pandas
 
-from deep_autoviml.data_load.extract import fill_missing_values_for_TF2
-from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
+from deep_autoviml.deep_autoviml.data_load.extract import fill_missing_values_for_TF2
+from deep_autoviml.deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
 ############################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
 from IPython.core.display import Image, display

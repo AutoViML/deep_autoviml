@@ -25,8 +25,8 @@ import functools
 np.set_printoptions(precision=3, suppress=True)
 ############################################################################################
 # data pipelines and feature engg here
-from deep_autoviml.preprocessing.preprocessing_tabular import preprocessing_tabular
-from deep_autoviml.preprocessing.preprocessing_nlp import preprocessing_nlp
+from deep_autoviml.deep_autoviml.preprocessing.preprocessing_tabular import preprocessing_tabular
+from deep_autoviml.deep_autoviml.preprocessing.preprocessing_nlp import preprocessing_nlp
 
 # Utils
 
