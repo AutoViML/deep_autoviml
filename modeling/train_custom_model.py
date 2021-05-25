@@ -177,6 +177,7 @@ def get_uncompiled_model(inputs, result, model_body, output_activation,
                             name='output_'+str(each_label))(result)
         multi_label_predictions[key].append(value)
     outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
+
     ##### Set the inputs and outputs of the model here
     uncompiled_model = Model(inputs=inputs, outputs=outputs)
     return uncompiled_model
@@ -288,7 +289,7 @@ class MyTuner(Tuner):
                                 "RMSprop","Nadam",'nesterov'],
                             ordered=False)
         optimizer = return_optimizer(hp, selected_optimizer, trial_flag=True)
-
+        
         comp_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
                             num_labels, model_body, optimizer, val_loss, val_metrics, cols_len)
 
@@ -395,7 +396,7 @@ def return_optimizer(hp, hpq_optimizer, trial_flag=False):
 ##########################################################################################
 def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type, 
                     keras_options, model_options, var_df, cat_vocab_dict, project_name="", 
-                    save_model_flag=True, verbose=0 ):
+                    save_model_flag=True, use_my_model='', verbose=0 ):
     """
     Given a keras model and a tf.data.dataset that is batched, this function will 
     train a keras model. It will first split the batched_data into train_ds and  
@@ -490,77 +491,85 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     #                        reshuffle_each_iteration=False, seed=42).repeat()
     #valid_ds = valid_ds.prefetch(batch_size).repeat()
     print('Training %s model now. This will take time...' %keras_model_type)
-    trials_saved_path = os.path.join(project_name,keras_model_type)
-    if not os.path.exists(trials_saved_path):
-        os.makedirs(trials_saved_path)
-    ########   S T O R M   T U N E R   D E F I N E D     H E R E ########### 
-    randomization_factor = 0.50
-    tuner = MyTuner(project_dir=trials_saved_path,
-                build_fn=build_model,
-                objective_direction=val_mode,
-                init_random=5,
-                max_iters=max_trials,
-                randomize_axis_factor=randomization_factor,
-                overwrite=True)
-    ###################   S T o R M   T U N E R   ###############################
-    # parameters passed through 'search' go directly to the 'run_trial' method ##
-    #### This is where you find best model parameters for keras using SToRM #####
-    #############################################################################
-    start_time1 = time.time()
-    print('    STORM Tuner max_trials = %d, randomization factor = %0.1f' %(
-                        max_trials, randomization_factor))
-    tuner_epochs = 100  ### keep this low so you can run fast
-    tuner_steps = steps  ## keep this also very low 
-    #### You have to make sure that inputs are unique, otherwise error ####
-    tuner.search(train_ds, valid_ds, tuner_epochs, tuner_steps, 
-                        inputs, meta_outputs, cols_len, output_activation,
-                        num_predicts, num_labels, optimizer, val_loss,
-                        val_metrics, patience, val_mode, data_size,
-                        learning_rate, val_monitor,
-                        )
-    #K.clear_session()
-    best_trial = tuner.get_best_trial()
-    print('    best trial selected as %s' %best_trial)
-    ##### get the best model parameters now. Also split it into two models ###########
-    hpq = tuner.get_best_config()
-    try:
-        best_model = build_model(hpq)
-        deep_model = build_model(hpq)
-    except:
-        ### Sometimes the tuner cannot find a config that works!
-        deep_model = return_model_body(keras_options)
-        best_model = return_model_body(keras_options)
-        
-    if cols_len <= 100:
+    if isinstance(use_my_model, str):
+        trials_saved_path = os.path.join(project_name,keras_model_type)
+        if not os.path.exists(trials_saved_path):
+            os.makedirs(trials_saved_path)
+        ########   S T O R M   T U N E R   D E F I N E D     H E R E ########### 
+        randomization_factor = 0.50
+        tuner = MyTuner(project_dir=trials_saved_path,
+                    build_fn=build_model,
+                    objective_direction=val_mode,
+                    init_random=5,
+                    max_iters=max_trials,
+                    randomize_axis_factor=randomization_factor,
+                    overwrite=True)
+        ###################   S T o R M   T U N E R   ###############################
+        # parameters passed through 'search' go directly to the 'run_trial' method ##
+        #### This is where you find best model parameters for keras using SToRM #####
+        #############################################################################
+        start_time1 = time.time()
+        print('    STORM Tuner max_trials = %d, randomization factor = %0.1f' %(
+                            max_trials, randomization_factor))
+        tuner_epochs = 100  ### keep this low so you can run fast
+        tuner_steps = steps  ## keep this also very low 
+        #### You have to make sure that inputs are unique, otherwise error ####
+        tuner.search(train_ds, valid_ds, tuner_epochs, tuner_steps, 
+                            inputs, meta_outputs, cols_len, output_activation,
+                            num_predicts, num_labels, optimizer, val_loss,
+                            val_metrics, patience, val_mode, data_size,
+                            learning_rate, val_monitor,
+                            )
+        #K.clear_session()
+        best_trial = tuner.get_best_trial()
+        print('    best trial selected as %s' %best_trial)
+        ##### get the best model parameters now. Also split it into two models ###########
+        hpq = tuner.get_best_config()
         try:
-            tf.keras.utils.plot_model(model = best_model , rankdir="LR", dpi=72, show_shapes=True)
+            best_model = build_model(hpq)
+            deep_model = build_model(hpq)
         except:
-            print('Could not plot model since pydot and graphviz may not be in this device')
-                  
-    print('Time taken for tuning hyperparameters = %0.0f (mins)' %((time.time()-start_time1)/60))
-    ##########    S E L E C T   B E S T   O P T I M I Z E R and L R  H E R E ############
-    try:
-        #optimizer_lr = tuner.model_lr
-        optimizer_lr = best_trial.metrics['final_lr']
-    except:
-        optimizer_lr = 0.01
-        print('    trial lr erroring. Seting default LR as %s' %optimizer_lr)
-    try:
-        best_batch = hpq.values['batch_size']
-        hpq_optimizer = hpq.values['optimizer']
-        best_optimizer = return_optimizer(hpq, hpq_optimizer, trial_flag=False)
-    except:
-        ### In some cases, the tuner doesn't select a good config in that case ##
+            ### Sometimes the tuner cannot find a config that works!
+            deep_model = return_model_body(keras_options)
+            best_model = return_model_body(keras_options)
+            
+        if cols_len <= 100:
+            try:
+                tf.keras.utils.plot_model(model = best_model , rankdir="LR", dpi=72, show_shapes=True)
+            except:
+                print('Could not plot model since pydot and graphviz may not be in this device')
+                      
+        print('Time taken for tuning hyperparameters = %0.0f (mins)' %((time.time()-start_time1)/60))
+        ##########    S E L E C T   B E S T   O P T I M I Z E R and L R  H E R E ############
+        try:
+            #optimizer_lr = tuner.model_lr
+            optimizer_lr = best_trial.metrics['final_lr']
+        except:
+            optimizer_lr = 0.01
+            print('    trial lr erroring. Seting default LR as %s' %optimizer_lr)
+        try:
+            best_batch = hpq.values['batch_size']
+            hpq_optimizer = hpq.values['optimizer']
+            best_optimizer = return_optimizer(hpq, hpq_optimizer, trial_flag=False)
+        except:
+            ### In some cases, the tuner doesn't select a good config in that case ##
+            best_batch = batch_size
+            hpq_optimizer = 'SGD'
+            best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
+        ### Set the learning rate for the best optimizer here ######
+        if optimizer_lr < 0:
+            print('    best learning rate less than zero. Resetting it....')
+            optimizer_lr = 0.01
+        print('\nBest optimizer = %s and best learning_rate = %s' %(hpq_optimizer, optimizer_lr))
+        K.set_value(best_optimizer.learning_rate, optimizer_lr)
+        #######################################################################################
+        print('Best hyperparameters: %s' %hpq.values)
+    else:
+        print('skipping tuner search since use_my_model flag set to True...')
+        best_model = use_my_model
+        deep_model = use_my_model
+        best_optimizer = 'Adam'
         best_batch = batch_size
-        hpq_optimizer = 'SGD'
-        best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
-    ### Set the learning rate for the best optimizer here ######
-    if optimizer_lr < 0:
-        print('    best learning rate less than zero. Resetting it....')
-        optimizer_lr = 0.01
-    print('\nBest optimizer = %s and best learning_rate = %s' %(hpq_optimizer, optimizer_lr))
-    K.set_value(best_optimizer.learning_rate, optimizer_lr)
-    #######################################################################################
     ##### This is the simplest way to convert a sequential model to functional!
     for num, each_layer in enumerate(best_model.layers):
         if num == 0:
@@ -572,7 +581,6 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     best_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
                         num_labels, best_model, best_optimizer, val_loss, val_metrics, cols_len)
     #######################################################################################
-    print('Best hyperparameters: %s' %hpq.values)
     #### here we can define the custom logic to assign a score to the model to monitor
     if num_labels > 1:
         ### You must choose one of the label outputs to monitor - we will choose the last one

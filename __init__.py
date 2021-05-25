@@ -23,8 +23,8 @@
 # Version
 from .__version__ import __version__
 
-from .deep_autoviml import run
-from .modeling.predict_model import load_test_data, predict_model
+from .deep_autoviml import fit
+from .modeling.predict_model import load_test_data, predict
 ################################################################################
 if __name__ == "__main__":
     module_type = 'Running'

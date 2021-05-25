@@ -281,7 +281,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     model_options_defaults["modeltype"] = ''
     model_options_defaults["sep"] = ","
     model_options_defaults["cat_feat_cross_flag"] = False
-    model_options_defaults["model_use_case"] = True
+    model_options_defaults["model_use_case"] = ''
     model_options_defaults["nlp_char_limit"] = 30
     model_options_defaults["variable_cat_limit"] = 30
     model_options_defaults["csv_encoding"] = 'utf-8'
@@ -351,10 +351,13 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                                                                     verbose)
 
 
-    if model_use_case.lower() == 'pipeline':
-        ##########  Perform keras preprocessing only and return inputs + keras layers created ##
-        print('\nReturning a keras pipeline so you can create your own Functional model.')
-        return nlp_inputs, meta_inputs, meta_outputs
+    if isinstance(model_use_case, str):
+        if model_use_case:
+            if model_use_case.lower() == 'pipeline':
+                ##########  Perform keras preprocessing only and return inputs + keras layers created ##
+                print('\nReturning a keras pipeline so you can create your own Functional model.')
+                return nlp_inputs, meta_inputs, meta_outputs
+            #### There may be other use cases for model_use_case in future hence leave this empty for now #
 
     #### you must create a functional model here 
     print('\nCreating a new Functional model here...')
@@ -388,7 +391,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         deep_model, cat_vocab_dict = train_custom_model(inputs, meta_outputs,
                                          batched_data, target, keras_model_type, keras_options, 
                                          model_options, var_df, cat_vocab_dict, project_name, 
-                                            save_model_flag, verbose) 
+                                            save_model_flag, use_my_model, verbose) 
     else:
         print('Training a %s model option...' %keras_model_type)
         deep_model, cat_vocab_dict = train_model(deep_model, batched_data, target, keras_model_type,
