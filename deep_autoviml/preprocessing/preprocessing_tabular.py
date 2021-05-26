@@ -535,13 +535,13 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     elif len(all_low_cat_encoded) == 1:
         meta_input_categ1 = all_low_cat_encoded[0]
         meta_categ1 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ1)
-        meta_categ1 = keras.layers.BatchNormalization()(meta_input_categ1)
+        meta_categ1 = keras.layers.BatchNormalization()(meta_categ1)
         meta_categ1 = layers.Activation(concat_activation)(meta_categ1)
     else:
         meta_input_categ1 = layers.concatenate(all_low_cat_encoded)
         #WIDE - This Dense layer connects to input layer - Categorical Data
         meta_categ1 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ1)
-        meta_categ1 = keras.layers.BatchNormalization()(meta_input_categ1)
+        meta_categ1 = keras.layers.BatchNormalization()(meta_categ1)
         meta_categ1 = layers.Activation(concat_activation)(meta_categ1)
 
     skip_meta_categ2 = False
@@ -551,7 +551,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     elif len(all_high_cat_encoded) == 1:
         meta_input_categ2 = all_high_cat_encoded[0]
         meta_categ2 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ2)
-        meta_categ2 = layers.BatchNormalization()(meta_input_categ2)
+        meta_categ2 = layers.BatchNormalization()(meta_categ2)
         meta_categ2 = layers.Activation(concat_activation)(meta_categ2)
     else:
         meta_input_categ2 = layers.concatenate(all_high_cat_encoded)

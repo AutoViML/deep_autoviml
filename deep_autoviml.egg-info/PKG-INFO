@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: deep-autoviml
-Version: 0.0.14
+Version: 0.0.15
 Summary: Automatically Build Deep Learning Models and Pipelines fast!
 Home-page: https://github.com/AutoViML/deep_autoviml
 Author: Ram Seshadri
@@ -113,19 +113,19 @@ Description: # deep_autoviml
         - `model_options`: must be a dictionary. For example: {'max_trials':5} sets the number of trials to run Storm-Tuner to search for the best hyper parameters for your keras model.
         - `keras_options`: must be a dictionary. You can use it for changing any keras model option you want such as "epochs", "kernel_initializer", "activation", "loss", "metrics", etc.
         - `save_model_flag`: must be True or False. The model will be saved in keras model format.
-        - `use_my_model`: bring your own mode that you have defined previously. This model must be a keras Sequential model with NO input layers or output layers! We will add those layers. Just specify your hidden layers (Dense, Conv1D, Conv2D, etc.), dropouts, activations, etc. If you don't want to use this option, just leave it as "empty string".
-        - `verbose`: must be 0, 1 or 2. Can also be True or False.
+        - `use_my_model`: "bring your own model" (BYOM) that you have defined previously. This BYOM model must be a keras Sequential model with NO input layers and output layers! We will add those layers automatically. Just specify your hidden layers (Dense, Conv1D, Conv2D, etc.), add dropouts or activations, whatever. The default for this argument is "" (empty string) which means we will build your model.
+        - `verbose`: must be 0, 1 or 2. Can also be True or False. You can see more and more outputs as you increase the verbose level. If you want to see a chart of your model, use verbose = 2. But you must have graphviz and pydot installed in your machine to see the model plot.
         
         ![how_deep](deep_3.jpg)
         
         ## Tips
         You can use the following arguments in your input to make deep_autoviml work best for you:
         - `model_options = {"model_use_case":'pipeline'}`: If you only want keras preprocessing layers (i.e. keras pipeline) then set the model_use_case input to "pipeline" and Deep Auto_ViML will not build a model but just return the keras input and preprocessing layers. You can use these inputs and output layers to any sequential model you choose and build your own custom model.
-        - `model_options = {max_trials:5}`: Always start with a small number of max_trials in model_options dictionary or a dataframe. Start with 5 trials and increase it by 20 each time to see if performance improves. Stop when performance of the model doesn't improve any more. This takes time.
-        - `model_options = {'cat_feat_cross_flag':True}`: default is False but change it to True and see if adding feature crosses with your categorical features helps improve the model. However, this will explode the number of features in your model. Be careful.
+        - `model_options = {'max_trials':5}`: Always start with a small number of max_trials in model_options dictionary or a dataframe. Start with 5 trials and increase it by 20 each time to see if performance improves. Stop when performance of the model doesn't improve any more. This takes time.
+        - `model_options = {'cat_feat_cross_flag':True}`: default is False but change it to True and see if adding feature crosses with your categorical features helps improve the model. However, do not do this for a large data set! This will explode the number of features in your model. Be careful!
         - `model_options = {'nlp_char_limit':20}`: If you want to run NLP Text preprocessing on any column, set this character limit low and deep_autoviml will then detect that column as an NLP column automatically. The default is 30 chars.
         - `keras_options = {"patience":30}`: If you want to reduce Early Stopping, then increase the patience to 30 or higher. Your model will train longer but you might get better performance.
-        - `use_my_model = sequential_model`: If you want to bring your own custom model for training, then define a Keras Sequential model but don't include inputs or output layers. Just define your hidden layers. Deep Auto_ViML will automatically add inputs and outputs and train your model. It will also save the model after training. You can use this model for predictions.
+        - `use_my_model = my_sequential_model`: If you want to bring your own custom model for training, then define a Keras Sequential model (you can name it anything but for example purposes, we have named it my_sequential_model) but don't include inputs or output layers! Just define your hidden layers! Deep Auto_ViML will automatically add inputs and output layers to your model and train it. It will also save your model after training. You can use this model for predictions.
         
         
         ## Maintainers

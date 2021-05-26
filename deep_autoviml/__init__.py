@@ -33,7 +33,7 @@ else:
     module_type = 'Imported'
 version_number = __version__
 print("""
-%s deep_auto_viml version=%s
+%s deep_auto_viml. version=%s
 from deep_autoviml import deep_autoviml as deepauto
 -------------------
 model, cat_vocab_dict = deepauto.fit(train, target, keras_model_type="auto",

@@ -9,3 +9,4 @@ storm-tuner
 emoji
 xlrd
 numpy
+optuna

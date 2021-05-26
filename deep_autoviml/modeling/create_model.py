@@ -150,7 +150,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     num_classes = model_options["num_classes"]
     num_labels = model_options["num_labels"]
     modeltype = model_options["modeltype"]
-    patience = check_keras_options(keras_options, "patience", 10)
+    patience = check_keras_options(keras_options, "patience", 20)
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
     data_dim = int(data_size*meta_outputs.shape[1])
     #### These can be standard for every keras option that you use layers ######
@@ -158,7 +158,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     activation='relu'
     #####   set some defaults for model parameters here ##
     #print('After preprocessing layers, Data Dimensions = %s' %data_dim)
-    optimizer = check_keras_options(keras_options,'optimizer', Adam(lr=0.1, beta_1=0.9, beta_2=0.999))
+    optimizer = check_keras_options(keras_options,'optimizer', Adam(lr=0.01, beta_1=0.9, beta_2=0.999))
     #print('    Using optimizer = %s' %str(optimizer).split(".")[-1][:8])
     use_bias = check_keras_options(keras_options, 'use_bias', True)
     ###################################################################################
@@ -265,10 +265,10 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
             else:
                 ### this means it's an auto model and you create one here 
                 print('    building a %s model...' %keras_model_type)
-                num_layers = check_keras_options(keras_options, 'num_layers', 3)
+                num_layers = check_keras_options(keras_options, 'num_layers', 1)
                 model_body = tf.keras.Sequential([])
                 for l_ in range(num_layers):
-                    model_body.add(layers.Dense(128, activation='selu', kernel_initializer="lecun_normal",
+                    model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
                                               activity_regularizer=tf.keras.regularizers.l2(0.01)))
                 keras_options["val_mode"] = val_mode
                 keras_options["val_monitor"] = val_monitor
@@ -281,29 +281,33 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
             except:
                 print('    Loading %s model is erroring, hence building a simple sequential model with one layer...' %keras_model_type)
                 ########## In case none of the loading of files works, then set up a simple model!
-                model_body = Sequential([layers.Dense(100, activation='relu')])
+                model_body = Sequential([layers.Dense(dense_layer1, activation='relu')])
     else:
         print('    Using your custom model given as input...')
         model_body = use_my_model
-
-    print('Loading %s model...' %keras_model_type)
-    ##### This is the simplest way to convert a sequential model to functional!
-    for num, each_layer in enumerate(model_body.layers):
-        if num == 0:
-            final_outputs = each_layer(meta_outputs)
+    #### For every keras_model_type other than auto use this #################
+    if not keras_model_type.lower() in ['auto']:
+        print('Loading %s model...' %keras_model_type)
+        ##### This is the simplest way to convert a sequential model to functional!
+        for num, each_layer in enumerate(model_body.layers):
+            if num == 0:
+                final_outputs = each_layer(meta_outputs)
+            else:
+                final_outputs = each_layer(final_outputs)
+        #### This final outputs is the one that is taken into final dense layer and compiled
+        print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
+        ###### This is where you compile the model after it is built ###############
+        deep_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
+                                num_labels, model_body, optimizer, val_loss, val_metrics, cols_len)
+        if cols_len > 100:
+            print('Too many columns to show model summary. Continuing...')
         else:
-            final_outputs = each_layer(final_outputs)
-    #### This final outputs is the one that is taken into final dense layer and compiled
-    print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
-    ###### This is where you compile the model after it is built ###############
-    deep_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
-                            num_labels, model_body, optimizer, val_loss, val_metrics, cols_len)
+            print(deep_model.summary())
+    else:
+        ### For auto models we will add input and output layers later #########
+        deep_model = model_body
     keras_options["val_mode"] = val_mode
     keras_options["val_monitor"] = val_monitor
-    if cols_len > 100:
-        print('Too many columns to show model summary. Continuing...')
-    else:
-        print(deep_model.summary())
     print('    %s model loaded and compiled successfully...' %keras_model_type)
     return deep_model, keras_options
 ###############################################################################

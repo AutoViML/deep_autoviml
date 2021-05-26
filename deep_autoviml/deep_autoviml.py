@@ -70,30 +70,30 @@ from sklearn.metrics import roc_auc_score
 from collections import defaultdict
 ############################################################################################
 # data pipelines 
-from deep_autoviml.deep_autoviml.data_load.classify_features import classify_features
-from deep_autoviml.deep_autoviml.data_load.classify_features import classify_features_using_pandas
+from .data_load.classify_features import classify_features
+from .data_load.classify_features import classify_features_using_pandas
 
-from deep_autoviml.deep_autoviml.data_load.classify_features import EDA_classify_and_return_cols_by_type
-from deep_autoviml.deep_autoviml.data_load.classify_features import EDA_classify_features
-from deep_autoviml.deep_autoviml.data_load.extract import find_problem_type, transform_train_target
-from deep_autoviml.deep_autoviml.data_load.extract import load_train_data, load_train_data_file
-from deep_autoviml.deep_autoviml.data_load.extract import load_train_data_frame
+from .data_load.classify_features import EDA_classify_and_return_cols_by_type
+from .data_load.classify_features import EDA_classify_features
+from .data_load.extract import find_problem_type, transform_train_target
+from .data_load.extract import load_train_data, load_train_data_file
+from .data_load.extract import load_train_data_frame
 
 # keras preprocessing
-from deep_autoviml.deep_autoviml.preprocessing.preprocessing import perform_preprocessing
-from deep_autoviml.deep_autoviml.preprocessing.preprocessing_tabular import preprocessing_tabular
-from deep_autoviml.deep_autoviml.preprocessing.preprocessing_nlp import preprocessing_nlp
+from .preprocessing.preprocessing import perform_preprocessing
+from .preprocessing.preprocessing_tabular import preprocessing_tabular
+from .preprocessing.preprocessing_nlp import preprocessing_nlp
 
 # keras models and bring-your-own models
-from deep_autoviml.deep_autoviml.modeling.create_model import create_model
-from deep_autoviml.deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
-from deep_autoviml.deep_autoviml.modeling.train_model import train_model
-from deep_autoviml.deep_autoviml.modeling.train_custom_model import train_custom_model
-from deep_autoviml.deep_autoviml.modeling.predict_model import predict
+from .modeling.create_model import create_model
+from .models import basic, deep, big_deep, giant_deep, cnn1, cnn2
+from .modeling.train_model import train_model
+from .modeling.train_custom_model import train_custom_model
+from .modeling.predict_model import predict
 
 # Utils
-from deep_autoviml.deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset
-from deep_autoviml.deep_autoviml.utilities.utilities import print_one_row_from_tf_label
+from .utilities.utilities import print_one_row_from_tf_dataset
+from .utilities.utilities import print_one_row_from_tf_label
 #############################################################################################
 import os
 def check_if_GPU_exists():
@@ -230,28 +230,25 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     ####   K E R A S    O P T I O N S   - THESE CAN BE OVERRIDDEN by your input keras_options dictionary ####
     keras_options_defaults = {}
     keras_options_defaults["batchsize"] = ""
-    keras_options_defaults['activation'] = 'relu'
+    keras_options_defaults['activation'] = ''
     keras_options_defaults['save_weights_only'] = True
     keras_options_defaults['use_bias'] = True
     keras_options_defaults["patience"] = "" ### patience of 20 seems ideal.
-    keras_options_defaults["epochs"] = 500 ## 500 seems ideal for most scenarios ####
+    keras_options_defaults["epochs"] = "" ## 500 seems ideal for most scenarios ####
     keras_options_defaults["steps_per_epoch"] = "" ### 10 seems ideal for most scenarios 
     keras_options_defaults['optimizer'] = ""
-    #keras_options_defaults['optimizer'] = RMSprop(lr=0.1, rho=0.9)
-    #keras_options_defaults['optimizer'] = SGD(lr=0.001, momentum=0.9, nesterov=True)
-    ##Adam(lr=0.1)   #SGD(lr=0.1) ## this needs tuning ##
     keras_options_defaults['kernel_initializer'] =  '' 
-    ### glorot is default. Ors are:  'he_uniform', etc.
-    keras_options_defaults['num_layers'] = 2
+    keras_options_defaults['num_layers'] = ""
     keras_options_defaults['loss'] = ""
     keras_options_defaults['metrics'] = ""
     keras_options_defaults['monitor'] = ""
     keras_options_defaults['mode'] = ""
+    keras_options_defaults["lr_scheduler"] = ""
 
     list_of_keras_options = ["batchsize", "activation", "save_weights_only", "use_bias",
                             "patience", "epochs", "steps_per_epoch", "optimizer",
                             "kernel_initializer", "num_layers",
-                            "loss", "metrics", "monitor","mode"]
+                            "loss", "metrics", "monitor","mode", "lr_scheduler"]
 
     if len(keras_options) == 0:
         keras_options = defaultdict(str)
@@ -274,7 +271,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 
     list_of_model_options = ["idcols","modeltype","sep","cat_feat_cross_flag", "model_use_case",
                             "nlp_char_limit", "variable_cat_limit", "csv_encoding", "header",
-                            "max_trials"]
+                            "max_trials","tuner"]
 
     model_options_defaults = defaultdict(str)
     model_options_defaults["idcols"] = []
@@ -287,6 +284,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     model_options_defaults["csv_encoding"] = 'utf-8'
     model_options_defaults["header"] = 0 ### this is the header row for pandas to read
     model_options_defaults["max_trials"] = 10 ## number of Storm Tuner trials ###
+    model_options_defaults['tuner'] = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
     
     if len(model_options) == 0:
         model_options = defaultdict(str)
@@ -372,8 +370,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     deep_model, keras_options =  create_model(use_my_model, inputs, meta_outputs, 
                                         keras_options, var_df, keras_model_type,
                                         model_options)
-    if dft.shape[1] <= 100 and keras_model_type != 'auto':
-        plot_filename = 'deep_autoviml_'+project_name+'_'+keras_model_type+'_model.png'
+    if dft.shape[1] <= 100 :
+        plot_filename = 'deep_autoviml_'+project_name+'_'+keras_model_type+'_model_before.png'
         try:
             tf.keras.utils.plot_model(model = deep_model, to_file=plot_filename, dpi=72,
                             show_layer_names=True, rankdir="LR", show_shapes=True)
@@ -396,6 +394,17 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         print('Training a %s model option...' %keras_model_type)
         deep_model, cat_vocab_dict = train_model(deep_model, batched_data, target, keras_model_type,
                         keras_options, model_options, var_df, cat_vocab_dict, project_name, save_model_flag, verbose) 
+    ##### Plot the model again after you have done model search #############
+    if dft.shape[1] <= 100 :
+        plot_filename = 'deep_autoviml_'+project_name+'_'+keras_model_type+'_model_after.png'
+        try:
+            tf.keras.utils.plot_model(model = deep_model, to_file=plot_filename, dpi=72,
+                            show_layer_names=True, rankdir="LR", show_shapes=True)
+            display(Image(retina=True, filename=plot_filename))
+            print('Model plot saved in file: %s' %plot_filename)
+        except:
+            print('Model plot not saved due to error. Continuing...')
+
     distributed_values = (deep_model, cat_vocab_dict)
     return distributed_values
 ############################################################################################

@@ -39,7 +39,7 @@ from tensorflow import keras
 from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup, CategoryCrossing
 from tensorflow.keras.layers.experimental.preprocessing import IntegerLookup, CategoryEncoding
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization, Discretization, Hashing
-from tensorflow.keras.layers import Embedding, Reshape, Dropout, Dense
+from tensorflow.keras.layers import Embedding, Reshape, Dropout, Dense, GaussianNoise
 
 from tensorflow.keras.optimizers import SGD, Adam, RMSprop
 from tensorflow.keras import layers
@@ -94,8 +94,8 @@ from tensorflow.keras import callbacks
 ### This is the Storm-Tuner which stands for Stochastic Random Mutator tuner
 ###  More details can be found in this github: https://github.com/ben-arnao/stochasticmutatortuner
 ###   You can also pip install storm-tuner --upgrade to get the latest version ##########
-from storm_tuner import Tuner
 #########################################################################################
+from storm_tuner import Tuner
 #########################################################################################
 import os
 def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_only):
@@ -168,6 +168,77 @@ def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, nu
         metrics=val_metrics,
     )
     return model
+###############################################################################
+def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predicts, 
+                        num_labels, optimizer_options, loss_fn, val_metrics, cols_len):
+
+    n_layers = trial.suggest_int("n_layers", 1, 4)
+    num_hidden = trial.suggest_int("n_units", 32, 512, log=True)
+    weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
+    model = tf.keras.Sequential()
+
+    batch_norm = trial.suggest_categorical("batch_norm", [True, False])
+    add_noise = trial.suggest_categorical("add_noise", [True, False])
+    dropout = trial.suggest_float("dropout", 0, 0.5)
+
+    for i in range(n_layers):
+        model.add(
+            tf.keras.layers.Dense(
+                num_hidden,
+                activation=trial.suggest_categorical("activation", ['relu', 'tanh', 'elu', 'selu']),
+                kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+            )
+        )
+
+        if batch_norm:
+            model.add(BatchNormalization())
+
+        if add_noise:
+            model.add(GaussianNoise(trial.suggest_float("adam_learning_rate", 1e-5, 1e-1, log=True)))
+
+        model.add(Dropout(dropout))
+
+    #### Now we add the final layers to the model #########
+    kwargs = {}
+    if isinstance(optimizer_options,str):
+        if optimizer_options == "":
+            optimizer_options = ["Adam", "SGD"]
+            optimizer_selected = trial.suggest_categorical("optimizer", optimizer_options)
+        else:
+            optimizer_selected = optimizer_options
+    else:
+        optimizer_selected = trial.suggest_categorical("optimizer", optimizer_options)
+    if optimizer_selected == "Adam":
+        kwargs["learning_rate"] = trial.suggest_float("adam_learning_rate", 1e-5, 1e-1, log=True)
+        kwargs["epsilon"] = trial.suggest_float(
+            "adam_epsilon", 1e-14, 1e-4, log=True
+        )
+    elif optimizer_selected == "SGD":
+        kwargs["learning_rate"] = trial.suggest_float(
+            "sgd_opt_learning_rate", 1e-5, 1e-2, log=True
+        )
+        kwargs["momentum"] = trial.suggest_float("sgd_opt_momentum", 0.8, 0.95)
+
+    optimizer = getattr(tf.optimizers, optimizer_selected)(**kwargs)
+
+    ##### This is the simplest way to convert a sequential model to functional!
+    opt_outputs = add_inputs_outputs_to_model_body(model, inputs, meta_outputs)
+
+    comp_model = get_compiled_model(inputs, opt_outputs, output_activation, num_predicts, 
+                        num_labels, model, optimizer, loss_fn, val_metrics, cols_len)
+
+    return comp_model
+
+###############################################################################
+def add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs):
+    ##### This is the simplest way to convert a sequential model to functional!
+    for num, each_layer in enumerate(model_body.layers):
+        if num == 0:
+            final_outputs = each_layer(meta_outputs)
+        else:
+            final_outputs = each_layer(final_outputs)
+    return final_outputs
+
 ###############################################################################
 def build_model_storm(hp):
     model_body = Sequential()
@@ -249,12 +320,10 @@ class MyTuner(Tuner):
 
         ##  now load the model_body and convert it to functional model
         #print('Loading custom model...')
-        ##### This is the simplest way to convert a sequential model to functional!
-        for num, each_layer in enumerate(model_body.layers):
-            if num == 0:
-                final_outputs = each_layer(meta_outputs)
-            else:
-                final_outputs = each_layer(final_outputs)
+
+        ##### This is the simplest way to convert a sequential model to functional model!
+        storm_outputs = add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs)
+
         #### This final outputs is the one that is taken into final dense layer and compiled
         #print('    Custom model loaded successfully. Now compiling model...')
 
@@ -266,7 +335,7 @@ class MyTuner(Tuner):
                             ordered=False)
         optimizer = return_optimizer(hp, selected_optimizer, trial_flag=True)
         
-        comp_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
+        comp_model = get_compiled_model(inputs, storm_outputs, output_activation, num_predicts, 
                             num_labels, model_body, optimizer, val_loss, val_metrics, cols_len)
 
         # here we can access params generated in the builder function
@@ -287,7 +356,7 @@ class MyTuner(Tuner):
         steps = 20
         #scores = []
         lr_patience = max(2,int(patience*0.5))
-        rlr = callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.95,
+        rlr = callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.97,
                     patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.001, cooldown=0, verbose=1)
         es = callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
                         verbose=0, mode=val_mode, baseline=None, restore_best_weights=True)
@@ -370,6 +439,7 @@ def return_optimizer(hp, hpq_optimizer, trial_flag=False):
             best_optimizer = nesterov
     return best_optimizer
 ##########################################################################################
+import optuna
 def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type, 
                     keras_options, model_options, var_df, cat_vocab_dict, project_name="", 
                     save_model_flag=True, use_my_model='', verbose=0 ):
@@ -388,7 +458,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     num_classes = model_options["num_classes"]
     num_labels = model_options["num_labels"]
     modeltype = model_options["modeltype"]
-    patience = check_keras_options(keras_options, "patience", 10)
+    patience = keras_options["patience"]
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
     data_dim = int(data_size*meta_outputs.shape[1])
     print('After preprocessing using keras layers, features dimensions is now %s' %meta_outputs.shape[1])
@@ -432,10 +502,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ### check the defaults for the following!
     save_weights_only = check_keras_options(keras_options, "save_weights_only", False)
 
-    if STEPS_PER_EPOCH > NUMBER_OF_EPOCHS:
-        STEPS_PER_EPOCH = max(2, int(NUMBER_OF_EPOCHS/25))
     print('    steps_per_epoch = %s, number epochs = %s' %(STEPS_PER_EPOCH, NUMBER_OF_EPOCHS))
-    patience = check_keras_options(keras_options,"patience", 10)
     print('    val mode = %s, val monitor = %s, patience = %s' %(val_mode, val_monitor, patience))
 
     callbacks_list, tb_logpath = get_callbacks(val_mode, val_monitor, patience,
@@ -466,8 +533,18 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     #train_ds = train_ds.prefetch(batch_size).shuffle(shuffle_size, 
     #                        reshuffle_each_iteration=False, seed=42).repeat()
     #valid_ds = valid_ds.prefetch(batch_size).repeat()
-    print('Training %s model now. This will take time...' %keras_model_type)
-    if isinstance(use_my_model, str):
+    if not isinstance(use_my_model, str):  ### That means no tuner in this case ####
+        tuner = "None"
+    else:
+        tuner = model_options["tuner"]
+    print('Training %s model using %s. This will take time...' %(keras_model_type, tuner))
+    ############################################################################
+    ########     P E R FO R M     T U N I N G    H E R E  #####################
+    ############################################################################
+    ###    E A R L Y    S T O P P I N G    T O    P R E V E N T   O V E R F I T T I N G  ##
+    es = callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
+                        verbose=0, mode=val_mode, baseline=None, restore_best_weights=True)
+    if tuner.lower() == "storm":
         trials_saved_path = os.path.join(project_name,keras_model_type)
         if not os.path.exists(trials_saved_path):
             os.makedirs(trials_saved_path)
@@ -509,12 +586,11 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
             deep_model = return_model_body(keras_options)
             best_model = return_model_body(keras_options)
             
-        if cols_len <= 100:
-            try:
-                tf.keras.utils.plot_model(model = best_model , rankdir="LR", dpi=72, show_shapes=True)
-            except:
-                print('Could not plot model since pydot and graphviz may not be in this device')
-                      
+        #### Now add layers to the model body ################
+        best_outputs = add_inputs_outputs_to_model_body(best_model, inputs, meta_outputs)
+        best_model = get_compiled_model(inputs, best_outputs, output_activation, num_predicts, 
+                            num_labels, deep_model, best_optimizer, val_loss, val_metrics, cols_len)
+                    
         print('Time taken for tuning hyperparameters = %0.0f (mins)' %((time.time()-start_time1)/60))
         ##########    S E L E C T   B E S T   O P T I M I Z E R and L R  H E R E ############
         try:
@@ -540,22 +616,75 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         K.set_value(best_optimizer.learning_rate, optimizer_lr)
         #######################################################################################
         print('Best hyperparameters: %s' %hpq.values)
-    else:
+        ##### You need to set the best optimizer from the best_model #################
+        deep_outputs = add_inputs_outputs_to_model_body(deep_model, inputs, meta_outputs)
+        ## The deep_model will be trained on full_dataset and saved as the final model ##########
+        deep_model = get_compiled_model(inputs, deep_outputs, output_activation, num_predicts, 
+                            num_labels, deep_model, best_optimizer, val_loss, val_metrics, cols_len)
+    elif tuner.lower() == "optuna":
+        ######     O P T U N A    ###########################
+        ### This is where you build the optuna model #####
+        ####################################################
+        optuna_scores = []
+        def objective(trial):
+            optimizer_options = ""
+            opt_model = build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predicts, 
+                        num_labels, optimizer_options, val_loss, val_metrics, cols_len)
+            cb_default = callbacks.LearningRateScheduler(lambda epoch: learning_rate * (0.75 ** np.floor(epoch / 2)))
+            history = opt_model.fit(train_ds, validation_data=valid_ds, 
+                        epochs=NUMBER_OF_EPOCHS, 
+                        callbacks=[cb_default, es],
+                        verbose=0)
+            if num_labels == 1:
+                score = np.mean(history.history[val_monitor][-5:])
+            else:
+                for i in range(num_labels):
+                    val_metric = val_monitor.split("_")[-1]
+                    val_metric = 'val_output_'+str(i)+'_' + val_metric
+                    if i == 0:
+                        results = history.history[val_metric][-5:]
+                    else:
+                        results = np.c_[results,history.history[val_metric][-5:]]
+                score = results.mean(axis=1).mean()
+            optuna_scores.append(score)
+            return score
+        ##### This where you run optuna ###################
+        if val_mode == 'max':
+            study = optuna.create_study(direction="maximize")
+        else:
+            study = optuna.create_study(direction="maximize")
+        ### now find the best tuning hyper params here ####
+        study.optimize(objective, n_trials=max_trials)
+        print('Best trial score in Optuna: %s' %study.best_trial.value)
+        print('    Scores mean:', np.mean(optuna_scores), 'std:', np.std(optuna_scores))
+        print('    Best params: %s' %study.best_params)
+        optimizer_options = study.best_params['optimizer']
+        best_model = build_model_optuna(study.best_trial, inputs, meta_outputs, output_activation, num_predicts, 
+                        num_labels, optimizer_options, val_loss, val_metrics, cols_len)
+        best_optimizer = best_model.optimizer
+        deep_model = build_model_optuna(study.best_trial, inputs, meta_outputs, output_activation, num_predicts, 
+                        num_labels, optimizer_options, val_loss, val_metrics, cols_len)
+        best_batch = batch_size
+        optimizer_lr = best_optimizer.learning_rate.numpy()
+        print('\nBest optimizer = %s and best learning_rate = %s' %(best_optimizer, optimizer_lr))
+        K.set_value(best_optimizer.learning_rate, optimizer_lr)
+    elif tuner.lower() == "none":
         print('skipping tuner search since use_my_model flag set to True...')
         best_model = use_my_model
         deep_model = use_my_model
-        best_optimizer = 'Adam'
+        best_outputs = add_inputs_outputs_to_model_body(best_model, inputs, meta_outputs)
+        deep_outputs = add_inputs_outputs_to_model_body(deep_model, inputs, meta_outputs)
+        best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
         best_batch = batch_size
-    ##### This is the simplest way to convert a sequential model to functional!
-    for num, each_layer in enumerate(best_model.layers):
-        if num == 0:
-            final_outputs = each_layer(meta_outputs)
-        else:
-            final_outputs = each_layer(final_outputs)
-    #######################################################################################
-    #### The best_model will be used for predictions on valid_ds to get metrics #########
-    best_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
-                        num_labels, best_model, best_optimizer, val_loss, val_metrics, cols_len)
+        optimizer_lr = best_optimizer.learning_rate.numpy()
+        print('\nBest optimizer = %s and best learning_rate = %s' %(best_optimizer, optimizer_lr))
+        K.set_value(best_optimizer.learning_rate, optimizer_lr)
+        #######################################################################################
+        #### The best_model will be used for predictions on valid_ds to get metrics #########
+        best_model = get_compiled_model(inputs, best_outputs, output_activation, num_predicts, 
+                            num_labels, best_model, best_optimizer, val_loss, val_metrics, cols_len)
+        deep_model = get_compiled_model(inputs, deep_outputs, output_activation, num_predicts, 
+                            num_labels, best_model, best_optimizer, val_loss, val_metrics, cols_len)
     #######################################################################################
     #### here we can define the custom logic to assign a score to the model to monitor
     if num_labels > 1:
@@ -568,25 +697,36 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ####################################################################################
     #### Onecycle is another fast way to find the best learning in large datasets ######
     #onecycle = OneCycleScheduler(iterations=steps, max_rate=0.05)
-    onecycle = OneCycleScheduler(steps=steps, lr_max=0.1)
     ####  This lr_sched is a fast way to reduce LR but it can easily overfit quickly #####
-    lr_sched = callbacks.LearningRateScheduler(lambda epoch: 1e-1 * (0.75 ** np.floor(epoch / 2)))
+    lr_sched = callbacks.LearningRateScheduler(lambda epoch: optimizer_lr * (0.75 ** np.floor(epoch / 2)))
     ## RLR is the easiest one to handle as it reduces learning rate when there is no improvement ##
     lr_patience = max(5,int(patience*0.5))
     rlr = callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.99,
                     patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.001, cooldown=0, verbose=1)
     #### lr_decay originally used to give good results but not anymore #######
     lr_decay_cb = callbacks.LearningRateScheduler(
-        lambda epoch: learning_rate - 0.02 * (0.5 ** (1 + epoch)),
+        lambda epoch: optimizer_lr + 0.02 * (0.5 ** (1 + epoch)),
         verbose=False)
-
+    onecycle_steps = max(10, np.ceil(data_size/(2*batch_size))*NUMBER_OF_EPOCHS)
+    print('Onecycle steps = %d' %onecycle_steps)
+    onecycle = OneCycleScheduler(steps=onecycle_steps, lr_max=0.05)
+    if keras_options['lr_scheduler'] == "lr_scheduler":
+        lr_scheduler = lr_sched
+        keras_options['lr_scheduler'] = "lr_sched"
+    elif keras_options['lr_scheduler'] == 'onecycle':
+        lr_scheduler = onecycle
+    elif keras_options['lr_scheduler'] == 'rlr':
+        lr_scheduler = rlr   #onecycle
+    elif keras_options['lr_scheduler'] == 'decay':
+        lr_scheduler == lr_decay_cb
+    else:
+        lr_scheduler = onecycle
+        keras_options['lr_scheduler'] = "onecycle"
+    print('Keras Learning Rate Scheduler = %s' %keras_options['lr_scheduler'])
     ##### Now you must try the best_model to choose the best learning_rate ####
     logdir = "deep_autoviml"
     tensorboard_logpath = os.path.join(logdir,"mylogs")
     tb = callbacks.TensorBoard(tensorboard_logpath)
-    ###    E A R L Y    S T O P P I N G    T O    P R E V E N T   O V E R F I T T I N G  ##
-    es = callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
-                        verbose=0, mode=val_mode, baseline=None, restore_best_weights=True)
 
     ####################################################################################
     #####   T E N S O R  B O A R D    C  A  N     B E   F O U N D    H E R E ######
@@ -606,11 +746,14 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ####################################################################################
     np.random.seed(42)
     tf.random.set_seed(42)
-    NUMBER_OF_EPOCHS = 100
-    ### lr_decay_cb is not working so well. rlr works best so far.
-    callbacks_list = [onecycle, es, tb]
+
+    ### lr_decay_cb is not working so well. rlr works best so far. Onecycle works well.
+    #callbacks_list = [onecycle, es, tb]
+    callbacks_list = [lr_scheduler, tb]
+
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
-    print('    Callbacks list: %s' %callbacks_list)
+    for each_callback in callbacks_list:
+        print('    Callback added: %s' %str(each_callback).split(".")[-1])
     ####  Do this with LR scheduling but NO early stopping since we want the model fully trained #####
     history = best_model.fit(train_ds, validation_data=valid_ds, batch_size=best_batch,
                 epochs=NUMBER_OF_EPOCHS, steps_per_epoch=STEPS_PER_EPOCH, 
@@ -758,21 +901,17 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     full_ds = full_ds.unbatch().batch(best_batch)
     full_ds = full_ds.shuffle(shuffle_size, 
             reshuffle_each_iteration=False, seed=42).prefetch(best_batch).repeat()
-    #################   B E S T    O P T I M I Z E R     ##########################
-    ##### You need to set the best optimizer from the best_model #################
-    deep_optimizer = best_model.optimizer
-    ## The deep_model will be trained on full_dataset and saved as the final model ##########
-    deep_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
-                        num_labels, deep_model, deep_optimizer, val_loss, val_metrics, cols_len)
+
+    #################   B E S T    D E E P   M O D E L       ##########################
 
     ##### You need to set the best learning rate from the best_model #################
     best_rate = best_model.optimizer.lr.numpy()
     if best_rate < 0:
         print('    best learning rate less than zero. Resetting it....')
-        #best_rate = 0.01
+        best_rate = 0.01
     else:
         pass
-        #print('    best learning rate = %s' %best_rate)
+        print('    best learning rate = %s' %best_rate)
     #K.set_value(deep_model.optimizer.learning_rate, best_rate)
     #print("    set learning rate using best model:", deep_model.optimizer.learning_rate.numpy())
     ####   Dont set the epochs too low - let them be back to where they were stopped  ####
@@ -827,7 +966,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     except:
         print('Unable to save cat_vocab_dict - please pickle it yourself.')
 
-    print('Deep_Auto_ViML completed. Total time = %0.0f (in mins)' %((time.time()-start_time)/60))
+    print('\nDeep_Auto_ViML completed. Total time taken = %0.0f (in mins)' %((time.time()-start_time)/60))
 
     return deep_model, cat_vocab_dict
 ######################################################################################
