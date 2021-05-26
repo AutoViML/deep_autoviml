@@ -630,6 +630,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         optuna_scores = []
         def objective(trial):
             optimizer_options = ""
+            K.clear_session()
             opt_model = build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predicts, 
                         num_labels, optimizer_options, val_loss, val_metrics, cols_len)
             cb_default = callbacks.LearningRateScheduler(lambda epoch: learning_rate * (0.75 ** np.floor(epoch / 2)))
@@ -651,10 +652,11 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
             optuna_scores.append(score)
             return score
         ##### This where you run optuna ###################
+        study_name = project_name+'_'+keras_model_type+'_study_'+str(np.random.randint(10))
         if val_mode == 'max':
-            study = optuna.create_study(direction="maximize")
+            study = optuna.create_study(study_name=study_name, direction="maximize", load_if_exists=False)
         else:
-            study = optuna.create_study(direction="maximize")
+            study = optuna.create_study(study_name=study_name, direction="maximize", load_if_exists=False)
         ### now find the best tuning hyper params here ####
         study.optimize(objective, n_trials=max_trials)
         print('Best trial score in Optuna: %s' %study.best_trial.value)
@@ -916,8 +918,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     else:
         pass
         print('    best learning rate = %s' %best_rate)
-    #K.set_value(deep_model.optimizer.learning_rate, best_rate)
-    #print("    set learning rate using best model:", deep_model.optimizer.learning_rate.numpy())
+    K.set_value(deep_model.optimizer.learning_rate, best_rate)
+    print("    set learning rate using best model:", deep_model.optimizer.learning_rate.numpy())
     ####   Dont set the epochs too low - let them be back to where they were stopped  ####
     print('    max epochs for training = %d' %stopped_epoch)
     deep_model.fit(full_ds, epochs=stopped_epoch, steps_per_epoch=STEPS_PER_EPOCH, 
