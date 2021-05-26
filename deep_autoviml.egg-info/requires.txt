@@ -2,7 +2,7 @@ emoji
 ipython
 jupyter
 matplotlib
-numpy
+numpy==1.19.2
 optuna
 pandas
 regex

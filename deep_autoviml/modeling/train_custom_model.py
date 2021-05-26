@@ -208,16 +208,16 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     batch_norm = trial.suggest_categorical("batch_norm", [True, False])
     add_noise = trial.suggest_categorical("add_noise", [True, False])
     dropout = trial.suggest_float("dropout", 0, 0.5)
-
+    activation_fn = trial.suggest_categorical("activation", ['relu', 'tanh', 'elu', 'selu'])
     for i in range(n_layers):
         model.add(
             tf.keras.layers.Dense(
                 num_hidden,
                 name="opt_dense_"+str(i),
-                activation=trial.suggest_categorical("activation", ['relu', 'tanh', 'elu', 'selu']),
                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
             )
         )
+        model.add(Activation(activation_fn,name="opt_activation_"+str(i)))
 
         if batch_norm:
             model.add(BatchNormalization(name="opt_batchnorm_"+str(i)))
@@ -517,6 +517,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     #optimizer = SGD(lr=learning_rate, momentum = 0.9)
     print('    Using optimizer = %s' %str(optimizer).split(".")[-1][:8])
     use_bias = check_keras_options(keras_options, 'use_bias', True)
+    lr_scheduler = check_keras_options(keras_options, 'lr_scheduler', "")
     #######################################################################
     val_mode = keras_options["mode"]
     val_monitor = keras_options["monitor"]
@@ -762,6 +763,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     onecycle_steps = max(10, np.ceil(data_size/(2*batch_size))*NUMBER_OF_EPOCHS)
     print('Onecycle steps = %d' %onecycle_steps)
     onecycle = OneCycleScheduler(steps=onecycle_steps, lr_max=0.05)
+
     if keras_options['lr_scheduler'] == "lr_scheduler":
         lr_scheduler = lr_sched
         keras_options['lr_scheduler'] = "lr_sched"
@@ -770,7 +772,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     elif keras_options['lr_scheduler'] == 'rlr':
         lr_scheduler = rlr   #onecycle
     elif keras_options['lr_scheduler'] == 'decay':
-        lr_scheduler == lr_decay_cb
+        lr_scheduler = lr_decay_cb
     else:
         lr_scheduler = onecycle
         keras_options['lr_scheduler'] = "onecycle"
@@ -808,6 +810,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
     for each_callback in callbacks_list:
         print('    Callback added: %s' %str(each_callback).split(".")[-1])
+    
     ####  Do this with LR scheduling but NO early stopping since we want the model fully trained #####
     history = best_model.fit(train_ds, validation_data=valid_ds, batch_size=best_batch,
                 epochs=NUMBER_OF_EPOCHS, steps_per_epoch=STEPS_PER_EPOCH, 
@@ -907,6 +910,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print('         Held-out test data set Results:')
     num_labels = cat_vocab_dict['num_labels']
     num_classes = cat_vocab_dict['num_classes']
+    if check_for_nan_in_array(y_probas):
+        y_probas = pd.DataFrame(y_probas).fillna(0).values
+    elif check_for_nan_in_array(y_test_preds):
+        y_test_preds = pd.DataFrame(y_test_preds).fillna(0).values.ravel()
     if num_labels <= 1:
         if modeltype == 'Regression':
             print_regression_model_stats(y_test, y_test_preds,target,plot_name="deep_autoviml")
@@ -1069,4 +1076,12 @@ def return_model_body(keras_options):
         model_body.add(layers.Dense(64, activation='relu', kernel_initializer="lecun_normal",
                                     activity_regularizer=tf.keras.regularizers.l2(0.01)))
     return model_body
+########################################################################################
+def check_for_nan_in_array(array_in):
+    """
+    If an array has NaN in it, this will return True. Otherwise, it will return False.
+    """
+    array_sum = np.sum(array_in)
+    array_nan = np.isnan(array_sum)
+    return array_nan
 ########################################################################################

@@ -51,6 +51,8 @@ from tensorflow.keras import utils
 from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
+from tensorflow.keras.layers import Dense, LSTM, GRU, Input, concatenate, Embedding
+from tensorflow.keras.layers import Reshape, Activation, Flatten
 
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
 from IPython.core.display import Image, display
@@ -85,6 +87,29 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     You can always fine tune it.
     You can always create your own model and feed it once you have successfully created preprocessing pipeline.
     """
+    num_classes = model_options["num_classes"]
+    num_labels = model_options["num_labels"]
+    modeltype = model_options["modeltype"]
+    ##### set the defaults for the LSTM or GRU model here #########################
+    # Convolution
+    kernel_size = 3
+    filters = 128
+    pool_size = 4
+
+    # LSTM
+    lstm_output_size = 96
+    gru_units = 96
+
+    # Training
+    drop_out = 0.2
+    if modeltype == 'Regression':
+        class_size = 1
+    else:
+        if num_classes == 2:
+            class_size = 1
+        else:
+            class_size = num_classes    
+    ###### Now calculate some layer sizes #####    
     data_size = cat_vocab_dict["DS_LEN"]
     if data_size <= 10000:
         dense_layer1 = max(32,int(data_size/300))
@@ -148,11 +173,33 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             nlp_outputs = Dense(dense_layer1, activation="relu")(nlp_outputs)
             nlp_outputs = Dropout(0.5)(nlp_outputs)
         else:
-            # We add a vanilla hidden layer that's all
-            nlp_outputs = GlobalAveragePooling1D()(embedding)
-            nlp_outputs = Dense(dense_layer1, activation="relu")(nlp_outputs)
-            nlp_outputs = Dropout(0.5)(nlp_outputs)
-    
+            ###############################################################################
+            if class_size == 1:
+                #### Use this only for Binary-Class classification problems ########
+                ####  LSTM with 1D convnet with maxpooling ########
+                x = Conv1D(filters, 
+                                 kernel_size,
+                                 padding='valid',
+                                 activation='relu',
+                                 strides=1)(embedding)
+                x = MaxPooling1D(pool_size=pool_size)(x)
+                x = GRU(units=gru_units,  dropout=drop_out, recurrent_dropout=drop_out)(x)
+                if modeltype == 'Regression':
+                    nlp_outputs = Dense(class_size, activation='linear')(x)
+                else:
+                    nlp_outputs = Dense(class_size, activation='sigmoid')(x)
+            elif class_size > 1:
+                #### Use this only for Multi-Class classification problems #########
+                ####  CNN Model: create a 1D convnet with global maxpooling ########
+                x = Conv1D(128, kernel_size, activation='relu')(embedding)
+                x = MaxPooling1D(kernel_size)(x)
+                x = Conv1D(128, kernel_size, activation='relu')(x)
+                x = MaxPooling1D(kernel_size)(x)
+                x = Conv1D(128, kernel_size, activation='relu')(x)
+                x = GlobalMaxPooling1D()(x)
+                x = Dense(128, activation='relu')(x)
+                nlp_outputs = Dense(class_size, activation='softmax')(x)
+
     #### This is common processing for both deep_and_wide models and other kinds of models ##
     if isinstance(meta_outputs, list):
         ### if meta_outputs is a list, it means there is no int, float or cat variable in this data set
