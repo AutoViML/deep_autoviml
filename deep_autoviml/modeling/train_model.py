@@ -52,6 +52,8 @@ from tensorflow.keras import regularizers
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
+from deep_autoviml.utilities.utilities import save_valid_predictions
+
 from deep_autoviml.modeling.create_model import check_keras_options
 #####################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
@@ -130,7 +132,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     patience = check_keras_options(keras_options, "patience", 10)
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
     print('    original datasize = %s, initial batchsize = %s' %(data_size, batch_size))
-    NUMBER_OF_EPOCHS = keras_options[ "epochs"]
+    NUMBER_OF_EPOCHS = check_keras_options(keras_options, "epochs", 100)
     learning_rate = 5e-1
     steps = max(10, data_size//(batch_size* 10))
     STEPS_PER_EPOCH = check_keras_options(keras_options, "steps_per_epoch", 
@@ -296,15 +298,15 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     #################################################################################
     ########     P L O T T I N G   V A L I D A T I O N   R E S U L T S         ######
     #################################################################################
-    ###  Plot the epochs and loss metrics here #####################
+    ###  Plot the epochs and loss metrics here #####################    
     try:
         #print('    Additionally, Tensorboard logs can be found here: %s' %tb_logpath)
         if modeltype == 'Regression':
-            plot_history(history, "mae", num_labels)
+            plot_history(history, val_monitor[4:], num_labels)
         elif modeltype == 'Classification':
-            plot_history(history, "accuracy", num_labels)
+            plot_history(history, val_monitor[4:], num_labels)
         else:
-            plot_history(history, "accuracy", num_labels)
+            plot_history(history, val_monitor[4:], num_labels)
     except:
         print('    Plot history is erroring. Tensorboard logs can be found here: %s' %tb_logpath)
 
@@ -372,10 +374,3 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
 
     return deep_model, cat_vocab_dict
 ######################################################################################
-def save_valid_predictions(y_test, y_preds, project_name):
-    pdf = pd.DataFrame([y_test, y_preds])
-    pdf = pdf.T
-    pdf.columns= ['actuals','predictions']
-    pdf.to_csv(project_name+'_predictions.csv',index=False)
-    return pdf
-#########################################################################################    

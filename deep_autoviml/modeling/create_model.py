@@ -29,7 +29,7 @@ np.set_printoptions(precision=3, suppress=True)
 from deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
 
 # Utils
-
+from deep_autoviml.utilities.utilities import get_compiled_model, check_if_GPU_exists
 ############################################################################################
 # TensorFlow ≥2.4 is required
 import tensorflow as tf
@@ -232,117 +232,66 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     print('Recommended hidden layers (with units in each Dense Layer)  = (%d, %d, %d)\n' %(
                                 dense_layer1,dense_layer2,dense_layer3))
     #### The Deep and Wide Model is a bit more complicated. So it needs some changes in inputs! ######
-    if isinstance(use_my_model, str) :
-        if use_my_model == "":
-            if keras_model_type.lower() in ['basic', 'simple', 'default','simple_dnn','sample model']:
-                ##########  Now that we have setup the layers correctly, we can build some more hidden layers
-                model_body = basic.model
-            elif keras_model_type.lower() in ['deep']:
-                ##########  Now that we have setup the layers correctly, we can build some more hidden layers
-                model_body = deep.model
-            elif keras_model_type.lower() in ['big_deep', 'big deep']:
-                ####################################################
-                model_body = big_deep.model
-            elif keras_model_type.lower() in ['giant_deep', 'giant deep']:
-                ####################################################
-                model_body = giant_deep.model
-            elif keras_model_type.lower() in ['cnn1', 'cnn','cnn2']:
-                ##########  Now that we have setup the layers correctly, we can build some more hidden layers
-                # Conv1D + global max pooling
-                if keras_model_type.lower() in ['cnn', 'cnn1']:
-                    model_body = cnn1.model
+    my_strategy = check_if_GPU_exists()
+    print('TF strategy used in this machine = %s' %my_strategy)
+    ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
+    with my_strategy.scope():
+        if isinstance(use_my_model, str) :
+            if use_my_model == "":
+                if keras_model_type.lower() in ['basic', 'simple', 'default','simple_dnn','sample model']:
+                    ##########  Now that we have setup the layers correctly, we can build some more hidden layers
+                    model_body = basic.model
+                elif keras_model_type.lower() in ['deep']:
+                    ##########  Now that we have setup the layers correctly, we can build some more hidden layers
+                    model_body = deep.model
+                elif keras_model_type.lower() in ['big_deep', 'big deep']:
+                    ####################################################
+                    model_body = big_deep.model
+                elif keras_model_type.lower() in ['giant_deep', 'giant deep']:
+                    ####################################################
+                    model_body = giant_deep.model
+                elif keras_model_type.lower() in ['cnn1', 'cnn','cnn2']:
+                    ##########  Now that we have setup the layers correctly, we can build some more hidden layers
+                    # Conv1D + global max pooling
+                    if keras_model_type.lower() in ['cnn', 'cnn1']:
+                        model_body = cnn1.model
+                    else:
+                        model_body = cnn2.model
+                elif keras_model_type.lower() in ['regularized']:
+                    ########## In case none of the options are specified, then set up a simple model!
+                    print('    keras model type = %s , hence building a custom sequential model...' %keras_model_type)
+                    num_layers = check_keras_options(keras_options, 'num_layers', 2)
+                    model_body = tf.keras.Sequential([])
+                    for l_ in range(num_layers):
+                        model_body.add(layers.Dense(32, activation='relu', kernel_initializer="glorot_uniform",
+                                                  activity_regularizer=tf.keras.regularizers.l2(0.01)))
+                    ################################################################################
                 else:
-                    model_body = cnn2.model
-            elif keras_model_type.lower() in ['regularized']:
-                ########## In case none of the options are specified, then set up a simple model!
-                print('    keras model type = %s , hence building a custom sequential model...' %keras_model_type)
-                num_layers = check_keras_options(keras_options, 'num_layers', 2)
-                model_body = tf.keras.Sequential([])
-                for l_ in range(num_layers):
-                    model_body.add(layers.Dense(32, activation='relu', kernel_initializer="glorot_uniform",
-                                              activity_regularizer=tf.keras.regularizers.l2(0.01)))
-                ################################################################################
+                    ### this means it's an auto model and you create one here 
+                    print('    building a %s model...' %keras_model_type)
+                    num_layers = check_keras_options(keras_options, 'num_layers', 1)
+                    model_body = tf.keras.Sequential([])
+                    for l_ in range(num_layers):
+                        model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
+                                                  activity_regularizer=tf.keras.regularizers.l2(0.01)))
+                    keras_options["val_mode"] = val_mode
+                    keras_options["val_monitor"] = val_monitor
             else:
-                ### this means it's an auto model and you create one here 
-                print('    building a %s model...' %keras_model_type)
-                num_layers = check_keras_options(keras_options, 'num_layers', 1)
-                model_body = tf.keras.Sequential([])
-                for l_ in range(num_layers):
-                    model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
-                                              activity_regularizer=tf.keras.regularizers.l2(0.01)))
-                keras_options["val_mode"] = val_mode
-                keras_options["val_monitor"] = val_monitor
+                try:
+                    new_module = __import__(use_my_model)
+                    print('Using the model given as input to build model body...')
+                    model_body = new_module.model
+                    print('    Loaded model from %s file successfully...' %use_my_model)
+                except:
+                    print('    Loading %s model is erroring, hence building a simple sequential model with one layer...' %keras_model_type)
+                    ########## In case none of the loading of files works, then set up a simple model!
+                    model_body = Sequential([layers.Dense(dense_layer1, activation='relu')])
         else:
-            try:
-                new_module = __import__(use_my_model)
-                print('Using the model given as input to build model body...')
-                model_body = new_module.model
-                print('    Loaded model from %s file successfully...' %use_my_model)
-            except:
-                print('    Loading %s model is erroring, hence building a simple sequential model with one layer...' %keras_model_type)
-                ########## In case none of the loading of files works, then set up a simple model!
-                model_body = Sequential([layers.Dense(dense_layer1, activation='relu')])
-    else:
-        print('    Using your custom model given as input...')
-        model_body = use_my_model
-    #### For every keras_model_type other than auto use this #################
-    if not keras_model_type.lower() in ['auto']:
-        print('Loading %s model...' %keras_model_type)
-        ##### This is the simplest way to convert a sequential model to functional!
-        for num, each_layer in enumerate(model_body.layers):
-            if num == 0:
-                final_outputs = each_layer(meta_outputs)
-            else:
-                final_outputs = each_layer(final_outputs)
-        #### This final outputs is the one that is taken into final dense layer and compiled
-        print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
-        ###### This is where you compile the model after it is built ###############
-        deep_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
-                                num_labels, model_body, optimizer, val_loss, val_metrics, cols_len)
-        if cols_len > 100:
-            print('Too many columns to show model summary. Continuing...')
-        else:
-            print(deep_model.summary())
-    else:
-        ### For auto models we will add input and output layers later #########
-        deep_model = model_body
+            print('    Using your custom model given as input...')
+            model_body = use_my_model
     keras_options["val_mode"] = val_mode
     keras_options["val_monitor"] = val_monitor
     print('    %s model loaded and compiled successfully...' %keras_model_type)
-    return deep_model, keras_options
-###############################################################################
-from collections import defaultdict
-def get_uncompiled_model(inputs, result, model_body, output_activation, 
-                    num_predicts, num_labels, cols_len):
-    ### The next 3 steps are most important! Don't mess with them! 
-    #model_preprocessing = Model(inputs, meta_outputs)
-    #preprocessed_inputs = model_preprocessing(inputs)
-    #result = model_body(preprocessed_inputs)
-    ##### now you
-    multi_label_predictions = defaultdict(list)
-    for each_label in range(num_labels):
-        key = 'predictions'        
-        value = layers.Dense(num_predicts, activation=output_activation,
-                            name='output_'+str(each_label))(result)
-        multi_label_predictions[key].append(value)
-    outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
-    ##### Set the inputs and outputs of the model here
-    uncompiled_model = Model(inputs=inputs, outputs=outputs)
-    if cols_len > 100:
-        print('    No model plot since too many variables in dataset. Continuing...')
-    else:
-        tf.keras.utils.plot_model(model = uncompiled_model , rankdir="LR", dpi=72, show_shapes=True)
-    return uncompiled_model
-
-def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, num_labels, 
-                      model_body, optimizer, val_loss, val_metrics, cols_len):
-    model = get_uncompiled_model(inputs, meta_outputs, model_body, output_activation, 
-                        num_predicts, num_labels, cols_len)
-    model.compile(
-        optimizer=optimizer,
-        loss=val_loss,
-        metrics=val_metrics,
-    )
-    return model
+    return model_body, keras_options
 ###############################################################################
 

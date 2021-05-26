@@ -28,13 +28,109 @@ warnings.filterwarnings(action='ignore')
 import functools
 # Make numpy values easier to read.
 np.set_printoptions(precision=3, suppress=True)
+################################################################################
 import tensorflow as tf
 np.random.seed(42)
 tf.random.set_seed(42)
 from tensorflow.keras import layers
 from tensorflow import keras
+from tensorflow.keras.models import Model, load_model
+################################################################################
+import os
+def check_if_GPU_exists():
+    GPU_exists = False
+    gpus = tf.config.list_physical_devices('GPU')
+    #print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+    #### In some cases like Kaggle kernels, the GPU is not enabled. Hence this check.
+    if gpus:
+      # Restrict TensorFlow to only use the first GPU
+      try:
+        tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU")
+      except RuntimeError as e:
+        # Visible devices must be set before GPUs have been initialized
+        print(e)
+      try:
+        # Currently, memory growth needs to be the same across GPUs
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+      except RuntimeError as e:
+        # Memory growth must be set before GPUs have been initialized
+        print(e)
+    try:
+        os.environ['NVIDIA_VISIBLE_DEVICES']
+        print('    GPU is turned on in this device')
+        if len(gpus) == 0:
+            device = "cpu"
+        elif len(gpus) == 1:
+            device = "gpu"
+        elif len(gpus) > 1:
+            device = "gpus"
+    except:
+        #print('    No GPU is turned on in this device')
+        device = "cpu"
+    #### Set Strategy ##########
+    if device == "tpu":
+        #print('Setting TPU strategy...')
+        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + os.environ['COLAB_TPU_ADDR'])
+        tf.config.experimental_connect_to_cluster(resolver)
+        # This is the TPU initialization code that has to be at the beginning.
+        tf.tpu.experimental.initialize_tpu_system(resolver)
+        strategy = tf.distribute.experimental.TPUStrategy(resolver)
+    elif device == "gpu":
+        #print('Setting GPU strategy...')
+        strategy = tf.distribute.MirroredStrategy()
+    elif device == "gpus":
+        #print('Setting Multiworker GPU strategy...')
+        strategy = tf.distribute.MultiWorkerMirroredStrategy()
+    else:
+        #print('Setting CPU on-device strategy...')
+        strategy = tf.distribute.OneDeviceStrategy(device='/device:CPU:0')
+    return strategy
+######################################################################################
+def get_uncompiled_model(inputs, result, model_body, output_activation, 
+                    num_predicts, num_labels, cols_len):
+    ### The next 3 steps are most important! Don't mess with them! 
+    #model_preprocessing = Model(inputs, meta_outputs)
+    #preprocessed_inputs = model_preprocessing(inputs)
+    #result = model_body(preprocessed_inputs)
+    ##### now you
+    multi_label_predictions = defaultdict(list)
+    for each_label in range(num_labels):
+        key = 'predictions'        
+        value = layers.Dense(num_predicts, activation=output_activation,
+                            name='output_'+str(each_label))(result)
+        multi_label_predictions[key].append(value)
+    outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
 
-#############################################################################################
+    ##### Set the inputs and outputs of the model here
+    uncompiled_model = Model(inputs=inputs, outputs=outputs)
+    return uncompiled_model
+
+def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, num_labels, 
+                      model_body, optimizer, val_loss, val_metrics, cols_len):
+    model = get_uncompiled_model(inputs, meta_outputs, model_body, output_activation, 
+                        num_predicts, num_labels, cols_len)
+    model.compile(
+        optimizer=optimizer,
+        loss=val_loss,
+        metrics=val_metrics,
+    )
+    return model
+###############################################################################
+def add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs):
+    ##### This is the simplest way to convert a sequential model to functional!
+    for num, each_layer in enumerate(model_body.layers):
+        if num == 0:
+            final_outputs = each_layer(meta_outputs)
+        else:
+            final_outputs = each_layer(final_outputs)
+    return final_outputs
+
+###############################################################################
 def print_one_row_from_tf_dataset(test_ds):
     """
     No matter how big a dataset or batch size, this handy function will print the first row.
@@ -569,4 +665,21 @@ def plot_regression_scatters(df, df2, num_vars, kind='scatter', plot_name=''):
                     counter += 1
     print('Regression Plots completed in %0.3f seconds' %(time.time()-start_time))
 ################################################################################
+import os
+def save_valid_predictions(y_test, y_preds, project_name, num_labels):
+    if num_labels == 1:
+        pdf = pd.DataFrame([y_test, y_preds])
+        pdf = pdf.T
+        pdf.columns= ['actuals','predictions']
+    else:
+        pdf = pd.DataFrame(np.c_[y_test, y_preds])
+        act_names = ['actuals_'+str(x) for x in range(y_test.shape[1])]
+        pred_names = ['predictions_'+str(x) for x in range(y_preds.shape[1])]
+        pdf.columns = act_names + pred_names
+    preds_file = project_name+'_predictions.csv'
+    preds_path = os.path.join(project_name, preds_file)
+    pdf.to_csv(preds_path,index=False)
+    print('Saved predictions in %s file' %preds_path)
+    return pdf
+#########################################################################################    
 

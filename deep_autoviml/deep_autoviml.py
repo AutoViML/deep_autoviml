@@ -47,6 +47,7 @@ from tensorflow.keras import utils
 from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
+from tensorflow.keras.models import Model, load_model
 #############################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
 from IPython.core.display import Image, display
@@ -88,62 +89,14 @@ from .preprocessing.preprocessing_nlp import preprocessing_nlp
 from .modeling.create_model import create_model
 from .models import basic, deep, big_deep, giant_deep, cnn1, cnn2
 from .modeling.train_model import train_model
-from .modeling.train_custom_model import train_custom_model
+from .modeling.train_custom_model import train_custom_model, return_optimizer
 from .modeling.predict_model import predict
 
 # Utils
 from .utilities.utilities import print_one_row_from_tf_dataset
 from .utilities.utilities import print_one_row_from_tf_label
+from .utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
 #############################################################################################
-import os
-def check_if_GPU_exists():
-    GPU_exists = False
-    gpus = tf.config.list_physical_devices('GPU')
-    print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
-    if gpus:
-      # Restrict TensorFlow to only use the first GPU
-      try:
-        tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
-        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU")
-      except RuntimeError as e:
-        # Visible devices must be set before GPUs have been initialized
-        print(e)
-      try:
-        # Currently, memory growth needs to be the same across GPUs
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-      except RuntimeError as e:
-        # Memory growth must be set before GPUs have been initialized
-        print(e)
-    try:
-        os.environ['NVIDIA_VISIBLE_DEVICES']
-        print('    GPU is turned on in this device')
-        if len(gpus) == 0:
-            device = "cpu"
-        elif len(gpus) == 1:
-            device = "gpu"
-        elif len(gpus) > 1:
-            device = "gpus"
-    except:
-        print('    No GPU is turned on in this device')
-        device = "cpu"
-    #### Set Strategy ##########
-    if device == "tpu":
-      resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + os.environ['COLAB_TPU_ADDR'])
-      tf.config.experimental_connect_to_cluster(resolver)
-      # This is the TPU initialization code that has to be at the beginning.
-      tf.tpu.experimental.initialize_tpu_system(resolver)
-      strategy = tf.distribute.experimental.TPUStrategy(resolver)
-    elif device == "gpu":
-        strategy = tf.distribute.MirroredStrategy()
-    elif device == "gpus":
-        strategy = tf.distribute.MultiWorkerMirroredStrategy()
-    else:
-        strategy = tf.distribute.OneDeviceStrategy(device='/device:CPU:0')
-    return strategy
 #### probably the most handy function of all!  ###############################################
 def left_subtract(l1,l2):
     lst = []
@@ -224,8 +177,6 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     verbose = 1 will give you more charts and outputs. verbose 0 will run silently 
                 with minimal outputs.
     """
-    my_strategy = check_if_GPU_exists()
-    print('TF strategy used in this machine = %s' %my_strategy)
     shuffle_flag = False
     ####   K E R A S    O P T I O N S   - THESE CAN BE OVERRIDDEN by your input keras_options dictionary ####
     keras_options_defaults = {}
@@ -319,7 +270,6 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     header = model_options["header"]
     max_trials = model_options["max_trials"]
     
-    #with my_strategy.scope():
     print("""
 #################################################################################
 ###########     L O A D I N G    D A T A    I N T O   TF.DATA.DATASET H E R E  #
@@ -368,9 +318,50 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     ######### this is where you get the model body either by yourself or sent as input ##
     ##### This takes care of providing multi-output predictions! ######
     inputs = nlp_inputs+meta_inputs
-    deep_model, keras_options =  create_model(use_my_model, inputs, meta_outputs, 
+    model_body, keras_options =  create_model(use_my_model, inputs, meta_outputs, 
                                         keras_options, var_df, keras_model_type,
                                         model_options)
+    
+    ###########    C O M P I L E    M O D E L    H E R E         #############
+    if not keras_model_type.lower() == 'auto':
+        #### For every keras_model_type other than "auto" use this #################
+        print('Loading a pre-built %s model...' %keras_model_type)
+        final_outputs = add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs)
+        #### This final outputs is the one that is taken into final dense layer and compiled
+        print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
+        ###### This is where you compile the model after it is built ###############
+        num_classes = model_options["num_classes"]
+        num_labels = model_options["num_labels"]
+        modeltype = model_options["modeltype"]
+        val_mode = keras_options["mode"]
+        val_monitor = keras_options["monitor"]
+        val_loss = keras_options["loss"]
+        val_metrics = keras_options["metrics"]
+        if not keras_options['optimizer']:
+            ### if it is an empty string, use the default Adam optimizer
+            optimizer = Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999)
+        else:
+            optimizer = return_optimizer(keras_options['optimizer'])
+        if modeltype == 'Regression':
+            num_predicts = 1*num_labels
+            output_activation = "linear"
+        elif modeltype == 'Classification':
+            num_predicts = int(num_classes*num_labels)
+            output_activation = "sigmoid"
+        else:
+            num_predicts = int(num_classes*num_labels)
+            output_activation = "sigmoid"
+        ######  You need to compile the non-auto models here ###############
+        deep_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
+                                num_labels, model_body, optimizer, val_loss, val_metrics, dft.shape[1])
+        if dft.shape[1] > 100:
+            print('Too many columns to show model summary. Continuing...')
+        else:
+            print(deep_model.summary())
+    else:
+        ### For auto models we will add input and output layers later. See below... #########
+        deep_model = model_body
+
     if dft.shape[1] <= 100 :
         plot_filename = 'deep_autoviml_'+project_name+'_'+keras_model_type+'_model_before.png'
         try:
@@ -385,8 +376,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 ###########     T R A I N I N G    K E R A S   M O D E L   H E R E      #########
 #################################################################################
     """)
-    if keras_model_type == 'auto':
-        print('Building and training a custom model using Storm Tuner...')
+    if keras_model_type.lower() == 'auto':
+        print('Building and training an automatic model using %s Tuner...' %model_options_defaults['tuner'])
         deep_model, cat_vocab_dict = train_custom_model(inputs, meta_outputs,
                                          batched_data, target, keras_model_type, keras_options, 
                                          model_options, var_df, cat_vocab_dict, project_name, 

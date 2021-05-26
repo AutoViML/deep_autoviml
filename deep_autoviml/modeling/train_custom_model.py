@@ -56,6 +56,9 @@ from tensorflow.keras import regularizers
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
+from deep_autoviml.utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
+from deep_autoviml.utilities.utilities import check_if_GPU_exists
+from deep_autoviml.utilities.utilities import save_valid_predictions
 
 from deep_autoviml.data_load.extract import find_batch_size
 from deep_autoviml.modeling.create_model import check_keras_options
@@ -139,36 +142,6 @@ def is_test(x, y):
 def is_train(x, y):
     return not is_test(x, y)
 ##################################################################################
-def get_uncompiled_model(inputs, result, model_body, output_activation, 
-                    num_predicts, num_labels, cols_len):
-    ### The next 3 steps are most important! Don't mess with them! 
-    #model_preprocessing = Model(inputs, meta_outputs)
-    #preprocessed_inputs = model_preprocessing(inputs)
-    #result = model_body(preprocessed_inputs)
-    ##### now you
-    multi_label_predictions = defaultdict(list)
-    for each_label in range(num_labels):
-        key = 'predictions'        
-        value = layers.Dense(num_predicts, activation=output_activation,
-                            name='output_'+str(each_label))(result)
-        multi_label_predictions[key].append(value)
-    outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
-
-    ##### Set the inputs and outputs of the model here
-    uncompiled_model = Model(inputs=inputs, outputs=outputs)
-    return uncompiled_model
-
-def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, num_labels, 
-                      model_body, optimizer, val_loss, val_metrics, cols_len):
-    model = get_uncompiled_model(inputs, meta_outputs, model_body, output_activation, 
-                        num_predicts, num_labels, cols_len)
-    model.compile(
-        optimizer=optimizer,
-        loss=val_loss,
-        metrics=val_metrics,
-    )
-    return model
-###############################################################################
 # Reset Keras Session
 def reset_keras():
     sess = get_session()
@@ -200,32 +173,38 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     reset_keras()
     tf.keras.backend.reset_uids()
 
-    n_layers = trial.suggest_int("n_layers", 1, 4)
-    num_hidden = trial.suggest_int("n_units", 32, 512, log=True)
-    weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
-    model = tf.keras.Sequential()
+    optuna_strategy = check_if_GPU_exists()
+    print('TF strategy used in this machine = %s' %optuna_strategy)
+    ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
+    with optuna_strategy.scope():
+        n_layers = trial.suggest_int("n_layers", 1, 4)
+        num_hidden = trial.suggest_int("n_units", 32, 512, log=True)
+        weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
+        model = tf.keras.Sequential()
 
-    batch_norm = trial.suggest_categorical("batch_norm", [True, False])
-    add_noise = trial.suggest_categorical("add_noise", [True, False])
-    dropout = trial.suggest_float("dropout", 0, 0.5)
-    activation_fn = trial.suggest_categorical("activation", ['relu', 'tanh', 'elu', 'selu'])
-    for i in range(n_layers):
-        model.add(
-            tf.keras.layers.Dense(
-                num_hidden,
-                name="opt_dense_"+str(i),
-                kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+        batch_norm = trial.suggest_categorical("batch_norm", [True, False])
+        add_noise = trial.suggest_categorical("add_noise", [True, False])
+        dropout = trial.suggest_float("dropout", 0, 0.5)
+        activation_fn = trial.suggest_categorical("activation", ['relu', 'tanh', 'elu', 'selu'])
+        for i in range(n_layers):
+            model.add(
+                tf.keras.layers.Dense(
+                    num_hidden,
+                    name="opt_dense_"+str(i),
+                    kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                )
             )
-        )
-        model.add(Activation(activation_fn,name="opt_activation_"+str(i)))
+            model.add(Activation(activation_fn,name="opt_activation_"+str(i)))
 
-        if batch_norm:
-            model.add(BatchNormalization(name="opt_batchnorm_"+str(i)))
+            if batch_norm:
+                model.add(BatchNormalization(name="opt_batchnorm_"+str(i)))
 
-        if add_noise:
-            model.add(GaussianNoise(trial.suggest_float("adam_learning_rate", 1e-5, 1e-1, log=True)))
+            if add_noise:
+                model.add(GaussianNoise(trial.suggest_float("adam_learning_rate", 1e-5, 1e-1, log=True)))
 
-        model.add(Dropout(dropout))
+            model.add(Dropout(dropout))
+    ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
+
 
     #### Now we add the final layers to the model #########
     kwargs = {}
@@ -249,7 +228,6 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
         kwargs["momentum"] = trial.suggest_float("sgd_opt_momentum", 0.8, 0.95)
 
     optimizer = getattr(tf.optimizers, optimizer_selected)(**kwargs)
-
     ##### This is the simplest way to convert a sequential model to functional!
     opt_outputs = add_inputs_outputs_to_model_body(model, inputs, meta_outputs)
 
@@ -259,18 +237,9 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     return comp_model
 
 ###############################################################################
-def add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs):
-    ##### This is the simplest way to convert a sequential model to functional!
-    for num, each_layer in enumerate(model_body.layers):
-        if num == 0:
-            final_outputs = each_layer(meta_outputs)
-        else:
-            final_outputs = each_layer(final_outputs)
-    return final_outputs
-
-###############################################################################
 def build_model_storm(hp):
-    model_body = Sequential()
+
+    model_body = Sequential([])
 
     # example of model-wide unordered categorical parameter
     activation_fn = hp.Param('activation', ['tanh','relu', 'selu', 'elu'])
@@ -334,8 +303,13 @@ def build_model_storm(hp):
 class MyTuner(Tuner):
 
     def run_trial(self, trial, *args):
-        hp = trial.hyperparameters
-        model_body = build_model_storm(hp)
+        hp = trial.hyperparameters    
+        ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
+        storm_strategy = check_if_GPU_exists()
+        print('TF strategy used in this machine = %s' %storm_strategy)
+        with storm_strategy.scope():
+            model_body = build_model_storm(hp)
+        ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
         train_ds, valid_ds = args[0], args[1]
         epochs, steps =  args[2], args[3]
         inputs, meta_outputs = args[4], args[5]
@@ -345,7 +319,6 @@ class MyTuner(Tuner):
         val_metrics, patience = args[12], args[13]
         val_mode, DS_LEN = args[14], args[15]
         learning_rate, val_monitor = args[16], args[17]
-
 
         ##  now load the model_body and convert it to functional model
         #print('Loading custom model...')
@@ -362,7 +335,7 @@ class MyTuner(Tuner):
         selected_optimizer = hp.Param('optimizer', ["Adam","AdaMax","Adagrad","SGD",
                                 "RMSprop","Nadam",'nesterov'],
                             ordered=False)
-        optimizer = return_optimizer(hp, selected_optimizer, trial_flag=True)
+        optimizer = return_optimizer_trials(hp, selected_optimizer)
         
         comp_model = get_compiled_model(inputs, storm_outputs, output_activation, num_predicts, 
                             num_labels, model_body, optimizer, val_loss, val_metrics, cols_len)
@@ -416,7 +389,7 @@ class MyTuner(Tuner):
         self.score_trial(trial, score) 
         #self.score_trial(trial, min(scores)) 
 #####################################################################################
-def return_optimizer(hp, hpq_optimizer, trial_flag=False):
+def return_optimizer_trials(hp, hpq_optimizer):
     """
     This returns the keras optimizer with proper inputs if you send the string.
     hpq_optimizer: input string that stands for an optimizer such as "Adam", etc.
@@ -429,43 +402,59 @@ def return_optimizer(hp, hpq_optimizer, trial_flag=False):
     adam = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999)
     adamax = keras.optimizers.Adamax(lr=0.001, beta_1=0.9, beta_2=0.999)
     nadam = keras.optimizers.Nadam(lr=0.001, beta_1=0.9, beta_2=0.999)
+    best_optimizer = ''
     #############################################################################
-    if trial_flag:
-        if hpq_optimizer == 'Adam':
-            best_optimizer = tf.keras.optimizers.Adam(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
-                epsilon=hp.Param('epsilon', [1e-6, 1e-8, 1e-10, 1e-12, 1e-14], ordered=True))
-        elif hpq_optimizer == 'SGD':
-            best_optimizer = keras.optimizers.SGD(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
-                                 momentum=0.9)
-        elif hpq_optimizer == 'Nadam':
-            best_optimizer = keras.optimizers.Nadam(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
-                             beta_1=0.9, beta_2=0.999)
-        elif hpq_optimizer == 'AdaMax':
-            best_optimizer = keras.optimizers.Adamax(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
-                             beta_1=0.9, beta_2=0.999)
-        elif hpq_optimizer == 'Adagrad':
-            best_optimizer = keras.optimizers.Adagrad(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]))
-        elif hpq_optimizer == 'RMSprop':
-            best_optimizer = keras.optimizers.RMSprop(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
-                             rho=0.9)
-        else:
-            best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
+    if hpq_optimizer == 'Adam':
+        best_optimizer = tf.keras.optimizers.Adam(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
+            epsilon=hp.Param('epsilon', [1e-6, 1e-8, 1e-10, 1e-12, 1e-14], ordered=True))
+    elif hpq_optimizer == 'SGD':
+        best_optimizer = keras.optimizers.SGD(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
+                             momentum=0.9)
+    elif hpq_optimizer == 'Nadam':
+        best_optimizer = keras.optimizers.Nadam(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
+                         beta_1=0.9, beta_2=0.999)
+    elif hpq_optimizer == 'AdaMax':
+        best_optimizer = keras.optimizers.Adamax(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
+                         beta_1=0.9, beta_2=0.999)
+    elif hpq_optimizer == 'Adagrad':
+        best_optimizer = keras.optimizers.Adagrad(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]))
+    elif hpq_optimizer == 'RMSprop':
+        best_optimizer = keras.optimizers.RMSprop(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
+                         rho=0.9)
     else:
-        #### This could be turned into a dictionary but for now leave is as is for readability ##
-        if hpq_optimizer == 'Adam':
-            best_optimizer = adam
-        elif hpq_optimizer == 'SGD':
-            best_optimizer = momentum
-        elif hpq_optimizer == 'Nadam':
-            best_optimizer = nadam
-        elif hpq_optimizer == 'AdaMax':
-            best_optimizer = adamax
-        elif hpq_optimizer == 'Adagrad':
-            best_optimizer = adagrad
-        elif hpq_optimizer == 'RMSprop':
-            best_optimizer = rmsprop
-        else:
-            best_optimizer = nesterov
+        best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
+    return best_optimizer
+#####################################################################################
+def return_optimizer(hpq_optimizer):
+    """
+    This returns the keras optimizer with proper inputs if you send the string.
+    hpq_optimizer: input string that stands for an optimizer such as "Adam", etc.
+    """
+    ##### These are the various optimizers we use ################################
+    momentum = keras.optimizers.SGD(lr=0.001, momentum=0.9)
+    nesterov = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
+    adagrad = keras.optimizers.Adagrad(lr=0.001)
+    rmsprop = keras.optimizers.RMSprop(lr=0.001, rho=0.9)
+    adam = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999)
+    adamax = keras.optimizers.Adamax(lr=0.001, beta_1=0.9, beta_2=0.999)
+    nadam = keras.optimizers.Nadam(lr=0.001, beta_1=0.9, beta_2=0.999)
+    best_optimizer = ''
+    #############################################################################
+    #### This could be turned into a dictionary but for now leave is as is for readability ##
+    if hpq_optimizer == 'Adam':
+        best_optimizer = adam
+    elif hpq_optimizer == 'SGD':
+        best_optimizer = momentum
+    elif hpq_optimizer == 'Nadam':
+        best_optimizer = nadam
+    elif hpq_optimizer == 'AdaMax':
+        best_optimizer = adamax
+    elif hpq_optimizer == 'Adagrad':
+        best_optimizer = adagrad
+    elif hpq_optimizer == 'RMSprop':
+        best_optimizer = rmsprop
+    else:
+        best_optimizer = nesterov
     return best_optimizer
 ##########################################################################################
 from tensorflow.keras import backend as K
@@ -621,14 +610,19 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         print('    best trial selected as %s' %best_trial)
         ##### get the best model parameters now. Also split it into two models ###########
         hpq = tuner.get_best_config()
-        try:
-            best_model = build_model_storm(hpq)
-            deep_model = build_model_storm(hpq)
-        except:
-            ### Sometimes the tuner cannot find a config that works!
-            deep_model = return_model_body(keras_options)
-            best_model = return_model_body(keras_options)
-                                
+        ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
+        my_strategy = check_if_GPU_exists()
+        print('TF strategy used in this machine = %s' %my_strategy)
+        with my_strategy.scope():
+            try:
+                best_model = build_model_storm(hpq)
+                deep_model = build_model_storm(hpq)
+            except:
+                ### Sometimes the tuner cannot find a config that works!
+                deep_model = return_model_body(keras_options)
+                best_model = return_model_body(keras_options)
+        ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
+
         print('Time taken for tuning hyperparameters = %0.0f (mins)' %((time.time()-start_time1)/60))
         ##########    S E L E C T   B E S T   O P T I M I Z E R and L R  H E R E ############
         try:
@@ -640,7 +634,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         try:
             best_batch = hpq.values['batch_size']
             hpq_optimizer = hpq.values['optimizer']
-            best_optimizer = return_optimizer(hpq, hpq_optimizer, trial_flag=False)
+            best_optimizer = return_optimizer(hpq_optimizer)
         except:
             ### In some cases, the tuner doesn't select a good config in that case ##
             best_batch = batch_size
@@ -1052,23 +1046,6 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
 
     return deep_model, cat_vocab_dict
 ######################################################################################
-import os
-def save_valid_predictions(y_test, y_preds, project_name, num_labels):
-    if num_labels == 1:
-        pdf = pd.DataFrame([y_test, y_preds])
-        pdf = pdf.T
-        pdf.columns= ['actuals','predictions']
-    else:
-        pdf = pd.DataFrame(np.c_[y_test, y_preds])
-        act_names = ['actuals_'+str(x) for x in range(y_test.shape[1])]
-        pred_names = ['predictions_'+str(x) for x in range(y_preds.shape[1])]
-        pdf.columns = act_names + pred_names
-    preds_file = project_name+'_predictions.csv'
-    preds_path = os.path.join(project_name, preds_file)
-    pdf.to_csv(preds_path,index=False)
-    print('Saved predictions in %s file' %preds_path)
-    return pdf
-#########################################################################################    
 def return_model_body(keras_options):
     num_layers = check_keras_options(keras_options, 'num_layers', 2)
     model_body = tf.keras.Sequential([])
