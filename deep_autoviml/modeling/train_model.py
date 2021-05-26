@@ -49,10 +49,10 @@ from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
 #####################################################################################
 # Utils
-from deep_autoviml.deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
-from deep_autoviml.deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
-from deep_autoviml.deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
-from deep_autoviml.deep_autoviml.modeling.create_model import check_keras_options
+from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
+from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
+from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
+from deep_autoviml.modeling.create_model import check_keras_options
 #####################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
 from IPython.core.display import Image, display

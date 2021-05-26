@@ -53,13 +53,13 @@ from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
 #####################################################################################
 # Utils
-from deep_autoviml.deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
-from deep_autoviml.deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
-from deep_autoviml.deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
+from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
+from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
+from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
 
-from deep_autoviml.deep_autoviml.data_load.extract import find_batch_size
-from deep_autoviml.deep_autoviml.modeling.create_model import check_keras_options
-from deep_autoviml.deep_autoviml.modeling.one_cycle import OneCycleScheduler
+from deep_autoviml.data_load.extract import find_batch_size
+from deep_autoviml.modeling.create_model import check_keras_options
+from deep_autoviml.modeling.one_cycle import OneCycleScheduler
 #####################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
 from IPython.core.display import Image, display
@@ -538,6 +538,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     else:
         tuner = model_options["tuner"]
     print('Training %s model using %s. This will take time...' %(keras_model_type, tuner))
+    K.clear_session()
     ############################################################################
     ########     P E R FO R M     T U N I N G    H E R E  #####################
     ############################################################################
@@ -573,7 +574,6 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
                             val_metrics, patience, val_mode, data_size,
                             learning_rate, val_monitor,
                             )
-        #K.clear_session()
         best_trial = tuner.get_best_trial()
         print('    best trial selected as %s' %best_trial)
         ##### get the best model parameters now. Also split it into two models ###########
@@ -585,12 +585,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
             ### Sometimes the tuner cannot find a config that works!
             deep_model = return_model_body(keras_options)
             best_model = return_model_body(keras_options)
-            
-        #### Now add layers to the model body ################
-        best_outputs = add_inputs_outputs_to_model_body(best_model, inputs, meta_outputs)
-        best_model = get_compiled_model(inputs, best_outputs, output_activation, num_predicts, 
-                            num_labels, deep_model, best_optimizer, val_loss, val_metrics, cols_len)
-                    
+                                
         print('Time taken for tuning hyperparameters = %0.0f (mins)' %((time.time()-start_time1)/60))
         ##########    S E L E C T   B E S T   O P T I M I Z E R and L R  H E R E ############
         try:
@@ -614,6 +609,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
             optimizer_lr = 0.01
         print('\nBest optimizer = %s and best learning_rate = %s' %(hpq_optimizer, optimizer_lr))
         K.set_value(best_optimizer.learning_rate, optimizer_lr)
+        #### Now add layers to the model body ################
+        best_outputs = add_inputs_outputs_to_model_body(best_model, inputs, meta_outputs)
+        best_model = get_compiled_model(inputs, best_outputs, output_activation, num_predicts, 
+                            num_labels, deep_model, best_optimizer, val_loss, val_metrics, cols_len)
         #######################################################################################
         print('Best hyperparameters: %s' %hpq.values)
         ##### You need to set the best optimizer from the best_model #################

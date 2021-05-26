@@ -26,7 +26,7 @@ import functools
 np.set_printoptions(precision=3, suppress=True)
 ############################################################################################
 # data pipelines and feature engg here
-from deep_autoviml.deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
+from deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
 
 # Utils
 

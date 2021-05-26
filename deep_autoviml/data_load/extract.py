@@ -27,8 +27,8 @@
 from .classify_features import classify_features_using_pandas
 from .classify_features import check_model_options
 # Utils
-from deep_autoviml.deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
-from deep_autoviml.deep_autoviml.utilities.utilities import My_LabelEncoder
+from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
+from deep_autoviml.utilities.utilities import My_LabelEncoder
 ############################################################################################
 import pandas as pd
 import numpy as np
