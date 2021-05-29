@@ -309,8 +309,8 @@ def predict(model_or_model_path, project_name, test_dataset,
             y_test_preds = y_probas.ravel()
             y_test_preds_list.append(y_test_preds)
     else:
+        ### This is for Multi-label classification problems ###
         if modeltype == 'Regression':
-            y_test_preds_list.append(y_probas)
             ### This is for Multi-Label Regresison problems ###
             for each_t in range(len(y_probas)):
                 if each_t == 0:

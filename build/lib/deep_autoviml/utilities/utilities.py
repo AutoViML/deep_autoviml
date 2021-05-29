@@ -59,7 +59,7 @@ def check_if_GPU_exists(verbose=0):
             print(e)
         try:
             # Currently, memory growth needs to be the same across GPUs
-            for gpu in gpus:
+            for gpu in logical_gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
             print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
         except RuntimeError as e:
