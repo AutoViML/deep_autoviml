@@ -150,7 +150,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     num_classes = model_options["num_classes"]
     num_labels = model_options["num_labels"]
     modeltype = model_options["modeltype"]
-    patience = check_keras_options(keras_options, "patience", 20)
+    patience = check_keras_options(keras_options, "patience", 10)
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
     data_dim = int(data_size*meta_outputs.shape[1])
     #### These can be standard for every keras option that you use layers ######
@@ -232,63 +232,59 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     print('Recommended hidden layers (with units in each Dense Layer)  = (%d, %d, %d)\n' %(
                                 dense_layer1,dense_layer2,dense_layer3))
     #### The Deep and Wide Model is a bit more complicated. So it needs some changes in inputs! ######
-    my_strategy = check_if_GPU_exists()
-    print('TF strategy used in this machine = %s' %my_strategy)
-    ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
-    with my_strategy.scope():
-        if isinstance(use_my_model, str) :
-            if use_my_model == "":
-                if keras_model_type.lower() in ['basic', 'simple', 'default','simple_dnn','sample model']:
-                    ##########  Now that we have setup the layers correctly, we can build some more hidden layers
-                    model_body = basic.model
-                elif keras_model_type.lower() in ['deep']:
-                    ##########  Now that we have setup the layers correctly, we can build some more hidden layers
-                    model_body = deep.model
-                elif keras_model_type.lower() in ['big_deep', 'big deep']:
-                    ####################################################
-                    model_body = big_deep.model
-                elif keras_model_type.lower() in ['giant_deep', 'giant deep']:
-                    ####################################################
-                    model_body = giant_deep.model
-                elif keras_model_type.lower() in ['cnn1', 'cnn','cnn2']:
-                    ##########  Now that we have setup the layers correctly, we can build some more hidden layers
-                    # Conv1D + global max pooling
-                    if keras_model_type.lower() in ['cnn', 'cnn1']:
-                        model_body = cnn1.model
-                    else:
-                        model_body = cnn2.model
-                elif keras_model_type.lower() in ['regularized']:
-                    ########## In case none of the options are specified, then set up a simple model!
-                    print('    keras model type = %s , hence building a custom sequential model...' %keras_model_type)
-                    num_layers = check_keras_options(keras_options, 'num_layers', 2)
-                    model_body = tf.keras.Sequential([])
-                    for l_ in range(num_layers):
-                        model_body.add(layers.Dense(32, activation='relu', kernel_initializer="glorot_uniform",
-                                                  activity_regularizer=tf.keras.regularizers.l2(0.01)))
-                    ################################################################################
+    if isinstance(use_my_model, str) :
+        if use_my_model == "":
+            if keras_model_type.lower() in ['basic', 'simple', 'default','simple_dnn','sample model']:
+                ##########  Now that we have setup the layers correctly, we can build some more hidden layers
+                model_body = basic.model
+            elif keras_model_type.lower() in ['deep']:
+                ##########  Now that we have setup the layers correctly, we can build some more hidden layers
+                model_body = deep.model
+            elif keras_model_type.lower() in ['big_deep', 'big deep']:
+                ####################################################
+                model_body = big_deep.model
+            elif keras_model_type.lower() in ['giant_deep', 'giant deep']:
+                ####################################################
+                model_body = giant_deep.model
+            elif keras_model_type.lower() in ['cnn1', 'cnn','cnn2']:
+                ##########  Now that we have setup the layers correctly, we can build some more hidden layers
+                # Conv1D + global max pooling
+                if keras_model_type.lower() in ['cnn', 'cnn1']:
+                    model_body = cnn1.model
                 else:
-                    ### this means it's an auto model and you create one here 
-                    print('    building a %s model...' %keras_model_type)
-                    num_layers = check_keras_options(keras_options, 'num_layers', 1)
-                    model_body = tf.keras.Sequential([])
-                    for l_ in range(num_layers):
-                        model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
-                                                  activity_regularizer=tf.keras.regularizers.l2(0.01)))
-                    keras_options["val_mode"] = val_mode
-                    keras_options["val_monitor"] = val_monitor
+                    model_body = cnn2.model
+            elif keras_model_type.lower() in ['regularized']:
+                ########## In case none of the options are specified, then set up a simple model!
+                print('    keras model type = %s , hence building a custom sequential model...' %keras_model_type)
+                num_layers = check_keras_options(keras_options, 'num_layers', 2)
+                model_body = tf.keras.Sequential([])
+                for l_ in range(num_layers):
+                    model_body.add(layers.Dense(32, activation='relu', kernel_initializer="glorot_uniform",
+                                              activity_regularizer=tf.keras.regularizers.l2(0.01)))
+                ################################################################################
             else:
-                try:
-                    new_module = __import__(use_my_model)
-                    print('Using the model given as input to build model body...')
-                    model_body = new_module.model
-                    print('    Loaded model from %s file successfully...' %use_my_model)
-                except:
-                    print('    Loading %s model is erroring, hence building a simple sequential model with one layer...' %keras_model_type)
-                    ########## In case none of the loading of files works, then set up a simple model!
-                    model_body = Sequential([layers.Dense(dense_layer1, activation='relu')])
+                ### this means it's an auto model and you create one here 
+                print('    building a %s model...' %keras_model_type)
+                num_layers = check_keras_options(keras_options, 'num_layers', 1)
+                model_body = tf.keras.Sequential([])
+                for l_ in range(num_layers):
+                    model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
+                                              activity_regularizer=tf.keras.regularizers.l2(0.01)))
+                keras_options["val_mode"] = val_mode
+                keras_options["val_monitor"] = val_monitor
         else:
-            print('    Using your custom model given as input...')
-            model_body = use_my_model
+            try:
+                new_module = __import__(use_my_model)
+                print('Using the model given as input to build model body...')
+                model_body = new_module.model
+                print('    Loaded model from %s file successfully...' %use_my_model)
+            except:
+                print('    Loading %s model is erroring, hence building a simple sequential model with one layer...' %keras_model_type)
+                ########## In case none of the loading of files works, then set up a simple model!
+                model_body = Sequential([layers.Dense(dense_layer1, activation='relu')])
+    else:
+        print('    Using your custom model given as input...')
+        model_body = use_my_model
     keras_options["val_mode"] = val_mode
     keras_options["val_monitor"] = val_monitor
     print('    %s model loaded and compiled successfully...' %keras_model_type)

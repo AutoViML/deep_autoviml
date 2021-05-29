@@ -37,13 +37,13 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 ############################################################################################
 model = tf.keras.Sequential()
 model.add(Reshape((-1, 1)))  ### you need to make input as 3-D for CNN models
-model.add(Conv1D(100, 32, padding="same", activation="relu", strides=2,  data_format='channels_first'))
-#model.add(Conv1D(100, 32, padding="same", activation="relu", strides=2,  data_format='channels_first'))
+#model.add(Conv1D(100, 32, name='conv1', padding="same", activation="relu", strides=2,  data_format='channels_first'))
+model.add(Conv1D(100, 32, name='conv1', padding="same", activation="relu", strides=2,  data_format='channels_last'))
 model.add(MaxPooling1D(pool_size=5))
 model.add(Dropout(0.5))
 model.add(Reshape((-1, 1)))  ### you need to make input as 3-D for CNN models
-model.add(Conv1D(64, 16, padding="same", activation="relu", strides=2,  data_format='channels_first'))
-#model.add(Conv1D(64, 16, padding="same", activation="relu", strides=2,  data_format='channels_first'))
+#model.add(Conv1D(64, 16, name='conv2', padding="same", activation="relu", strides=2,  data_format='channels_first'))
+model.add(Conv1D(64, 16, name='conv2', padding="same", activation="relu", strides=2,  data_format='channels_last'))
 model.add(GlobalAveragePooling1D())
 model.add(Dropout(0.5))
 model.add(layers.Flatten())

@@ -96,6 +96,8 @@ from .modeling.predict_model import predict
 from .utilities.utilities import print_one_row_from_tf_dataset
 from .utilities.utilities import print_one_row_from_tf_label
 from .utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
+from .utilities.utilities import check_if_GPU_exists
+
 #############################################################################################
 #### probably the most handy function of all!  ###############################################
 def left_subtract(l1,l2):
@@ -134,24 +136,23 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                     Additionally, you can create a Sequential model variable and send it.
     keras_options: dictionary:  you can send in any keras model option you want: optimizer, 
                 epochs, batchsize, etc.
-           For example: let's say you want to change  epochs that you want deep_autoviml to run.
-           You can add an input like this: epochs=100 to  list of arguments here and we will 
-                take it.
-           batchsize: default = "": you can leave it blank and we will automatically 
+            "batchsize": default = "": you can leave it blank and we will automatically 
                 calculate a batchsize
-           epochs: default = "": you can leave it blank and we will automatically set a 
-                number of epochs
-        Our suggestions for  following are:
-            keras_options_defaults["patience"] = 10 ### patience of 10 seems ideal.
-                    do not raise or lower it!
-            keras_options_defaults["epochs"] = 500 ## 500 seems ideal for most scenarios ####
-            keras_options_defaults["steps_per_epoch"] = 5 ### 5 seems ideal for most scenarios 
-            keras_options_defaults['optimizer'] = RMSprop(lr=0.1, rho=0.9)   
-                                ##Adam(lr=0.1)   #SGD(lr=0.1) ## this needs tuning ##
-            keras_options_defaults['kernel_initializer'] =  'glorot_uniform' 
-                                ### glorot is default. Ors are:  'he_uniform', etc.
-            keras_options_defaults['num_layers'] = 2   
-                    ## this defines  number of layers if you choose custom model ####
+            "patience": default = 10 ### patience of 10 seems ideal. You can raise or lower it
+            "epochs": default = 500 ## 500 seems ideal for most scenarios ####
+            "steps_per_epoch": default = 5 ### 5 seems ideal for most scenarios 
+            'optimizer': default = RMSprop(lr=0.1, rho=0.9) ##Adam(lr=0.1)   #SGD(lr=0.1)
+            'kernel_initializer': default =  'glorot_uniform' ### Others:  'he_uniform', etc.
+            'num_layers': default = 2 : # this defines  number of layers if you choose custom model
+            'loss': default = it will choose automatically based on modeltype
+                    ### you can define any keras loss function such as mae, mse, etc.
+            'metrics': default = it will choose automatically based on modeltype 
+                    ##  you can define any keras metric you like
+            'monitor': default = it will choose automatically based on modeltype
+            'mode': default = it will choose automatically based on modeltype
+            "lr_scheduler": default = "onecycle" but you can choose from any below:
+                    ##  ["scheduler", 'onecycle', 'rlr' (reduce LR on plateau), 'decay']
+            "early_stopping": default = False. You can change it to True.
     model_options: dictionary:  you can send in any deep autoviml model option you 
                     want to change using this dictionary.
             You can change  following as long as you use this option and  same exact wordings:
@@ -174,9 +175,17 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                     'Multi_Classification'.
                     We will figure out single label or multi-label problem based on your target 
                             being string or list.
+            header: default = 0 ### this is the header row for pandas to read
+            max_trials: default = 10 ## number of Storm Tuner trials ###
+            tuner: default = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
+            embedding_size: default = 50 ## this is the NLP embedding size minimum
     verbose = 1 will give you more charts and outputs. verbose 0 will run silently 
                 with minimal outputs.
     """
+    my_strategy = check_if_GPU_exists(1)
+    ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
+    #with my_strategy.scope():
+
     shuffle_flag = False
     ####   K E R A S    O P T I O N S   - THESE CAN BE OVERRIDDEN by your input keras_options dictionary ####
     keras_options_defaults = {}
@@ -223,7 +232,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 
     list_of_model_options = ["idcols","modeltype","sep","cat_feat_cross_flag", "model_use_case",
                             "nlp_char_limit", "variable_cat_limit", "csv_encoding", "header",
-                            "max_trials","tuner"]
+                            "max_trials","tuner", "embedding_size"]
 
     model_options_defaults = defaultdict(str)
     model_options_defaults["idcols"] = []
@@ -237,6 +246,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     model_options_defaults["header"] = 0 ### this is the header row for pandas to read
     model_options_defaults["max_trials"] = 10 ## number of Storm Tuner trials ###
     model_options_defaults['tuner'] = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
+    model_options_defaults["embedding_size"] = 50 ## this is the NLP embedding size minimum
     
     if len(model_options) == 0:
         model_options = defaultdict(str)
@@ -269,7 +279,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     variable_cat_limit = model_options["variable_cat_limit"]
     header = model_options["header"]
     max_trials = model_options["max_trials"]
-    
+
     print("""
 #################################################################################
 ###########     L O A D I N G    D A T A    I N T O   TF.DATA.DATASET H E R E  #
@@ -386,6 +396,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         print('Training a %s model option...' %keras_model_type)
         deep_model, cat_vocab_dict = train_model(deep_model, batched_data, target, keras_model_type,
                         keras_options, model_options, var_df, cat_vocab_dict, project_name, save_model_flag, verbose) 
+    ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
+
     ##### Plot the model again after you have done model search #############
     if dft.shape[1] <= 100 :
         plot_filename = 'deep_autoviml_'+project_name+'_'+keras_model_type+'_model_after.png'

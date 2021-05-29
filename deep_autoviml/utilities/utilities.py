@@ -37,58 +37,74 @@ from tensorflow import keras
 from tensorflow.keras.models import Model, load_model
 ################################################################################
 import os
-def check_if_GPU_exists():
+def check_if_GPU_exists(verbose=0):
     GPU_exists = False
     gpus = tf.config.list_physical_devices('GPU')
-    #print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+    logical_gpus = tf.config.list_logical_devices('GPU')
+    tpus = tf.config.list_logical_devices('TPU')
     #### In some cases like Kaggle kernels, the GPU is not enabled. Hence this check.
-    if gpus:
-      # Restrict TensorFlow to only use the first GPU
-      try:
-        tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
-        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU")
-      except RuntimeError as e:
-        # Visible devices must be set before GPUs have been initialized
-        print(e)
-      try:
-        # Currently, memory growth needs to be the same across GPUs
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-      except RuntimeError as e:
-        # Memory growth must be set before GPUs have been initialized
-        print(e)
-    try:
-        os.environ['NVIDIA_VISIBLE_DEVICES']
-        print('    GPU is turned on in this device')
-        if len(gpus) == 0:
-            device = "cpu"
-        elif len(gpus) == 1:
-            device = "gpu"
-        elif len(gpus) > 1:
+    if logical_gpus:
+        # Restrict TensorFlow to only use the first GPU        
+        if verbose:
+            print("Num GPUs Available: ", len(logical_gpus))
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU")
+        if len(logical_gpus) > 1:
             device = "gpus"
-    except:
-        #print('    No GPU is turned on in this device')
+        else:
+            device = "gpu"
+        try:
+            tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+        except RuntimeError as e:
+            # Visible devices must be set before GPUs have been initialized
+            print(e)
+        try:
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in logical_gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
+    elif tpus:
+        device = "tpu"
+        if verbose:
+            print("Listing all TPU devices: ")
+            for tpu in tpus:
+                print(tpu)
+    else:
+        if verbose:
+            print('    Only CPU found on this device')
         device = "cpu"
     #### Set Strategy ##########
     if device == "tpu":
-        #print('Setting TPU strategy...')
-        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + os.environ['COLAB_TPU_ADDR'])
-        tf.config.experimental_connect_to_cluster(resolver)
-        # This is the TPU initialization code that has to be at the beginning.
-        tf.tpu.experimental.initialize_tpu_system(resolver)
-        strategy = tf.distribute.experimental.TPUStrategy(resolver)
+        try:
+            resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='')
+            tf.config.experimental_connect_to_cluster(resolver)
+            # This is the TPU initialization code that has to be at the beginning.
+            tf.tpu.experimental.initialize_tpu_system(resolver)
+            strategy = tf.distribute.TPUStrategy(resolver)
+            if verbose:
+                print('Setting TPU strategy using %d devices' %strategy.num_replicas_in_sync)
+        except:
+            if verbose:
+                print('Setting TPU strategy using Colab...')
+            resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + os.environ['COLAB_TPU_ADDR'])
+            tf.config.experimental_connect_to_cluster(resolver)
+            # This is the TPU initialization code that has to be at the beginning.
+            tf.tpu.experimental.initialize_tpu_system(resolver)
+            strategy = tf.distribute.TPUStrategy(resolver)
     elif device == "gpu":
-        #print('Setting GPU strategy...')
         strategy = tf.distribute.MirroredStrategy()
+        if verbose:
+            print('Setting Mirrored GPU strategy using %d devices' %strategy.num_replicas_in_sync)
     elif device == "gpus":
-        #print('Setting Multiworker GPU strategy...')
         strategy = tf.distribute.MultiWorkerMirroredStrategy()
+        if verbose:
+            print('Setting Multiworker GPU strategy using %d devices' %strategy.num_replicas_in_sync)
     else:
-        #print('Setting CPU on-device strategy...')
         strategy = tf.distribute.OneDeviceStrategy(device='/device:CPU:0')
+        if verbose:
+            print('Setting CPU strategy using %d devices' %strategy.num_replicas_in_sync)
     return strategy
 ######################################################################################
 def get_uncompiled_model(inputs, result, model_body, output_activation, 

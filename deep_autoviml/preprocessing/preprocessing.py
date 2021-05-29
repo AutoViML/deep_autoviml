@@ -90,6 +90,8 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     num_classes = model_options["num_classes"]
     num_labels = model_options["num_labels"]
     modeltype = model_options["modeltype"]
+    embedding_size = model_options["embedding_size"]
+    batch_size = 32
     ##### set the defaults for the LSTM or GRU model here #########################
     # Convolution
     kernel_size = 3
@@ -131,7 +133,8 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     if len(nlps) > 0:
         print('Starting NLP string column layer preprocessing...')
         nlp_inputs, embedding, nlp_names = preprocessing_nlp(train_ds, model_options,
-                                                var_df, cat_vocab_dict, embedding_size=50)
+                                                var_df, cat_vocab_dict, 
+                                                embedding_size=embedding_size)
         print('    NLP Preprocessing completed.')
     else:
         print('There are no NLP variables in this dataset for preprocessing...')
@@ -163,9 +166,10 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             nlp_outputs = layers.Bidirectional(layers.LSTM(dense_layer1, dropout=0.3, recurrent_dropout=0.3,
                                                 return_sequences=False, batch_size=batch_size,
                                                 kernel_regularizer=regularizers.l2(0.01)))(embedding)
-        elif keras_model_type.lower() in ['CNN']:
+        elif keras_model_type.lower() in ['cnn1','cnn2']:
             # Conv1D + global max pooling
-            nlp_outputs = Conv1D(dense_layer1, 14, padding="same", activation="relu", strides=3)(embedding)
+            nlp_outputs = Conv1D(dense_layer1, 14, name='cnn_dense1', padding="same", 
+                                    activation="relu", strides=3)(embedding)
             nlp_outputs = GlobalMaxPooling1D()(nlp_outputs)
         elif keras_model_type.lower() in ['deep','deep_and_wide','deep and wide','deep wide']:
             # We add a vanilla hidden layer that's all
@@ -185,9 +189,11 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                 x = MaxPooling1D(pool_size=pool_size)(x)
                 x = GRU(units=gru_units,  dropout=drop_out, recurrent_dropout=drop_out)(x)
                 if modeltype == 'Regression':
-                    nlp_outputs = Dense(class_size, activation='linear')(x)
+                    #nlp_outputs = Dense(class_size, activation='linear')(x)
+                    nlp_outputs = Dense(128, activation='relu')(x)
                 else:
-                    nlp_outputs = Dense(class_size, activation='sigmoid')(x)
+                    #nlp_outputs = Dense(class_size, activation='sigmoid')(x)
+                    nlp_outputs = Dense(128, activation='relu')(x)
             elif class_size > 1:
                 #### Use this only for Multi-Class classification problems #########
                 ####  CNN Model: create a 1D convnet with global maxpooling ########
@@ -197,8 +203,8 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                 x = MaxPooling1D(kernel_size)(x)
                 x = Conv1D(128, kernel_size, activation='relu')(x)
                 x = GlobalMaxPooling1D()(x)
-                x = Dense(128, activation='relu')(x)
-                nlp_outputs = Dense(class_size, activation='softmax')(x)
+                nlp_outputs = Dense(128, activation='relu')(x)
+                #nlp_outputs = Dense(class_size, activation='softmax')(x)
 
     #### This is common processing for both deep_and_wide models and other kinds of models ##
     if isinstance(meta_outputs, list):

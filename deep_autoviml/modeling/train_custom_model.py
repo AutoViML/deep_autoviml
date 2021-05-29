@@ -100,6 +100,20 @@ from tensorflow.keras import callbacks
 #########################################################################################
 from storm_tuner import Tuner
 #########################################################################################
+# Callback for printing the LR at the end of each epoch.
+class PrintLR(tf.keras.callbacks.Callback):
+  def on_epoch_end(self, epoch, logs=None):
+    print('\nLearning rate for epoch {} is {}'.format(epoch + 1,
+                                                      self.model.optimizer.lr.numpy()))
+#######################################################################################
+# Function for decaying the learning rate.
+# You can define any decay function you need.
+def schedules(epoch):
+    return 1e-2 * (0.95 ** np.floor(epoch / 2))
+
+def decay(epoch):
+    return 0.01 - 0.02 * (0.5 ** (1 + epoch))
+#####################################################################################
 import os
 def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_only):
     logdir = "deep_autoviml"
@@ -108,7 +122,7 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
     cp = keras.callbacks.ModelCheckpoint("deep_autoviml", save_best_only=True,
                                          save_weights_only=save_weights_only, save_format='tf')
     ### sometimes a model falters and restore_best_weights gives len() not found error. So avoid True option!
-    lr_patience = max(2,int(patience*0.5))
+    lr_patience = max(5,int(patience*0.5))
     rlr = callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.75,
                     patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.00001, cooldown=0, verbose=1)
 
@@ -116,19 +130,19 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
     #onecycle = OneCycleScheduler(iterations=steps, max_rate=0.05)
     onecycle = OneCycleScheduler(steps=steps, lr_max=0.1)
 
-    lr_sched = callbacks.LearningRateScheduler(lambda epoch: 1e-4 * (0.75 ** np.floor(epoch / 2)))
+    lr_sched = callbacks.LearningRateScheduler(schedules)
 
       # Setup Learning Rate decay.
-    lr_decay_cb = callbacks.LearningRateScheduler(
-        lambda epoch: learning_rate - 0.02 * (0.5 ** (1 + epoch)),
-        verbose=False)
+    lr_decay_cb = callbacks.LearningRateScheduler(decay)
 
     es = callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
                         verbose=1, mode=val_mode, baseline=None, restore_best_weights=True)
     
     tb = callbacks.TensorBoard(tensorboard_logpath)
+
+    pr = PrintLR()
     
-    callbacks_list = [cp, lr_sched, es, tb]
+    callbacks_list = [cp, lr_sched, es, tb, pr]
 
     return callbacks_list, tensorboard_logpath
 ####################################################################################
@@ -173,38 +187,32 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     reset_keras()
     tf.keras.backend.reset_uids()
 
-    optuna_strategy = check_if_GPU_exists()
-    print('TF strategy used in this machine = %s' %optuna_strategy)
-    ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
-    with optuna_strategy.scope():
-        n_layers = trial.suggest_int("n_layers", 1, 4)
-        num_hidden = trial.suggest_int("n_units", 32, 512, log=True)
-        weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
-        model = tf.keras.Sequential()
+    n_layers = trial.suggest_int("n_layers", 1, 4)
+    num_hidden = trial.suggest_int("n_units", 32, 512, log=True)
+    weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
+    model = tf.keras.Sequential()
 
-        batch_norm = trial.suggest_categorical("batch_norm", [True, False])
-        add_noise = trial.suggest_categorical("add_noise", [True, False])
-        dropout = trial.suggest_float("dropout", 0, 0.5)
-        activation_fn = trial.suggest_categorical("activation", ['relu', 'tanh', 'elu', 'selu'])
-        for i in range(n_layers):
-            model.add(
-                tf.keras.layers.Dense(
-                    num_hidden,
-                    name="opt_dense_"+str(i),
-                    kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
-                )
+    batch_norm = trial.suggest_categorical("batch_norm", [True, False])
+    add_noise = trial.suggest_categorical("add_noise", [True, False])
+    dropout = trial.suggest_float("dropout", 0, 0.5)
+    activation_fn = trial.suggest_categorical("activation", ['relu', 'tanh', 'elu', 'selu'])
+    for i in range(n_layers):
+        model.add(
+            tf.keras.layers.Dense(
+                num_hidden,
+                name="opt_dense_"+str(i),
+                kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
             )
-            model.add(Activation(activation_fn,name="opt_activation_"+str(i)))
+        )
+        model.add(Activation(activation_fn,name="opt_activation_"+str(i)))
 
-            if batch_norm:
-                model.add(BatchNormalization(name="opt_batchnorm_"+str(i)))
+        if batch_norm:
+            model.add(BatchNormalization(name="opt_batchnorm_"+str(i)))
 
-            if add_noise:
-                model.add(GaussianNoise(trial.suggest_float("adam_learning_rate", 1e-5, 1e-1, log=True)))
+        if add_noise:
+            model.add(GaussianNoise(trial.suggest_float("adam_learning_rate", 1e-5, 1e-1, log=True)))
 
-            model.add(Dropout(dropout))
-    ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
-
+        model.add(Dropout(dropout))
 
     #### Now we add the final layers to the model #########
     kwargs = {}
@@ -303,12 +311,8 @@ def build_model_storm(hp):
 class MyTuner(Tuner):
 
     def run_trial(self, trial, *args):
-        hp = trial.hyperparameters    
-        ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
-        storm_strategy = check_if_GPU_exists()
-        print('TF strategy used in this machine = %s' %storm_strategy)
-        with storm_strategy.scope():
-            model_body = build_model_storm(hp)
+        hp = trial.hyperparameters
+        model_body = build_model_storm(hp)
         ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
         train_ds, valid_ds = args[0], args[1]
         epochs, steps =  args[2], args[3]
@@ -357,7 +361,7 @@ class MyTuner(Tuner):
         valid_ds = valid_ds.prefetch(batch_size).repeat(5)
         steps = 20
         #scores = []
-        lr_patience = max(2,int(patience*0.5))
+        lr_patience = max(5,int(patience*0.5))
         rlr = callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.97,
                     patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.001, cooldown=0, verbose=1)
         es = callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
@@ -492,7 +496,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print("    Early stopping : %s" %early_stopping)
     NUMBER_OF_EPOCHS = check_keras_options(keras_options, "epochs", 100)
     learning_rate = 5e-1
-    steps = max(5, data_size//(batch_size*10))
+    steps = max(15, data_size//(batch_size*25))
     print('    recommended steps per epoch = %d' %steps)
     STEPS_PER_EPOCH = check_keras_options(keras_options, "steps_per_epoch", 
                         steps)
@@ -507,6 +511,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print('    Using optimizer = %s' %str(optimizer).split(".")[-1][:8])
     use_bias = check_keras_options(keras_options, 'use_bias', True)
     lr_scheduler = check_keras_options(keras_options, 'lr_scheduler', "")
+    onecycle_steps = max(10, np.ceil(data_size/(2*batch_size))*NUMBER_OF_EPOCHS)
+    print('    Onecycle steps = %d' %onecycle_steps)
     #######################################################################
     val_mode = keras_options["mode"]
     val_monitor = keras_options["monitor"]
@@ -575,7 +581,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ########     P E R FO R M     T U N I N G    H E R E  #####################
     ############################################################################
     ###    E A R L Y    S T O P P I N G    T O    P R E V E N T   O V E R F I T T I N G  ##
-    es = callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
+    lr_patience = max(2,int(patience*0.5))
+    es = callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.0001, patience=lr_patience,
                         verbose=0, mode=val_mode, baseline=None, restore_best_weights=True)
     if tuner.lower() == "storm":
         trials_saved_path = os.path.join(project_name,keras_model_type)
@@ -610,18 +617,13 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         print('    best trial selected as %s' %best_trial)
         ##### get the best model parameters now. Also split it into two models ###########
         hpq = tuner.get_best_config()
-        ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
-        my_strategy = check_if_GPU_exists()
-        print('TF strategy used in this machine = %s' %my_strategy)
-        with my_strategy.scope():
-            try:
-                best_model = build_model_storm(hpq)
-                deep_model = build_model_storm(hpq)
-            except:
-                ### Sometimes the tuner cannot find a config that works!
-                deep_model = return_model_body(keras_options)
-                best_model = return_model_body(keras_options)
-        ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
+        try:
+            best_model = build_model_storm(hpq)
+            deep_model = build_model_storm(hpq)
+        except:
+            ### Sometimes the tuner cannot find a config that works!
+            deep_model = return_model_body(keras_options)
+            best_model = return_model_body(keras_options)
 
         print('Time taken for tuning hyperparameters = %0.0f (mins)' %((time.time()-start_time1)/60))
         ##########    S E L E C T   B E S T   O P T I M I Z E R and L R  H E R E ############
@@ -665,18 +667,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         optuna_scores = []
         def objective(trial):
             optimizer_options = ""
-            tf.compat.v1.reset_default_graph()
-            K.clear_session()
-            reset_keras()
-            tf.keras.backend.reset_uids()
-            try:
-                del opt_model
-                print('deleted opt model from memory')
-            except:
-                pass
             opt_model = build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predicts, 
                         num_labels, optimizer_options, val_loss, val_metrics, cols_len)
-            cb_default = callbacks.LearningRateScheduler(lambda epoch: learning_rate * (0.75 ** np.floor(epoch / 2)))
+            cb_default = callbacks.LearningRateScheduler(decay)
             history = opt_model.fit(train_ds, validation_data=valid_ds, 
                         epochs=NUMBER_OF_EPOCHS, 
                         callbacks=[cb_default, es],
@@ -742,25 +735,23 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ####################################################################################
     #####    LEARNING RATE CHEDULING : Setup Learning Rate Multiple Ways #########
     ####################################################################################
-    #### Onecycle is another fast way to find the best learning in large datasets ######
-    #onecycle = OneCycleScheduler(iterations=steps, max_rate=0.05)
     ####  This lr_sched is a fast way to reduce LR but it can easily overfit quickly #####
-    lr_sched = callbacks.LearningRateScheduler(lambda epoch: optimizer_lr * (0.75 ** np.floor(epoch / 2)))
+    #### lr_decay originally used to give good results but not anymore #######
+    lr_sched = callbacks.LearningRateScheduler(schedules)
+
     ## RLR is the easiest one to handle as it reduces learning rate when there is no improvement ##
     lr_patience = max(5,int(patience*0.5))
-    rlr = callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.99,
+    rlr = callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.95,
                     patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.001, cooldown=0, verbose=1)
-    #### lr_decay originally used to give good results but not anymore #######
-    lr_decay_cb = callbacks.LearningRateScheduler(
-        lambda epoch: optimizer_lr + 0.02 * (0.5 ** (1 + epoch)),
-        verbose=False)
-    onecycle_steps = max(10, np.ceil(data_size/(2*batch_size))*NUMBER_OF_EPOCHS)
-    print('Onecycle steps = %d' %onecycle_steps)
+
+    # Setup Learning Rate decay.
+    lr_decay_cb = callbacks.LearningRateScheduler(decay)
+
+    #### Onecycle is another fast way to find the best learning in large datasets ######
     onecycle = OneCycleScheduler(steps=onecycle_steps, lr_max=0.05)
 
-    if keras_options['lr_scheduler'] == "lr_scheduler":
+    if keras_options['lr_scheduler'] == "scheduler":
         lr_scheduler = lr_sched
-        keras_options['lr_scheduler'] = "lr_sched"
     elif keras_options['lr_scheduler'] == 'onecycle':
         lr_scheduler = onecycle
     elif keras_options['lr_scheduler'] == 'rlr':
@@ -796,10 +787,12 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     tf.random.set_seed(42)
 
     ### lr_decay_cb is not working so well. rlr works best so far. Onecycle works well.
+    pr = PrintLR()
+
     if early_stopping:
-        callbacks_list = [lr_scheduler, es, tb]
+        callbacks_list = [lr_scheduler, es, tb, pr]
     else:
-        callbacks_list = [lr_scheduler, tb]
+        callbacks_list = [lr_scheduler, tb, pr]
 
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
     for each_callback in callbacks_list:

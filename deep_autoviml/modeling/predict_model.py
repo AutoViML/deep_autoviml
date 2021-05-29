@@ -290,23 +290,26 @@ def predict(model_or_model_path, project_name, test_dataset,
     if isinstance(target, str):
         if modeltype != 'Regression':
             #### This is for Single Label classification problems ######
+            y_test_preds_list.append(y_probas)
             y_test_preds = y_probas.argmax(axis=1)
-            print('    Sample predictions before inverse_transform:%s' %y_test_preds[:5])
-            y_test_preds_t = copy.deepcopy(y_test_preds)
+            print('    Sample predictions before inverse_transform: %s' %y_test_preds[:5])
             if cat_vocab_dict["target_transformed"]:
                 try:
                     y_test_preds_t = cat_vocab_dict['target_le'].inverse_transform(y_test_preds_t)
-                    print('    Sample predictions after inverse_transform:%s' %y_test_preds_t[:5])
+                    print('    Sample predictions after inverse_transform: %s' %y_test_preds_t[:5])
                     y_test_preds_list.append(y_test_preds_t)                
                 except:
+                    print('    Inverse transform erroring. Continuing...')
                     y_test_preds_list.append(y_test_preds)
             else:
+                print('    Sample predictions after transform: %s' %y_test_preds[:5])
                 y_test_preds_list.append(y_test_preds)
         else:
             #### This is for Single Label regression problems ######
             y_test_preds = y_probas.ravel()
-        y_test_preds_list.append(y_test_preds)
+            y_test_preds_list.append(y_test_preds)
     else:
+        ### This is for Multi-label classification problems ###
         if modeltype == 'Regression':
             ### This is for Multi-Label Regresison problems ###
             for each_t in range(len(y_probas)):
@@ -314,24 +317,25 @@ def predict(model_or_model_path, project_name, test_dataset,
                         y_test_preds = y_probas[each_t].mean(axis=1)
                 else:
                         y_test_preds = np.c_[y_test_preds, y_probas[each_t].mean(axis=1)]
-            y_test_preds_list.append(y_test_preds)
+                y_test_preds_list.append(y_test_preds)
         else:
             #### This is Multi-Label Classification problems ######
-            for each_target in target:
-                y_test_preds = y_test_preds.argmax(axis=1)
-                print('Multi-Label Predictions shape:%s' %(y_test_preds.shape,))
-                print('    Sample predictions from model :%s' %y_test_preds[:5])
-                y_test_preds_t = copy.deepcopy(y_test_preds)
+            y_test_preds_list.append(y_probas)
+            print('Multi-Label Predictions shape:%s' %(y_probas.shape,))
+            for each_t in range(len(y_probas)):
+                y_test_preds_t = y_probas[each_t].argmax(axis=1)
+                print('    Sample predictions for label: %s before transform: %s' %(each_t, y_test_preds_t[:5]))
                 if cat_vocab_dict["target_transformed"]:
                     try:
-                        if cat_vocab_dict["target_transformed"]:
-                            y_test_preds_t = cat_vocab_dict[each_target]['target_le'].inverse_transform(y_test_preds_t)
-                            print('    Sample predictions after inverse_transform:%s' %y_test_preds_t[:5])
-                            y_test_preds_list.append(y_test_preds_t)                
+                        y_test_preds_t = cat_vocab_dict[each_target]['target_le'].inverse_transform(
+                                                y_test_preds_t)
+                        print('    Sample predictions after inverse_transform: %s' %y_test_preds_t[:5])
+                        y_test_preds_list.append(y_test_preds_t)                
                     except:
-                        y_test_preds_list.append(y_test_preds)
+                        print('    Inverse transform erroring. Continuing...')
+                        y_test_preds_list.append(y_test_preds_t)
                 else:
-                    y_test_preds_list.append(y_test_preds)
+                    y_test_preds_list.append(y_test_preds_t)
     #####  We now show how many items are in the output  ###################
     print('Returning model predictions in form of a list...of length %d' %len(y_test_preds_list))
     print('Time taken in mins for predictions = %0.0f' %((time.time()-start_time2)/60))
