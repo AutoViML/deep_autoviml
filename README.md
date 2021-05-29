@@ -27,7 +27,7 @@
 >           preprocessing pipelines and models in as few lines of code
 >           as possible.
 
-[![YouTube Demo](deep_6)](https://www.youtube.com/watch?v=IcpwNNNXsWE)
+[![YouTube Demo](deep_6.jpg)](https://www.youtube.com/watch?v=IcpwNNNXsWE)
 
 deep_autoviml is a tensorflow >2.4-enabled, keras-ready, model and pipeline building utility.
 deep autoviml is meant for data engineers, data scientists and ml engineers to quickly prototype and build tensorflow 2.4.1+ models and pipelines for any data set, any size using a single line of code.
