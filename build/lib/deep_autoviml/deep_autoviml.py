@@ -163,26 +163,27 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             Similarly for the number of characters above which a string variable will be  
                 considered an NLP variable: model_options_defaults["nlp_char_limit"] = 30
             Another option would be to inform autoviml about  encoding in  CSV file for it to 
-                    read such as 'latin-1'
-            model_options_defaults["csv_encoding"] =  'latin-1'
-            model_options_defaults["csv_encoding"] =  'utf-8' (this is  default)
+                    read such as 'latin-1' by setting {"csv_encoding": 'latin-1'}
+            Other examples:
+            "csv_encoding": default =  'utf-8'
             "cat_feat_cross_flag": if you want to cross categorical features such as A*B, B*C...
-            "sep" : default = "," - but you can override it in model_options. 
-                        This is separator used in read_csv.
-            idcols: default: empty list. Specify which variables you want to exclude from model.
-            modeltype: default = '': if you leave it blank we will automatically determine it.
+            "sep" : default = "," comma but you can override it. Separator used in read_csv.
+            "idcols": default: empty list. Specify which variables you want to exclude from model.
+            "modeltype": default = '': if you leave it blank we will automatically determine it.
                     If you want to override, your options are: 'Regression', 'Classification', 
                     'Multi_Classification'.
                     We will figure out single label or multi-label problem based on your target 
                             being string or list.
-            header: default = 0 ### this is the header row for pandas to read
-            max_trials: default = 10 ## number of Storm Tuner trials ###
-            tuner: default = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
-            embedding_size: default = 50 ## this is the NLP embedding size minimum
+            "header": default = 0 ### this is the header row for pandas to read
+            "max_trials": default = 10 ## number of Storm Tuner trials ###
+            "tuner": default = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
+            "embedding_size": default = 50 ## this is the NLP embedding size minimum
     verbose = 1 will give you more charts and outputs. verbose 0 will run silently 
                 with minimal outputs.
     """
     my_strategy = check_if_GPU_exists(1)
+    model_options_copy = copy.deepcopy(model_options)
+    keras_options_copy = copy.deepcopy(keras_options)
     ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
     #with my_strategy.scope():
 
@@ -211,24 +212,13 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                             "kernel_initializer", "num_layers",
                             "loss", "metrics", "monitor","mode", "lr_scheduler","early_stopping"]
 
-    if len(keras_options) == 0:
-        keras_options = defaultdict(str)
-        if verbose:
-            print('Using following default keras_options in deep_autoviml:')
-        for key, value in keras_options_defaults.items():
-            keras_options[key] = value
-            if verbose:
-                print("    ",key,':', keras_options[key])
-    else:
-        if verbose:
-            print('Using following keras_options in customizing deep_autoviml to your needs:')
+    keras_options = copy.deepcopy(keras_options_defaults)
+    if len(keras_options_copy) > 0:
+        print('Using following keras_options given as input:')
         for key in list_of_keras_options:
-            if key in keras_options.keys():
-                continue
-            else:
-                keras_options[key] = keras_options_defaults[key]
-            if verbose:
-                print("    ",key,':', keras_options[key])
+            if key in keras_options_copy.keys():
+                print('    %s : %s' %(key, keras_options_copy[key]))
+                keras_options[key] = keras_options_copy[key]
 
     list_of_model_options = ["idcols","modeltype","sep","cat_feat_cross_flag", "model_use_case",
                             "nlp_char_limit", "variable_cat_limit", "csv_encoding", "header",
@@ -248,24 +238,13 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     model_options_defaults['tuner'] = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
     model_options_defaults["embedding_size"] = 50 ## this is the NLP embedding size minimum
     
-    if len(model_options) == 0:
-        model_options = defaultdict(str)
-        if verbose:
-            print('Using following default model_options in deep_autoviml:')
-        for key, value in model_options_defaults.items():
-            model_options[key] = value
-            if verbose:
-                print("    ",key,':', model_options[key])
-    else:
-        if verbose:
-            print('Using following model_options in customizing deep_autoviml to your needs:')
+    model_options = copy.deepcopy(model_options_defaults)
+    if len(model_options_copy) > 0:
+        print('Using following model_options given as input:')
         for key in list_of_model_options:
-            if key in model_options.keys():
-                continue
-            else:
-                model_options[key] = model_options_defaults[key]
-            if verbose:
-                print("    ",key,':', model_options[key])
+            if key in model_options_copy.keys():
+                print('    %s : %s' %(key, model_options_copy[key]))
+                model_options[key] = model_options_copy[key]
 
     BUFFER_SIZE = int(1e4)
 

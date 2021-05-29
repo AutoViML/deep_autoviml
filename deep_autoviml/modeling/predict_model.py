@@ -79,12 +79,12 @@ import time
 def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict="",
                                                  verbose=0):
     ### load a small sample of data into a pandas dataframe ##
+    
     if isinstance(test_data_or_file, str):
-        filesize = lenopenreadlines(test_data_or_file)
         test_small = pd.read_csv(test_data_or_file) ### this reads the entire file
     else:
         test_small = copy.deepcopy(test_data_or_file)
-        filesize = test_small.shape[0]
+    filesize = test_small.shape[0]
     print('Loaded test data size: %d' %filesize)
     #### All column names in Tensorflow should have no spaces ! So you must convert them here!
     sel_preds = ["_".join(x.split(" ")) for x in list(test_small) ]
@@ -277,7 +277,7 @@ def predict(model_or_model_path, project_name, test_dataset,
     #########  See if you can predict here if not return the null result #####
     print('    number of steps needed to predict: %d' %num_steps)
     try:
-        y_probas = model.predict(test_ds, steps=num_steps)
+        y_probas = model.predict(test_ds, steps=num_steps)[:DS_LEN,:]
     except Exception as error:
         print('Could not predict using given model and inputs.\nError: %s\n Please check your inputs and try again.' %error)
         return []
@@ -295,7 +295,7 @@ def predict(model_or_model_path, project_name, test_dataset,
             print('    Sample predictions before inverse_transform: %s' %y_test_preds[:5])
             if cat_vocab_dict["target_transformed"]:
                 try:
-                    y_test_preds_t = cat_vocab_dict['target_le'].inverse_transform(y_test_preds_t)
+                    y_test_preds_t = cat_vocab_dict['target_le'].inverse_transform(y_test_preds)
                     print('    Sample predictions after inverse_transform: %s' %y_test_preds_t[:5])
                     y_test_preds_list.append(y_test_preds_t)                
                 except:

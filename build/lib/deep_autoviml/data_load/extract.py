@@ -121,6 +121,8 @@ def find_problem_type(train, target, model_options={}, verbose=0) :
 ######################################################################################
 
 def transform_train_target(train_target, target, modeltype, model_label, cat_vocab_dict):
+    train_target = copy.deepcopy(train_target)
+    cat_vocab_dict = copy.deepcopy(cat_vocab_dict)
     ### Just have to change the target from string to Numeric in entire dataframe! ###
     if modeltype != 'Regression':
         if model_label == 'Multi_Label':
@@ -175,15 +177,26 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     if find_words_in_list(['http'], [train_datafile]):
         print('http urls file: will be loaded into pandas and then into tensorflow datasets')
         http_url = True
-    DS_LEN = model_options['DS_LEN']
+    try:
+        DS_LEN = model_options['DS_LEN']
+    except:
+        ### Choose a default option in case it is not given
+        DS_LEN = 10000
     shuffle_flag = False
-    if model_options["sep"] == ",":
-        sep = ","
-    else:
+    #### Set some default values in case model options is not set ##
+    try:
         sep = model_options["sep"]
+    except:
+        sep = ","
+    try:
+        header = model_options["header"]
+    except:
+        header = 0
+    try:
+        csv_encoding = model_options["csv_encoding"]
+    except:
+        csv_encoding = 'utf-8'
     #################################################################################
-    header = model_options["header"]
-    csv_encoding = model_options["csv_encoding"]
     try:
         compression = None
         ### see if there is a . in the file name. If it is, then do this process.
@@ -219,7 +232,6 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
             print('not able to collect files matching given pattern = %s' %train_datafile)
             return
     #################################################################################
-    modeltype = model_options["modeltype"]
     #### About 25% of the data or 10,000 rows which ever is higher is loaded #######
     if http_url:
         maxrows = 100000 ### set it very high so that all rows are read into dataframe ###
@@ -239,6 +251,11 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         train_small = pd.read_csv(train_datafile, sep=sep, nrows=maxrows, compression=compression,
                                 header=header, encoding=csv_encoding) 
         ### this reads the entire file
+    ##### Now detect modeltype if it is not given ###############
+    try:
+        modeltype = model_options["modeltype"]
+    except:
+        modeltype, model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
     #### All column names in Tensorflow should have no spaces ! So you must convert them here!
     if header is None:
         sel_preds = ["col_"+str(x) for x in range(train_small.shape[1])]
@@ -250,8 +267,18 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         target = ["_".join(x.split(" ")) for x in target ]
     print('    Modified column names to fit no-spaces-in-column-names Rule in Tensorflow!')
     train_small.columns = sel_preds
-    ##########  Find small details about the data to help create the right model ###
+    ### modeltype and usecols are very important to know before doing any processing #####
+    model_label = ''
+    #### usecols is a very handy tool to handle a target which can be single label or multi-label!
+    if modeltype == '':
+        ### usecols is basically target in a list format. Very handy to know when target is a list.
+        modeltype, model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
+    else:
+        ### if modeltype is given, then do not find the model type using this function
+        _,  model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
+    
     label_encode_flag = False
+    ##########  Find small details about the data to help create the right model ###
     if modeltype == 'Classification' or modeltype == 'Multi_Classification':
         if isinstance(target, str):
             if train_small[target].dtype == 'object' or str(train_small[target].dtype).lower() == 'category':
@@ -276,15 +303,6 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     #### This is where we set the model_options for num_classes and num_labels #########
     model_options['num_classes'] = num_classes
     
-    #### usecols is a very handy way to handle target which can be single label or multi-label!
-    ### usecols is basically target in a list format. Very handy to know when target is a list.
-    model_label = ''
-    if modeltype == '':
-        ### usecols is basically target in a list format. Very handy to know when target is a list.
-        modeltype, model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
-    else:
-        ### if modeltype is given, then do not find the model type using this function
-        _,  model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
 
     #############   Sample Data classifying features into variaous types ##################  
     print('Loaded a small data sample of size = %s into pandas dataframe to analyze...' %(train_small.shape,))
@@ -300,6 +318,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     cat_vocab_dict["target_transformed"] = label_encode_flag
 
     # Construct a lookup table to map string chars to indexes,
+    
     # using the vocab loaded above:
     if label_encode_flag:
         table = tf.lookup.StaticHashTable(
@@ -309,13 +328,13 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
             default_value=int(len(target_vocab)+1))
         _, cat_vocab_dict = transform_train_target(train_small, target, modeltype, 
                                     model_label, cat_vocab_dict)
-
+    
     #### Set column defaults while reading dataset from CSV files - that way, missing values avoided!
     ### The following are valid CSV dtypes for missing values: float32, float64, int32, int64, or string
     ### fill all missing values in categorical variables with "None"
     ### Similarly. fill all missing values in float variables with -99
     if train_small.isnull().sum().sum() > 0:
-        print('There are %d missing values in dataset - must be filled with defaults...' %(
+        print('There are %d missing values in dataset: filling them with default values...' %(
                                 train_small.isnull().sum().sum()))
     string_cols = train_small.select_dtypes(include='object').columns.tolist() + train_small.select_dtypes(
                                         include='category').columns.tolist()
@@ -350,10 +369,10 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         cat_vocab_dict["DS_LEN"] = train_small.shape[0]
         model_options['DS_LEN'] = train_small.shape[0]
         DS_LEN = train_small.shape[0]
-    if isinstance(keras_options["batchsize"], str):
-        batch_size = find_batch_size(DS_LEN)
     try:
         keras_options["batchsize"] = batch_size
+        if isinstance(keras_options["batchsize"], str):
+            batch_size = find_batch_size(DS_LEN)
         cat_vocab_dict['batch_size'] = batch_size
     except:
         batch_size = find_batch_size(DS_LEN)
@@ -403,22 +422,22 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                                        compression_type=compression_type,
                                        shuffle=shuffle_flag,
                                        num_parallel_reads=tf.data.experimental.AUTOTUNE)
-        ############### Do this only for Multi_Label problems ######
+        ############### Additional Checkes needed - do it here  ######        
         if num_labels > 1:
+            ############### Do this step only for Multi_Label problems ######        
             data_batches = data_batches.map(lambda x: split_combined_ds_into_two(x, usecols, preds))
         if label_encode_flag:
             print('    target label encoding now...')
             data_batches = data_batches.map(lambda x, y: to_ids(x, y, table))
             print('    target label encoding completed.')
-
     print('    train data loaded successfully.')
-
+    
     drop_cols = var_df1['cols_delete']
     preds = [x for x in list(train_small) if x not in usecols+drop_cols]
     print('\nNumber of predictors to be used = %s in next step: keras preprocessing...' %len(preds))
-    cat_vocab_dict['columns_deleted'] = cols_delete
+    cat_vocab_dict['columns_deleted'] = drop_cols
     if len(drop_cols) > 0: ### drop cols that have been identified for deletion ###
-        print('Dropping %s columns marked for deletion...' %cols_delete)
+        print('Dropping %s columns marked for deletion...' %drop_cols)
         train_small.drop(drop_cols,axis=1,inplace=True)
 
     return train_small, data_batches, var_df1, cat_vocab_dict, keras_options, model_options
@@ -522,10 +541,13 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     """
     DS_LEN = model_options['DS_LEN']
     #### do this for dataframes ##################
-    if isinstance(keras_options["batchsize"], str):
-        batch_size = find_batch_size(DS_LEN)
-    else:
+    try:
         batch_size = keras_options["batchsize"]
+        if isinstance(keras_options["batchsize"], str):
+            batch_size = find_batch_size(DS_LEN)
+    except:
+        #### If it is not given find it here ####
+        batch_size = find_batch_size(DS_LEN)
     #########  Modify or Convert column names to fit tensorflow rules of no space in names!
     sel_preds = ["_".join(x.split(" ")) for x in list(train_small) ]
     train_small.columns = sel_preds
@@ -538,10 +560,17 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     ### usecols is basically target in a list format. Very handy to know when target is a list.
     model_label = ''
         
-    if model_options["modeltype"] == '':
-        ### usecols is basically target in a list format. Very handy to know when target is a list.
-        modeltype, model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
-    else:
+    try:
+        modeltype = model_options["modeltype"]
+        if model_options["modeltype"] == '':
+            ### usecols is basically target in a list format. Very handy to know when target is a list.
+            modeltype, model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
+        else:
+            if isinstance(target, str):
+                usecols = [target]
+            else:
+                usecols = copy.deepcopy(target)
+    except:
         ### if modeltype is given, then do not find the model type using this function
         modeltype,  model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
     
