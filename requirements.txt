@@ -9,4 +9,6 @@ regex
 storm-tuner
 emoji
 xlrd
+tensorflow_hub
+tensorflow-text
 optuna

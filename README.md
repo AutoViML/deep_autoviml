@@ -27,10 +27,12 @@
 >           preprocessing pipelines and models in as few lines of code
 >           as possible.
 
+### Watch YouTube Video for Demo of Deep_AutoViML
 [![YouTube Demo](deep_6.jpg)](https://www.youtube.com/watch?v=IcpwNNNXsWE)
 
 deep_autoviml is a tensorflow >2.4-enabled, keras-ready, model and pipeline building utility.
-deep autoviml is meant for data engineers, data scientists and ml engineers to quickly prototype and build tensorflow 2.4.1+ models and pipelines for any data set, any size using a single line of code.
+deep autoviml is meant for data engineers, data scientists and ml engineers to quickly prototype and build tensorflow 2.4.1+ models and pipelines for any data set, any size using a single line of code. It can build models for structured data, NLP and image datasets. It can also handle time series data sets. You can either choose deep_autoviml to automatically buid a custom Tensorflow model or you can "bring your own model" ("BYOM" option) model to attach keras data pipelines to your model. Additionally, you can choose any Tensorflow Hub model (TFHub) to train on your data. Just see the instructions below in <a href="#tips">"Tips for using deep_autoviml"</a></li> section.
+
 ![why_deep](deep_2.jpg)
 ## InnerWorking
 ![how_it_works](deep_1.jpg)
@@ -99,7 +101,7 @@ predictions = deepauto.predict(model, project_name, test_dataset=test,
 ## API
 **Arguments**
 
-deep_autoviml requires only a single line of code to get started. You can however, fine tune the model we build using multiple options using dictionaries named "model_options" and "keras_options". These two dictionaries act like **kwargs to enable you to fine tune hyperparameters for building our tf.keras model. Instructions on how to use them are provided below.
+deep_autoviml requires only a single line of code to get started. You can however, fine tune the model we build using multiple options using dictionaries named "model_options" and "keras_options". These two dictionaries act like python **kwargs to enable you to fine tune hyperparameters for building our tf.keras model. Instructions on how to use them are provided below.
 
 - `train`: could be a datapath+filename or a pandas dataframe. Deep Auto_ViML even handles gz or gzip files. You must specify the full path and file name for it find and load it.
 - `target`: name of the target variable in the data set.
@@ -107,8 +109,9 @@ deep_autoviml requires only a single line of code to get started. You can howeve
 - `project_name`: must be a string. Name of the folder where we will save your keras saved model and logs for tensorboard
 - `model_options`: must be a dictionary. For example: {'max_trials':5} sets the number of trials to run Storm-Tuner to search for the best hyper parameters for your keras model.
 - `keras_options`: must be a dictionary. You can use it for changing any keras model option you want such as "epochs", "kernel_initializer", "activation", "loss", "metrics", etc.
+- `model_use_case`: must be a string. You can use it for telling deep_autoviml what kind of model you want used such as "image", "time series", "seq2seq", etc. This is a constantly expanding list and you should watch this space for more model announcements.
 - `save_model_flag`: must be True or False. The model will be saved in keras model format.
-- `use_my_model`: "bring your own model" (BYOM) that you have defined previously. This BYOM model must be a keras Sequential model with NO input layers and output layers! We will add those layers automatically. Just specify your hidden layers (Dense, Conv1D, Conv2D, etc.), add dropouts or activations, whatever. The default for this argument is "" (empty string) which means we will build your model.
+- `use_my_model`: This is where "bring your own model" (BYOM) option comes into play. This BYOM model must be a keras Sequential model with NO input layers and output layers! You can define it and send it as input here. We will add input and preprocessing layers to it automatically. Your custom defined model must contain only hidden layers (Dense, Conv1D, Conv2D, etc.), and dropouts, activations, etc. The default for this argument is "" (empty string) which means we will build your model. If you provide your custom model object here, we will use it instead.
 - `verbose`: must be 0, 1 or 2. Can also be True or False. You can see more and more outputs as you increase the verbose level. If you want to see a chart of your model, use verbose = 2. But you must have graphviz and pydot installed in your machine to see the model plot.
 
 ![how_deep](deep_3.jpg)
@@ -121,7 +124,9 @@ You can use the following arguments in your input to make deep_autoviml work bes
 - `model_options = {'nlp_char_limit':20}`: If you want to run NLP Text preprocessing on any column, set this character limit low and deep_autoviml will then detect that column as an NLP column automatically. The default is 30 chars.
 - `keras_options = {"patience":30}`: If you want to reduce Early Stopping, then increase the patience to 30 or higher. Your model will train longer but you might get better performance.
 - `use_my_model = my_sequential_model`: If you want to bring your own custom model for training, then define a Keras Sequential model (you can name it anything but for example purposes, we have named it my_sequential_model) but don't include inputs or output layers! Just define your hidden layers! Deep Auto_ViML will automatically add inputs and output layers to your model and train it. It will also save your model after training. You can use this model for predictions.
-
+- `model_use_case = "images"`: If you want to build a model for image classification, then you can use this option. But you must add the following additional options in model_options dictionary: `model_options = {"image_height":__, "image_width": __, "image_channels": __, "image_directory": __}`. 
+- `model_options = {"tf_hub_model": "URL"}`: If you want to use a pre-trained Tensorflow Hub model such as [BERT](https://tfhub.dev/google/collections/bert/1) or a [feature extractor](https://tfhub.dev/google/imagenet/mobilenet_v3_small_100_224/feature_vector/5) for image classification, then you can use its TF Hub model URL by providing it in model_options dictionary as follows: `model_options = {"tf_hub_model": "URL of TF hub model"}`
+- `keras_model_type = "BERT"`: If you want to use a default [BERT](https://tfhub.dev/google/collections/bert/1) model, just set this option to "BERT" and we will load a default small pre-trained BERT model, train it on your dataset and give you back a pipeline with BERT in it! If you want to send in your favorite BERT model, please use the tf_hub_model option above and set this option to "BERT" and we will train your BERT model with your data.
 
 ## Maintainers
 

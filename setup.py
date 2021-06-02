@@ -49,6 +49,8 @@ setuptools.setup(
         "emoji",
         "storm-tuner",
         "optuna",
+        "tensorflow_hub",
+        "tensorflow-text",
         "xlrd"
     ],
     classifiers=[

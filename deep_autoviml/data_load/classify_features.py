@@ -260,7 +260,7 @@ def classify_columns(df_preds, model_options={}, verbose=0):
             train[col] = train[col].fillna('  ')
             if train[col].map(lambda x: len(x) if type(x)==str else 0).mean(
                 ) >= max_nlp_char_size and len(train[col].value_counts()
-                        ) <= int(0.9*len(train)) and col not in string_bool_vars:
+                        ) >= int(0.9*len(train)) and col not in string_bool_vars:
                 try:
                     pd.to_datetime(train[col],infer_datetime_format=True)
                     var_df.loc[var_df['index']==col,'date_time'] = 1
@@ -400,6 +400,8 @@ def classify_columns(df_preds, model_options={}, verbose=0):
     sum_all_cols['cat_vars'] = cat_vars
     sum_all_cols['continuous_vars'] = continuous_vars
     sum_all_cols['id_vars'] = id_vars
+    cols_delete = find_remove_duplicates(cols_delete+id_vars)
+    sum_all_cols['cols_delete'] = cols_delete
     ###### This is where you consoldate the numbers ###########
     var_dict_sum = dict(zip(var_df.values[:,0], var_df.values[:,2:].sum(1)))
     for col, sumval in var_dict_sum.items():
@@ -426,6 +428,7 @@ def classify_columns(df_preds, model_options={}, verbose=0):
         print("    Number of Columns to Delete = ", len(cols_delete))
     if verbose == 2:
         marthas_columns(df_preds,verbose=1)
+    if verbose >=1 and orig_cols_total > max_cols_to_print:
         print("    Numeric Columns: %s" %continuous_vars[:max_cols_to_print])
         print("    Integer-Categorical Columns: %s" %int_vars[:max_cols_to_print])
         print("    String-Categorical Columns: %s" %cat_vars[:max_cols_to_print])
@@ -438,13 +441,13 @@ def classify_columns(df_preds, model_options={}, verbose=0):
         print("    ID Columns: %s" %id_vars[:max_cols_to_print])
         print("    Columns that will not be considered in modeling: %s" %cols_delete[:max_cols_to_print])
     ##### now collect all the column types and column names into a single dictionary to return!
-
-    len_sum_all_cols = reduce(add,[len(v) for v in sum_all_cols.values()])
+    #### Since cols_delete and id_vars have the same columns, you need to subtract id_vars from this!
+    len_sum_all_cols = reduce(add,[len(v) for v in sum_all_cols.values()]) - len(id_vars)
     if len_sum_all_cols == orig_cols_total:
         print('    %d Predictors classified...' %orig_cols_total)
         #print('        This does not include the Target column(s)')
     else:
-        print('No of columns classified %d does not match %d total cols. Continuing...' %(
+        print('Number columns classified %d does not match %d total cols. Continuing...' %(
                    len_sum_all_cols, orig_cols_total))
         ls = sum_all_cols.values()
         flat_list = [item for sublist in ls for item in sublist]
@@ -917,3 +920,13 @@ def create_feature_cols(data_batches, preds):
     print('    completed.')
     return({'K' : keras_dict_input})
 ##############################################################################################
+# Removes duplicates from a list to return unique values - USED ONLYONCE
+def find_remove_duplicates(values):
+    output = []
+    seen = set()
+    for value in values:
+        if value not in seen:
+            output.append(value)
+            seen.add(value)
+    return output
+#################################################################################

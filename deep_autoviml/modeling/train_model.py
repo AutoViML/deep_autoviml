@@ -130,11 +130,15 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     num_labels = model_options["num_labels"]
     modeltype = model_options["modeltype"]
     patience = check_keras_options(keras_options, "patience", 10)
+    class_weights = check_keras_options(keras_options, "class_weight", {})
+    print('    class_weights: %s' %class_weights)
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
     print('    original datasize = %s, initial batchsize = %s' %(data_size, batch_size))
     NUMBER_OF_EPOCHS = check_keras_options(keras_options, "epochs", 100)
     learning_rate = 5e-1
-    steps = max(10, data_size//(batch_size* 10))
+    steps = max(10, data_size//(batch_size*25))
+    steps = min(40, steps)
+    print('    recommended steps per epoch = %d' %steps)
     STEPS_PER_EPOCH = check_keras_options(keras_options, "steps_per_epoch", 
                         steps)
     optimizer = tf.keras.optimizers.RMSprop(lr=learning_rate)
@@ -177,7 +181,13 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     print('Training %s model now. This will take time...' %keras_model_type)
     np.random.seed(42)
     tf.random.set_seed(42)
-    history = deep_model.fit(train_ds, validation_data=valid_ds, 
+    if modeltype == 'Regression':
+        history = deep_model.fit(train_ds, validation_data=valid_ds, 
+                        epochs=NUMBER_OF_EPOCHS, steps_per_epoch=STEPS_PER_EPOCH, 
+                        callbacks=callbacks_list, validation_steps=STEPS_PER_EPOCH,
+                       shuffle=False)
+    else:
+        history = deep_model.fit(train_ds, validation_data=valid_ds, class_weight=class_weights,
                         epochs=NUMBER_OF_EPOCHS, steps_per_epoch=STEPS_PER_EPOCH, 
                         callbacks=callbacks_list, validation_steps=STEPS_PER_EPOCH,
                        shuffle=False)
@@ -368,7 +378,12 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     ##################################################################################
     print('\nTraining full train dataset. This will take time...')
     full_ds = full_ds.shuffle(shuffle_size).prefetch(batch_size).repeat()
-    deep_model.fit(full_ds, epochs=stopped_epoch, steps_per_epoch=STEPS_PER_EPOCH, verbose=0)
+    if modeltype == 'Regression':
+        deep_model.fit(full_ds, epochs=stopped_epoch, steps_per_epoch=STEPS_PER_EPOCH,
+                 verbose=0)
+    else:
+        deep_model.fit(full_ds, epochs=stopped_epoch, steps_per_epoch=STEPS_PER_EPOCH,
+                 class_weight=class_weights, verbose=0)
 
     print('    completed. Time taken (in mins) = %0.0f' %((time.time()-start_time)/100))
 

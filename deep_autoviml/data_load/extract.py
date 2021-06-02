@@ -28,7 +28,8 @@ from .classify_features import classify_features_using_pandas
 from .classify_features import check_model_options
 # Utils
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
-from deep_autoviml.utilities.utilities import My_LabelEncoder
+from deep_autoviml.utilities.utilities import My_LabelEncoder, print_one_image_from_dataset
+
 ############################################################################################
 import pandas as pd
 import numpy as np
@@ -321,11 +322,13 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     
     # using the vocab loaded above:
     if label_encode_flag:
+        #### Sometimes, using tf.int64 works. Hence this is needed.
         table = tf.lookup.StaticHashTable(
             tf.lookup.KeyValueTensorInitializer(
                 keys=target_vocab, values=tf.constant(list(range(len(target_vocab))),
-                                               dtype=tf.int32)),
+                                               dtype=tf.int64)),
             default_value=int(len(target_vocab)+1))
+
         _, cat_vocab_dict = transform_train_target(train_small, target, modeltype, 
                                     model_label, cat_vocab_dict)
     
@@ -422,7 +425,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                                        compression_type=compression_type,
                                        shuffle=shuffle_flag,
                                        num_parallel_reads=tf.data.experimental.AUTOTUNE)
-        ############### Additional Checkes needed - do it here  ######        
+        ############### Additional Checkes needed - do it here  ######
         if num_labels > 1:
             ############### Do this step only for Multi_Label problems ######        
             data_batches = data_batches.map(lambda x: split_combined_ds_into_two(x, usecols, preds))
@@ -443,6 +446,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     return train_small, data_batches, var_df1, cat_vocab_dict, keras_options, model_options
 ############################################################################################
 def to_ids(features, labels, table):
+    labels = tf.cast(labels, tf.int64)
     labels = table.lookup(labels)
     return (features, labels)
 #############################################################################################
@@ -665,9 +669,108 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
 
     return train_small, ds, var_df, cat_vocab_dict, keras_options, model_options
 ###############################################################################################
+def load_image_data(train_data_or_file, target, project_name, keras_options, model_options,
+                        verbose=0):
+    """
+    Handy function that collects a sequence of image files  into a tf.data generator.
+
+    Inputs:
+    -----------
+    train_data_or_file: this can be a name of file to load or can be a pandas dataframe to load into tf.data
+                  either option will work. This function will detect that automatically and load them.
+    target: target name as a string or a 
+    """
+    cat_vocab_dict = dict()
+    cat_vocab_dict['target_variables'] =  target
+    cat_vocab_dict['project_name'] = project_name
+    if 'image_directory' in model_options.keys():
+        print('    Image directory given as %s' %model_options['image_directory'])
+        image_directory = model_options["image_directory"]
+    else:
+        print("    No image directory given. Provide image directory in model_options...")
+        return
+    if 'image_height' in model_options.keys():
+        print('    Image height given as %d' %model_options['image_height'])
+    else:
+        print("    No image height given. Returning. Provide image height and width...")
+        return
+    if 'image_width' in model_options.keys():
+        print('    Image width given as %d' %model_options['image_width'])
+    else:
+        print("    No image width given. Returning. Provide image height and width...")
+        return
+    if 'image_channels' in model_options.keys():
+        print('    Image channels given as %d' %model_options['image_channels'])
+    else:
+        print("    No image_channels given. Returning. Provide image height and width...")
+        return
+    try:
+        image_train_folder = os.path.join(image_directory,"train")
+        if not os.path.exists(image_train_folder):
+            print("Image use case. No train folder exists under given directory. Returning...")
+            return
+    except:
+        print('Error: Not able to find any train or test image folder in the given folder %s' %image_train_folder)
+        print("""   You must put images under folders named train, 
+                    validation (optional) and test folders under given %s folder.
+                    Otherwise deep_autoviml won't work. """ %image_directory)
+    image_train_split = False
+    image_train_folder = os.path.join(image_directory,"train")
+    if not os.path.exists(image_train_folder):
+        print("No train folder found under given image directory %s. Returning..." %image_directory)
+        image_train_folder = os.path.join(image_directory,"validation")
+    image_valid_folder = os.path.join(image_directory,"validation")
+    if not os.path.exists(image_valid_folder):
+        print("No validation folder found under given image directory %s. Returning..." %image_directory)
+        image_train_split = True
+    img_height = model_options['image_height']
+    img_width = model_options['image_width']
+    img_channels = model_options['image_channels']
+    #### make this a small number - default batch_size ###
+    batch_size = check_model_options(model_options, "batch_size", 64)
+    model_options["batch_size"] = batch_size
+    train_ds = tf.keras.preprocessing.image_dataset_from_directory(image_train_folder,
+                                  seed=111,
+                                  image_size=(img_height, img_width),
+                                  batch_size=batch_size)
+    if image_train_split:
+        ############## Split train into train and validation datasets here ###############
+        recover = lambda x,y: y
+        print('\nSplitting train into two: train and validation data')
+        valid_ds = full_ds.enumerate().filter(is_valid).map(recover)
+        train_ds = full_ds.enumerate().filter(is_train).map(recover)
+    else:
+        valid_ds = tf.keras.preprocessing.image_dataset_from_directory(image_valid_folder,
+          seed=111,
+          image_size=(img_height, img_width),
+          batch_size=batch_size)
+    ####  Successfully loaded train and validation data sets ################
+    classes = train_ds.class_names
+    cat_vocab_dict["image_classes"] = classes
+    cat_vocab_dict["target_transformed"] = True
+    cat_vocab_dict['modeltype'] =  'Classification'
+    MLB = My_LabelEncoder()
+    ins = copy.deepcopy(classes)
+    outs = np.arange(len(classes))
+    MLB.transformer = dict(zip(ins,outs))
+    MLB.inverse_transformer = dict(zip(outs,ins))
+    cat_vocab_dict['target_le'] = MLB
+    print('Number of image classes = %d and they are: %s' %(len(classes), classes))
+    print_one_image_from_dataset(train_ds, classes)
+    AUTOTUNE = tf.data.AUTOTUNE
+    train_ds = train_ds.cache().prefetch(buffer_size=AUTOTUNE)
+    valid_ds = valid_ds.cache().prefetch(buffer_size=AUTOTUNE)
+    cat_vocab_dict["image_height"] = img_height
+    cat_vocab_dict["image_width"] = img_width
+    cat_vocab_dict["batch_size"] = batch_size
+    cat_vocab_dict["image_channels"] = img_channels
+    return train_ds, valid_ds, cat_vocab_dict, model_options
+########################################################################################
 from collections import defaultdict
+from collections import Counter
+
 def load_train_data(train_data_or_file, target, project_name, keras_options, model_options,
-                  verbose=0):
+                  model_use_case="", verbose=0):
     """
     Handy function that loads a file or a sequence of files (*.csv) into a tf.data.Dataset 
     You can also load a pandas dataframe instead of a file if you wanted to. It accepts both!
@@ -705,6 +808,59 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     cat_vocab_dict['DS_LEN'] = DS_LEN
     if verbose >= 1 and train_small.shape[1] <= 30:
         print_one_row_from_tf_dataset(ds)
-
+    ####  Set Class Weights for Imbalanced Data Sets here ##########
+    modeltype = model_options["modeltype"]
+    if isinstance(target, str):
+        y_train = transform_train_target(train_small[[target]], target, 
+                modeltype, model_label='Single_Label', cat_vocab_dict=cat_vocab_dict)[0].values
+    else:
+        y_train = transform_train_target(train_small[target], target, 
+                modeltype, model_label='Multi_Label', cat_vocab_dict=cat_vocab_dict)[0].values
+    ####  CREATE  CLASS_WEIGHTS HERE #################
+    if modeltype != 'Regression':
+        find_rare_class(y_train, verbose=1)
+    if keras_options['class_weight']:
+        # create a counter of labels and their counts
+        labels_dict = dict(Counter(y_train))
+        class_weights = create_class_weight(labels_dict)
+        keras_options['class_weight'] = class_weights
+        print('    Class weights calculcated: %s' %class_weights)
+    else:
+        print('    No class weights specified. Continuing...')
     return train_small, model_options, ds, var_df, cat_vocab_dict, keras_options
 ##########################################################################################################
+from collections import OrderedDict
+def find_rare_class(classes, verbose=0):
+    ######### Print the % count of each class in a Target variable  #####
+    """
+    Works on Multi Class too. Prints class percentages count of target variable.
+    It returns the name of the Rare class (the one with the minimum class member count).
+    This can also be helpful in using it as pos_label in Binary and Multi Class problems.
+    """
+    counts = OrderedDict(Counter(classes))
+    total = sum(counts.values())
+    if verbose >= 1:
+        print('       Class  -> Counts -> Percent')
+        sorted_keys = sorted(counts.keys())
+        for cls in sorted_keys:
+            print("%12s: % 7d  ->  % 5.1f%%" % (cls, counts[cls], counts[cls]/total*100))
+    if type(pd.Series(counts).idxmin())==str:
+        return pd.Series(counts).idxmin()
+    else:
+        return int(pd.Series(counts).idxmin())
+###############################################################################
+import math
+# labels_dict : {ind_label: count_label}
+# mu : parameter to tune 
+
+def create_class_weight(labels_dict,mu=0.15):
+    total = np.sum(list(labels_dict.values()))
+    keys = labels_dict.keys()
+    class_weights = dict()
+    
+    for key in keys:
+        score = math.log(mu*total/float(labels_dict[key]))
+        class_weights[key] = score if score > 1.0 else 1.0
+    
+    return class_weights
+########################################################################

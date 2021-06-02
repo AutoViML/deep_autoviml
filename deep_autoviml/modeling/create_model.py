@@ -30,6 +30,7 @@ from deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
 
 # Utils
 from deep_autoviml.utilities.utilities import get_compiled_model, check_if_GPU_exists
+from deep_autoviml.utilities.utilities import get_model_defaults, check_keras_options
 ############################################################################################
 # TensorFlow ≥2.4 is required
 import tensorflow as tf
@@ -77,16 +78,6 @@ def left_subtract(l1,l2):
             lst.append(i)
     return lst
 #############################################################################################
-def check_keras_options(keras_options, name, default):
-    try:
-        if keras_options[name]:
-            value = keras_options[name] 
-        else:
-            value = default
-    except:
-        value = default
-    return value
-#####################################################################################
 from sklearn.metrics import balanced_accuracy_score, accuracy_score
 import tensorflow as tf
 from sklearn.metrics import confusion_matrix
@@ -124,21 +115,6 @@ class BalancedAccuracy(tf.keras.metrics.Metric):
         result = tf.math.reduce_mean(diag/rowsums, axis=0)
         return result
 ##########################################################################################
-class BalancedSparseCategoricalAccuracy(keras.metrics.SparseCategoricalAccuracy):
-    def __init__(self, name='balanced_sparse_categorical_accuracy', dtype=None):
-        super().__init__(name, dtype=dtype)
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        y_flat = y_true
-        if y_true.shape.ndims == y_pred.shape.ndims:
-            y_flat = tf.squeeze(y_flat, axis=[-1])
-        y_true_int = tf.cast(y_flat, tf.int32)
-
-        cls_counts = tf.math.bincount(y_true_int)
-        cls_counts = tf.math.reciprocal_no_nan(tf.cast(cls_counts, self.dtype))
-        weight = tf.gather(cls_counts, y_true_int)
-        return super().update_state(y_true, y_pred, sample_weight=weight)
-#####################################################################################
 def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                         keras_model_type, model_options):
     """
@@ -155,65 +131,11 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     data_dim = int(data_size*meta_outputs.shape[1])
     #### These can be standard for every keras option that you use layers ######
     kernel_initializer = check_keras_options(keras_options, 'kernel_initializer', 'glorot_uniform')
-    activation='relu'
-    #####   set some defaults for model parameters here ##
-    #print('After preprocessing layers, Data Dimensions = %s' %data_dim)
-    optimizer = check_keras_options(keras_options,'optimizer', Adam(lr=0.01, beta_1=0.9, beta_2=0.999))
-    #print('    Using optimizer = %s' %str(optimizer).split(".")[-1][:8])
-    use_bias = check_keras_options(keras_options, 'use_bias', True)
+    activation='relu'    
+    
+    ######################   set some defaults for model parameters here ##############
+    keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, model_options)
     ###################################################################################
-    if modeltype == 'Regression':
-        val_loss = check_keras_options(keras_options,'loss','mae') ### you can use tf.keras.losses.Huber() instead
-        #val_metrics = [check_keras_options(keras_options,'metrics',keras.metrics.RootMeanSquaredError(name='rmse'))]
-        val_metrics = check_keras_options(keras_options,'metrics',['mae','mse'])
-        #val_metrics=['mae', 'mse']
-        num_predicts = 1*num_labels
-        output_activation = 'linear' ### use "relu" or "softplus" if you want positive values as output
-    elif modeltype == 'Classification':
-        ##### This is for Binary Classification Problems
-        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
-        val_loss = check_keras_options(keras_options,'loss', cat_loss)
-        bal_acc = BalancedSparseCategoricalAccuracy()
-        val_metrics = check_keras_options(keras_options,'metrics',bal_acc)
-        #val_metrics = [check_keras_options(keras_options,'metrics','AUC')]
-        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
-        num_predicts = int(num_classes*num_labels)
-        output_activation = "sigmoid"
-    else:
-        #### this is for multi-class problems ####
-        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
-        val_loss = check_keras_options(keras_options,'loss', cat_loss)
-        bal_acc = BalancedSparseCategoricalAccuracy()
-        val_metrics = check_keras_options(keras_options, 'metrics', bal_acc)
-        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
-        num_predicts = int(num_classes*num_labels)
-        output_activation = 'softmax'
-    ##############  Suggested number of neurons in each layer ##################
-    if modeltype == 'Regression':
-        val_monitor = check_keras_options(keras_options, 'monitor', 'val_mae')
-        val_mode = check_keras_options(keras_options,'mode', 'min')
-    elif modeltype == 'Classification':
-        ##### This is for Binary Classification Problems
-        val_monitor = check_keras_options(keras_options,'monitor', 'val_balanced_sparse_categorical_accuracy')
-        #val_monitor = check_keras_options(keras_options,'monitor', 'val_auc')
-        #val_monitor = check_keras_options(keras_options,'monitor', 'val_accuracy')
-        val_mode = check_keras_options(keras_options,'mode', 'max')
-    else:
-        #### this is for multi-class problems
-        val_monitor = check_keras_options(keras_options,'monitor', 'val_balanced_sparse_categorical_accuracy')
-        #val_monitor = check_keras_options(keras_options, 'monitor','val_accuracy')
-        val_mode = check_keras_options(keras_options, 'mode', 'max')
-    #########################################################    
-    keras_options["mode"] = val_mode
-    keras_options["monitor"] = val_monitor
-    keras_options["metrics"] = val_metrics
-    keras_options['loss'] = val_loss
-    keras_options["patience"] = patience
-    keras_options['use_bias'] = use_bias
-    keras_options['optimizer'] = optimizer
-    #########################################################    
     if data_dim <= 1e6:
         dense_layer1 = max(96,int(data_dim/30000))
         dense_layer2 = max(64,int(dense_layer1*0.5))
@@ -270,8 +192,6 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                 for l_ in range(num_layers):
                     model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
                                               activity_regularizer=tf.keras.regularizers.l2(0.01)))
-                keras_options["val_mode"] = val_mode
-                keras_options["val_monitor"] = val_monitor
         else:
             try:
                 new_module = __import__(use_my_model)
@@ -285,8 +205,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     else:
         print('    Using your custom model given as input...')
         model_body = use_my_model
-    keras_options["val_mode"] = val_mode
-    keras_options["val_monitor"] = val_monitor
+    ###########################################################################
     print('    %s model loaded and compiled successfully...' %keras_model_type)
     return model_body, keras_options
 ###############################################################################

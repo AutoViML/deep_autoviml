@@ -216,8 +216,7 @@ def find_batch_size(DS_LEN):
     print('    Batch size selected as %d' %batch_len)
     return batch_len
 ###############################################################################################
-def predict(model_or_model_path, project_name, test_dataset, 
-                    keras_model_type, cat_vocab_dict=""):
+def load_model_dict(model_or_model_path, cat_vocab_dict, project_name):
     start_time = time.time()
     if not cat_vocab_dict:
         ### No cat_vocab_dict is given. Hence you must load it from disk ###
@@ -247,27 +246,33 @@ def predict(model_or_model_path, project_name, test_dataset,
     else:
         print('\nUsing %s model provided as input...' %model_or_model_path)
         model = model_or_model_path
-    print('    loaded model.')
+    print('Time taken to load saved model = %0.0f seconds' %((time.time()-start_time)))
+    return model, cat_vocab_dict
+###################################################################################################
+def predict(model_or_model_path, project_name, test_dataset, 
+                    keras_model_type, cat_vocab_dict=""):
     start_time2 = time.time()
+    model, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name)
     ##### load the test data set here #######
     if isinstance(test_dataset, str):
         test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name, 
                                 target="", cat_vocab_dict=cat_vocab_dict)
         batch_size = cat_vocab_dict2["batch_size"]
         DS_LEN = cat_vocab_dict2["DS_LEN"]
-        print("    modeltype = ",modeltype, ', test data size = ',DS_LEN, ', batch_size = ',batch_size)
+        print("test data size = ",DS_LEN, ', batch_size = ',batch_size)
     elif isinstance(test_dataset, pd.DataFrame) or isinstance(test_dataset, pd.Series):
         test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name,
                                 target="", cat_vocab_dict=cat_vocab_dict)
         test_small = test_dataset
         batch_size = cat_vocab_dict2["batch_size"]
         DS_LEN = cat_vocab_dict2["DS_LEN"]
-        print("    modeltype = ",modeltype, ', test data size = ',DS_LEN, ', batch_size = ',batch_size)
+        print("test data size = ",DS_LEN, ', batch_size = ',batch_size)
     else:
         ### It must be a tf.data.Dataset hence just load it as is ####
         test_ds = test_dataset
         DS_LEN = 100000
         batch_size = 64
+        cat_vocab_dict2 = copy.deepcopy(cat_vocab_dict)
     ##### Now predict on the data set here ####
     ## num_steps is needed to predict on whole dataset once ##
     try:
@@ -282,11 +287,20 @@ def predict(model_or_model_path, project_name, test_dataset,
         print('Could not predict using given model and inputs.\nError: %s\n Please check your inputs and try again.' %error)
         return []
     ###### Now collect the predictions if there are more than one target ###
+    y_test_preds_list = convert_predictions_from_model(y_probas, cat_vocab_dict2)
+    #####  We now show how many items are in the output  ###################
+    print('Returning model predictions in form of a list...of length %d' %len(y_test_preds_list))
+    print('Time taken in mins for predictions = %0.0f' %((time.time()-start_time2)/60))
+    return y_test_preds_list
+############################################################################################
+def convert_predictions_from_model(y_probas, cat_vocab_dict):
     y_test_preds_list = []
     target = cat_vocab_dict['target_variables']
+    modeltype = cat_vocab_dict["modeltype"]
     if isinstance(target, list):
         if len(target) == 1:
             target = target[0]
+    #### This is where predictions are converted back to classes ###
     if isinstance(target, str):
         if modeltype != 'Regression':
             #### This is for Single Label classification problems ######
@@ -336,8 +350,45 @@ def predict(model_or_model_path, project_name, test_dataset,
                         y_test_preds_list.append(y_test_preds_t)
                 else:
                     y_test_preds_list.append(y_test_preds_t)
-    #####  We now show how many items are in the output  ###################
-    print('Returning model predictions in form of a list...of length %d' %len(y_test_preds_list))
-    print('Time taken in mins for predictions = %0.0f' %((time.time()-start_time2)/60))
     return y_test_preds_list
-############################################################################################
+###########################################################################################
+from PIL import Image
+import numpy as np
+from skimage import transform
+def process_image_file(filename, img_height, img_weight, img_channels):
+    np_image = Image.open(filename)
+    np_image = np.array(np_image).astype('float32')
+    np_image = transform.resize(np_image, (224, 224, 3))
+    np_image = np.expand_dims(np_image, axis=0)
+    return np_image
+##############################################################################################
+def predict_images(test_image_dir, model_or_model_path, cat_vocab_dict):
+    project_name = cat_vocab_dict["project_name"]
+    model_loaded, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name)
+    ##### Now load the classes neede for predictions ###
+    y_test_preds_list = []
+    classes = cat_vocab_dict['image_classes']
+    img_height = cat_vocab_dict["image_height"]
+    img_width = cat_vocab_dict["image_width"]
+    batch_size = cat_vocab_dict["batch_size"]
+    img_channels = cat_vocab_dict["image_channels"]
+    if isinstance(test_image_dir, str):
+        if test_image_dir.split(".")[-1] in ["jpg","png"]:
+            print("    loading and predicting on file : %s" %test_image_dir)
+            pred_label = model_loaded.predict(process_image_file(test_image_dir, 
+                                img_height, img_weight, img_channels))
+            print('Predicted Label: %s' %(classes[np.argmax(pred_label)]))
+            print('Predicted probabilities: %s' %pred_label)
+        else:
+            print("    loading and predicting on folder: %s" %test_image_dir)
+            test_ds = tf.keras.preprocessing.image_dataset_from_directory(test_image_dir,
+                          seed=111,
+                          image_size=(img_height, img_width),
+                          batch_size=batch_size)
+            y_probas = model_loaded.predict(test_ds)
+            pred_label = convert_predictions_from_model(y_probas, cat_vocab_dict)
+            return pred_label
+    else:
+        print('Error: test_image_dir should be either a directory containining test folder or a single JPG or PNG image file')
+        return None
+########################################################################################################

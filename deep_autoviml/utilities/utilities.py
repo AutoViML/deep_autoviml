@@ -34,6 +34,22 @@ np.random.seed(42)
 tf.random.set_seed(42)
 from tensorflow.keras import layers
 from tensorflow import keras
+from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup
+from tensorflow.keras.layers.experimental.preprocessing import IntegerLookup, CategoryEncoding
+from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
+
+from tensorflow.keras.optimizers import SGD, Adam, RMSprop
+from tensorflow.keras import layers
+from tensorflow.keras import optimizers
+from tensorflow.keras.models import Model, load_model
+from tensorflow.keras import callbacks
+from tensorflow.keras import backend as K
+from tensorflow.keras import utils
+from tensorflow.keras.layers import BatchNormalization
+from tensorflow.keras.optimizers import SGD
+from tensorflow.keras import regularizers
+
+from tensorflow.keras import layers
 from tensorflow.keras.models import Model, load_model
 ################################################################################
 import os
@@ -698,4 +714,118 @@ def save_valid_predictions(y_test, y_preds, project_name, num_labels):
     print('Saved predictions in %s file' %preds_path)
     return pdf
 #########################################################################################    
+import matplotlib.pyplot as plt
+from IPython.display import Image, display
+def print_one_image_from_dataset(train_ds, classes):
+    plt.figure(figsize=(10, 10))
+    for images, labels in train_ds.take(1):
+      for i in range(9):
+        ax = plt.subplot(3, 3, i + 1)
+        plt.imshow(images[i].numpy().astype("uint8"))
+        plt.title(classes[labels[i]])
+        plt.axis("off");
+#########################################################################################
+def predict_plot_images(model, test_ds, classes):
+    plt.figure(figsize=(10, 10))
+    for images, labels in test_ds.take(1):
+      for i in range(9):
+        ax = plt.subplot(3, 3, i + 1)
 
+        plt.tight_layout()
+        
+        img = tf.keras.preprocessing.image.img_to_array(images[i])                    
+        img = np.expand_dims(img, axis=0)  
+
+        pred=model.predict(img)
+        plt.imshow(images[i].numpy().astype("uint8"))
+        plt.title("Actual Label: %s" % classes[labels[i]])
+        plt.text(1, 240, "Predicted Label: %s" % classes[np.argmax(pred)], fontsize=12)
+
+        plt.axis("off")
+#######################################################################################
+def get_model_defaults(keras_options, model_options):
+    num_classes = model_options["num_classes"]
+    num_labels = model_options["num_labels"]
+    modeltype = model_options["modeltype"]
+    patience = check_keras_options(keras_options, "patience", 10)
+    use_bias = check_keras_options(keras_options, 'use_bias', True)
+    optimizer = check_keras_options(keras_options,'optimizer', Adam(lr=0.01, beta_1=0.9, beta_2=0.999))
+    if modeltype == 'Regression':
+        val_loss = check_keras_options(keras_options,'loss','mae') ### you can use tf.keras.losses.Huber() instead
+        #val_metrics = [check_keras_options(keras_options,'metrics',keras.metrics.RootMeanSquaredError(name='rmse'))]
+        val_metrics = check_keras_options(keras_options,'metrics',['mae','mse'])
+        #val_metrics=['mae', 'mse']
+        num_predicts = 1*num_labels
+        output_activation = 'linear' ### use "relu" or "softplus" if you want positive values as output
+    elif modeltype == 'Classification':
+        ##### This is for Binary Classification Problems
+        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
+        val_loss = check_keras_options(keras_options,'loss', cat_loss)
+        bal_acc = BalancedSparseCategoricalAccuracy()
+        val_metrics = check_keras_options(keras_options,'metrics',bal_acc)
+        #val_metrics = [check_keras_options(keras_options,'metrics','AUC')]
+        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
+        num_predicts = int(num_classes*num_labels)
+        output_activation = "sigmoid"
+    else:
+        #### this is for multi-class problems ####
+        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
+        val_loss = check_keras_options(keras_options,'loss', cat_loss)
+        bal_acc = BalancedSparseCategoricalAccuracy()
+        val_metrics = check_keras_options(keras_options, 'metrics', bal_acc)
+        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
+        num_predicts = int(num_classes*num_labels)
+        output_activation = 'softmax'
+    ##############  Suggested number of neurons in each layer ##################
+    if modeltype == 'Regression':
+        val_monitor = check_keras_options(keras_options, 'monitor', 'val_mae')
+        val_mode = check_keras_options(keras_options,'mode', 'min')
+    elif modeltype == 'Classification':
+        ##### This is for Binary Classification Problems
+        val_monitor = check_keras_options(keras_options,'monitor', 'val_balanced_sparse_categorical_accuracy')
+        #val_monitor = check_keras_options(keras_options,'monitor', 'val_auc')
+        #val_monitor = check_keras_options(keras_options,'monitor', 'val_accuracy')
+        val_mode = check_keras_options(keras_options,'mode', 'max')
+    else:
+        #### this is for multi-class problems
+        val_monitor = check_keras_options(keras_options,'monitor', 'val_balanced_sparse_categorical_accuracy')
+        #val_monitor = check_keras_options(keras_options, 'monitor','val_accuracy')
+        val_mode = check_keras_options(keras_options, 'mode', 'max')
+    ##############################################################################
+    keras_options["mode"] = val_mode
+    keras_options["monitor"] = val_monitor
+    keras_options["metrics"] = val_metrics
+    keras_options['loss'] = val_loss
+    keras_options["patience"] = patience
+    keras_options['use_bias'] = use_bias
+    keras_options['optimizer'] = optimizer
+    return keras_options, model_options, num_predicts, output_activation
+
+###############################################################################
+class BalancedSparseCategoricalAccuracy(keras.metrics.SparseCategoricalAccuracy):
+    def __init__(self, name='balanced_sparse_categorical_accuracy', dtype=None):
+        super().__init__(name, dtype=dtype)
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_flat = y_true
+        if y_true.shape.ndims == y_pred.shape.ndims:
+            y_flat = tf.squeeze(y_flat, axis=[-1])
+        y_true_int = tf.cast(y_flat, tf.int32)
+
+        cls_counts = tf.math.bincount(y_true_int)
+        cls_counts = tf.math.reciprocal_no_nan(tf.cast(cls_counts, self.dtype))
+        weight = tf.gather(cls_counts, y_true_int)
+        return super().update_state(y_true, y_pred, sample_weight=weight)
+#####################################################################################
+def check_keras_options(keras_options, name, default):
+    try:
+        if keras_options[name]:
+            value = keras_options[name] 
+        else:
+            value = default
+    except:
+        value = default
+    return value
+#####################################################################################

@@ -18,6 +18,7 @@ pd.set_option('display.max_columns',500)
 import matplotlib.pyplot as plt
 import tempfile
 import pdb
+import os
 import copy
 import warnings
 warnings.filterwarnings(action='ignore')
@@ -48,6 +49,9 @@ from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
 from tensorflow.keras.models import Model, load_model
+import tensorflow_hub as hub
+import tensorflow_text as text
+
 #############################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
 from IPython.core.display import Image, display
@@ -78,25 +82,27 @@ from .data_load.classify_features import EDA_classify_and_return_cols_by_type
 from .data_load.classify_features import EDA_classify_features
 from .data_load.extract import find_problem_type, transform_train_target
 from .data_load.extract import load_train_data, load_train_data_file
-from .data_load.extract import load_train_data_frame
+from .data_load.extract import load_train_data_frame, load_image_data
 
 # keras preprocessing
 from .preprocessing.preprocessing import perform_preprocessing
 from .preprocessing.preprocessing_tabular import preprocessing_tabular
 from .preprocessing.preprocessing_nlp import preprocessing_nlp
+from .preprocessing.preprocessing_images import preprocessing_images
 
 # keras models and bring-your-own models
 from .modeling.create_model import create_model
 from .models import basic, deep, big_deep, giant_deep, cnn1, cnn2
 from .modeling.train_model import train_model
 from .modeling.train_custom_model import train_custom_model, return_optimizer
-from .modeling.predict_model import predict
+from .modeling.predict_model import predict, predict_images
+from .modeling.train_image_model import train_image_model
 
 # Utils
 from .utilities.utilities import print_one_row_from_tf_dataset
 from .utilities.utilities import print_one_row_from_tf_label
 from .utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
-from .utilities.utilities import check_if_GPU_exists
+from .utilities.utilities import check_if_GPU_exists, plot_history
 
 #############################################################################################
 #### probably the most handy function of all!  ###############################################
@@ -108,8 +114,8 @@ def left_subtract(l1,l2):
     return lst
 ##############################################################################################
 def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep_autoviml", 
-                                save_model_flag=True, model_options={},
-                                keras_options={}, use_my_model='', verbose=0):
+                                save_model_flag=True, model_options={}, keras_options={},
+                                 use_my_model='', model_use_case='', verbose=0):
     """
     ####################################################################################
     ####                          Deep AutoViML                                     ####
@@ -119,8 +125,10 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     Inputs:
     train_data_or_file: can be file or pandas dataframe: you need to give path to filename.
     target: string or list. You can give one variable (string) or multiple variables (list)
-    keras_model_type: default = 'Deep', 'Big Deep', 'Giant Deep', 'Custom', 'CNN1',
-                         'CNN2'. <more to come>
+    keras_model_type: default = "auto". If you are not satisfied with the automatic model we build, 
+                        you can choose other options like 'Deep', 'Big Deep', 'Giant Deep', 
+                         'CNN1', 'CNN2', "BERT", etc. If you are using a BERT model, you must set
+                         the keras_model_type to "BERT". Otherwise, you will get an error.
     project_name: default = "deep_autoviml". This is used to name the folder to save model.
     save_model_flag: default = False: it determines wher you want to save your trained model 
                     to local drive. If True, it will save it locally in project_name folder.
@@ -153,6 +161,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             "lr_scheduler": default = "onecycle" but you can choose from any below:
                     ##  ["scheduler", 'onecycle', 'rlr' (reduce LR on plateau), 'decay']
             "early_stopping": default = False. You can change it to True.
+            "class_weight": {}: you can send in class weights for imbalanced classes as a dictionary.
     model_options: dictionary:  you can send in any deep autoviml model option you 
                     want to change using this dictionary.
             You can change  following as long as you use this option and  same exact wordings:
@@ -165,7 +174,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             Another option would be to inform autoviml about  encoding in  CSV file for it to 
                     read such as 'latin-1' by setting {"csv_encoding": 'latin-1'}
             Other examples:
-            "csv_encoding": default =  'utf-8'
+            "csv_encoding": default='utf-8'. You can change to 'latin-1', 'iso-8859-1', 'cp1252', etc.
             "cat_feat_cross_flag": if you want to cross categorical features such as A*B, B*C...
             "sep" : default = "," comma but you can override it. Separator used in read_csv.
             "idcols": default: empty list. Specify which variables you want to exclude from model.
@@ -178,12 +187,45 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             "max_trials": default = 10 ## number of Storm Tuner trials ###
             "tuner": default = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
             "embedding_size": default = 50 ## this is the NLP embedding size minimum
+            "tf_hub_model": default "" (empty string). If you want to supply TF hub model, provide URL here.
+            "image_directory": If you choose model_use_case as "image", then you must provide image folder.
+            "image_height": default is "" (empty string). Needed only for "image" use case.
+            "image_width": default is "" (empty string). Needed only for "image" use case.
+            "image_channels": default is "" (empty string). Needed only for image use case. Number of channels.
+    model_use_case: default is "" (empty string). If "pipeline", you will get back pipeline only, not model.
+                It can also be used for different purposes: "image" for images, "time series" etc.
     verbose = 1 will give you more charts and outputs. verbose 0 will run silently 
                 with minimal outputs.
     """
     my_strategy = check_if_GPU_exists(1)
     model_options_copy = copy.deepcopy(model_options)
     keras_options_copy = copy.deepcopy(keras_options)
+
+    if not model_use_case == "":
+        if model_use_case.lower() in ['image', 'images', "image_classification"]:
+            ###############   Now do special image processing here ###################################
+            with my_strategy.scope():
+                try:
+                    print('For image use case:')
+                    image_dir = model_options["image_directory"]
+                    train_ds, valid_ds, cat_vocab_dict, model_options = load_image_data(image_dir,
+                                                            target, project_name, keras_options_copy,
+                                                            model_options_copy, verbose)
+                except:
+                    print('    Error in image loading: check your model_options and try again.')
+                    return
+                try:
+                    deep_model = preprocessing_images(train_ds, model_options)
+                except:
+                    print('    Error in image preprocessing: check your model_options and try again.')
+                    return
+            ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
+            deep_model, cat_vocab_dict = train_image_model(deep_model, train_ds, valid_ds, 
+                                                cat_vocab_dict, keras_options_copy, 
+                                                project_name, save_model_flag)
+            print(deep_model.summary())
+            return deep_model, cat_vocab_dict
+
     ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
     #with my_strategy.scope():
 
@@ -206,10 +248,11 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     keras_options_defaults['mode'] = ""
     keras_options_defaults["lr_scheduler"] = ""
     keras_options_defaults["early_stopping"] = ""
+    keras_options_defaults["class_weight"] = {}
 
     list_of_keras_options = ["batchsize", "activation", "save_weights_only", "use_bias",
                             "patience", "epochs", "steps_per_epoch", "optimizer",
-                            "kernel_initializer", "num_layers",
+                            "kernel_initializer", "num_layers", "class_weight",
                             "loss", "metrics", "monitor","mode", "lr_scheduler","early_stopping"]
 
     keras_options = copy.deepcopy(keras_options_defaults)
@@ -222,7 +265,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 
     list_of_model_options = ["idcols","modeltype","sep","cat_feat_cross_flag", "model_use_case",
                             "nlp_char_limit", "variable_cat_limit", "csv_encoding", "header",
-                            "max_trials","tuner", "embedding_size"]
+                            "max_trials","tuner", "embedding_size", "tf_hub_model", "image_directory",
+                            'image_height', 'image_width', "image_channels"]
 
     model_options_defaults = defaultdict(str)
     model_options_defaults["idcols"] = []
@@ -237,6 +281,11 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     model_options_defaults["max_trials"] = 10 ## number of Storm Tuner trials ###
     model_options_defaults['tuner'] = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
     model_options_defaults["embedding_size"] = 50 ## this is the NLP embedding size minimum
+    model_options_defaults["tf_hub_model"] = "" ## If you want to use a pretrained Hub model, provide URL here.
+    model_options_defaults["image_directory"] = "" ## this is where images are input in form of folder
+    model_options_defaults['image_height'] = "" ## the height of the image must be given in number of pixels
+    model_options_defaults['image_width'] = "" ## the width of the image must be given in number of pixels
+    model_options_defaults["image_channels"] = "" ## number of channels in images provided 
     
     model_options = copy.deepcopy(model_options_defaults)
     if len(model_options_copy) > 0:
@@ -265,8 +314,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 #################################################################################
         """)
     dft, model_options, batched_data, var_df, cat_vocab_dict, keras_options = load_train_data(
-                                            train_data_or_file, target, project_name, keras_options, 
-                                            model_options, verbose=verbose)
+                                    train_data_or_file, target, project_name, keras_options, 
+                                    model_options, model_use_case=model_use_case, verbose=verbose)
 
     try:
         data_size = cat_vocab_dict['DS_LEN']
@@ -285,9 +334,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 
     nlp_inputs, meta_inputs, meta_outputs = perform_preprocessing(batched_data, var_df, 
                                                 cat_vocab_dict, keras_model_type, 
-                                                model_options, cat_feat_cross_flag,  
-                                                                    verbose)
-
+                                                keras_options, model_options, 
+                                                cat_feat_cross_flag, verbose)
 
     if isinstance(model_use_case, str):
         if model_use_case:

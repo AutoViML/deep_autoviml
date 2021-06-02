@@ -29,6 +29,7 @@ from deep_autoviml.preprocessing.preprocessing_tabular import preprocessing_tabu
 from deep_autoviml.preprocessing.preprocessing_nlp import preprocessing_nlp
 
 # Utils
+from deep_autoviml.utilities.utilities import get_model_defaults
 
 ############################################################################################
 # TensorFlow ≥2.4 is required
@@ -78,7 +79,7 @@ def left_subtract(l1,l2):
     return lst
 #############################################################################################
 def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
-                                model_options, cat_feat_cross_flag=False, verbose=0):
+                           keras_options, model_options, cat_feat_cross_flag=False, verbose=0):
     """
     Remember this is the most valuable part of this entire library!
     This is one humongous preprocessing step to build everything needed for preprocessing into a keras model!
@@ -126,7 +127,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     ###########     F E A T U R E    P R E P R O C E S S I N G   H E R E      #######
     #################################################################################
     nlps = var_df['nlp_vars']
-    
+    keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, model_options)
     ##################  NLP Text Features are Proprocessed Here  ################
     nlp_inputs = []
     nlp_names = []
@@ -134,7 +135,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
         print('Starting NLP string column layer preprocessing...')
         nlp_inputs, embedding, nlp_names = preprocessing_nlp(train_ds, model_options,
                                                 var_df, cat_vocab_dict, 
-                                                embedding_size=embedding_size)
+                                                keras_model_type)
         print('    NLP Preprocessing completed.')
     else:
         print('There are no NLP variables in this dataset for preprocessing...')
@@ -157,12 +158,22 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     ds_types = dict([(col_name, train_ds.element_spec[0][col_name].dtype) for col_name in final_training_order ])
     col_type_tuples = [(name,ds_types[name]) for name in final_training_order]
     print('Inferred column names, layers and types (double-check for duplicates and correctness!): \n%s' %col_type_tuples)
-
     ##### You need to send in the ouput from embedding layer to this sequence of layers ####
     nlp_outputs = []
     if len(nlps) > 0:
-        ###### This is where you define the NLP Embedded Layers ########
-        if keras_model_type.lower() in ['auto']:
+        if keras_model_type.lower() in ['bert','nlp','text', 'use']:
+            ###### This is where you define the NLP Embedded Layers ########
+            #x = layers.Dense(64, activation='relu')(embedding)
+            #x = layers.Dense(32, activation='relu')(x)
+            #nlp_outputs = layers.Dropout(0.2)(x)
+            #nlp_outputs = layers.Dropout(0.2)(embedding)
+            if isinstance(meta_outputs, list):
+                #### if there are no other variables then leave it as embedding output
+                nlp_outputs = embedding
+            else:
+                #### If there are other variables, then convert this embedding to an output
+                nlp_outputs = layers.Dense(num_predicts, activation=output_activation)(embedding)
+        elif keras_model_type.lower() in ['auto']:
             x = layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True))(embedding)
             nlp_outputs = layers.Bidirectional(tf.keras.layers.LSTM(64))(x)
             # = layers.Bidirectional(layers.LSTM(dense_layer1, dropout=0.3, recurrent_dropout=0.3,

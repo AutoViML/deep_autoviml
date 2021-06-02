@@ -23,9 +23,11 @@
 # Version
 from .__version__ import __version__
 __all__ = ['data_load', 'models', 'modeling', 'preprocessing', 'utilities']
+import pdb
 
 from .deep_autoviml import fit
 from .modeling.predict_model import load_test_data, predict
+from deep_autoviml.modeling.predict_model import predict_images
 ################################################################################
 if __name__ == "__main__":
     module_type = 'Running'

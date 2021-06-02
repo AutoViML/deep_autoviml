@@ -323,7 +323,8 @@ class MyTuner(Tuner):
         val_metrics, patience = args[12], args[13]
         val_mode, DS_LEN = args[14], args[15]
         learning_rate, val_monitor = args[16], args[17]
-        callbacks_list = args[18]
+        callbacks_list, modeltype = args[18], args[19]
+        class_weights =  args[20]
 
         ##  now load the model_body and convert it to functional model
         #print('Loading custom model...')
@@ -362,11 +363,10 @@ class MyTuner(Tuner):
         valid_ds = valid_ds.prefetch(batch_size).repeat(5)
         steps = 20
         #scores = []
-
         history = comp_model.fit(train_ds, epochs=epochs, steps_per_epoch=steps,# batch_size=batch_size, 
                             validation_data=valid_ds, validation_steps=steps,
-                            callbacks=callbacks_list, shuffle=False,
-                            verbose=0)
+                            callbacks=callbacks_list, shuffle=True, class_weight=class_weights,
+                            verbose=0)            
         # here we can define custom logic to assign a score to a configuration
         if num_labels == 1:
             score = np.mean(history.history[val_monitor][-5:])
@@ -475,11 +475,14 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     train the model and evaluate it on valid_ds. It will return a keras model fully 
     trained on the full batched_data finally and train history.
     """
+    start_time = time.time()
     ########################   STORM TUNER and other DEFAULTS     ####################
     max_trials = model_options["max_trials"]
     overwrite_flag = True ### This overwrites the trials so every time it runs it is new
     data_size = check_keras_options(keras_options, 'data_size', 10000)
     batch_size = check_keras_options(keras_options, 'batchsize', 64)
+    class_weights = check_keras_options(keras_options, 'class_weight', {})
+    print('    Class weights: %s' %class_weights)
     num_classes = model_options["num_classes"]
     num_labels = model_options["num_labels"]
     modeltype = model_options["modeltype"]
@@ -492,7 +495,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print("    Early stopping : %s" %early_stopping)
     NUMBER_OF_EPOCHS = check_keras_options(keras_options, "epochs", 100)
     learning_rate = 5e-1
-    steps = max(25, data_size//(batch_size*25))
+    steps = max(10, data_size//(batch_size*25))
+    steps = min(40, steps)
     print('    recommended steps per epoch = %d' %steps)
     STEPS_PER_EPOCH = check_keras_options(keras_options, "steps_per_epoch", 
                         steps)
@@ -528,7 +532,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
                         val_loss, num_predicts, output_activation))
     ####  just use modeltype for printing that's all ###
     modeltype = cat_vocab_dict['modeltype']
-    start_time = time.time()
+
+
     ### check the defaults for the following!
     save_weights_only = check_keras_options(keras_options, "save_weights_only", False)
 
@@ -647,8 +652,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
                             inputs, meta_outputs, cols_len, output_activation,
                             num_predicts, num_labels, optimizer, val_loss,
                             val_metrics, patience, val_mode, data_size,
-                            learning_rate, val_monitor, callbacks_list_tuner
-                            )
+                            learning_rate, val_monitor, callbacks_list_tuner,
+                            modeltype,  class_weights)
         best_trial = tuner.get_best_trial()
         print('    best trial selected as %s' %best_trial)
         ##### get the best model parameters now. Also split it into two models ###########
@@ -706,7 +711,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
             opt_model = build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predicts, 
                         num_labels, optimizer_options, val_loss, val_metrics, cols_len)
             history = opt_model.fit(train_ds, validation_data=valid_ds, 
-                        epochs=NUMBER_OF_EPOCHS, 
+                        epochs=NUMBER_OF_EPOCHS, shuffle=True,
                         callbacks=callbacks_list_tuner,
                         verbose=0)
             if num_labels == 1:
@@ -805,10 +810,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     
     ####  Do this with LR scheduling but NO early stopping since we want the model fully trained #####
     history = best_model.fit(train_ds, validation_data=valid_ds, batch_size=best_batch,
-                epochs=NUMBER_OF_EPOCHS, steps_per_epoch=STEPS_PER_EPOCH, 
-                callbacks=callbacks_list, 
-                validation_steps=STEPS_PER_EPOCH,
-               shuffle=False)
+            epochs=NUMBER_OF_EPOCHS, steps_per_epoch=STEPS_PER_EPOCH, 
+            callbacks=callbacks_list, class_weight=class_weights,
+            validation_steps=STEPS_PER_EPOCH, 
+           shuffle=True)
 
     #################################################################################
     #######          R E S E T    K E R A S      S E S S I O N 
@@ -978,10 +983,14 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print("    set learning rate using best model:", deep_model.optimizer.learning_rate.numpy())
     ####   Dont set the epochs too low - let them be back to where they were stopped  ####
     print('    max epochs for training = %d' %stopped_epoch)
-    deep_model.fit(full_ds, epochs=stopped_epoch, steps_per_epoch=STEPS_PER_EPOCH, 
+    if modeltype != 'Regression':
+        deep_model.fit(full_ds, epochs=stopped_epoch, steps_per_epoch=STEPS_PER_EPOCH, 
                     batch_size=best_batch,
                     callbacks=[rlr],  shuffle=True, verbose=0)
-
+    else:
+        deep_model.fit(full_ds, epochs=stopped_epoch, steps_per_epoch=STEPS_PER_EPOCH, 
+                    batch_size=best_batch, class_weight = class_weights,
+                    callbacks=[rlr],  shuffle=True, verbose=0)
     ##################################################################################
     #######        S A V E the model here using save_model_name      #################
     ##################################################################################
