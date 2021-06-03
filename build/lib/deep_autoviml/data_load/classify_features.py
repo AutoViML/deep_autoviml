@@ -138,7 +138,7 @@ def classify_features(dfte, depVar, model_options={}, verbose=0):
             print('    List of variables to be removed: %s' %cols_delete)
     #############  Check if there are too many columns to visualize  ################
     ppt = pprint.PrettyPrinter(indent=4)
-    if verbose > 1 and len(preds) <= max_cols_analyzed:
+    if verbose==1 and len(preds) <= max_cols_analyzed:
         marthas_columns(dfte,verbose)
         print("   Columns to delete:")
         ppt.pprint('   %s' % cols_delete)
@@ -504,7 +504,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
             print(f"printing first five values of {target}: {data_sample[target].values[:5]}")
     if len(preds) <= 30:
         print_features = True
-    if print_features and verbose > 1:
+    if print_features and verbose >= 1:
         print("printing features and their max, min, datatypes in one batch ")
     ###### Now we do the creation of cat_vocab_dict though it is called feats_max_min here #####
     floats = []
@@ -556,8 +556,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                 ####  Now we select features if they are present in the data set ###
                 #feats_max_min[key]["vocab"] = data_sample[key].unique()
                 vocab = data_sample[key].unique()
-                vocab = ['missing' if type(x) != str  else x for x in vocab]
-                feats_max_min[key]["vocab"] = vocab
+                feats_max_min[key]["vocab"] = []
                 feats_max_min[key]['size_of_vocab'] = len(vocab)
                 #feats_max_min[key]['size_of_vocab'] = len(feats_max_min[key]["vocab"])
         else:
@@ -567,7 +566,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
             feats_max_min[key]["vocab"] = []
             feats_max_min[key]['size_of_vocab'] = len(vocab)
             #feats_max_min[key]['size_of_vocab'] = len(feats_max_min[key]["vocab"])
-        if print_features and verbose > 1:
+        if print_features and verbose >= 1:
             print("  {!r:20s}: {}".format(key, data_sample[key].values[:4]))
             print("  {!r:25s}: {}".format('    size of vocab', feats_max_min[key]["size_of_vocab"]))
             print("  {!r:25s}: {}".format('    max', feats_max_min[key]["max"]))

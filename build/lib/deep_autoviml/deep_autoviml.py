@@ -193,7 +193,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             "image_width": default is "" (empty string). Needed only for "image" use case.
             "image_channels": default is "" (empty string). Needed only for image use case. Number of channels.
     model_use_case: default is "" (empty string). If "pipeline", you will get back pipeline only, not model.
-                It is a placeholder for future purposes. At the moment, leave it as empty string.
+                It can also be used for different purposes: "image" for images, "time series" etc.
     verbose = 1 will give you more charts and outputs. verbose 0 will run silently 
                 with minimal outputs.
     """
@@ -201,29 +201,30 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     model_options_copy = copy.deepcopy(model_options)
     keras_options_copy = copy.deepcopy(keras_options)
 
-    if keras_model_type.lower() in ['image', 'images', "image_classification"]:
-        ###############   Now do special image processing here ###################################
-        with my_strategy.scope():
-            try:
-                print('For image use case:')
-                image_dir = model_options["image_directory"]
-                train_ds, valid_ds, cat_vocab_dict, model_options = load_image_data(image_dir,
-                                                        target, project_name, keras_options_copy,
-                                                        model_options_copy, verbose)
-            except:
-                print('    Error in image loading: check your model_options and try again.')
-                return
-            try:
-                deep_model = preprocessing_images(train_ds, model_options)
-            except:
-                print('    Error in image preprocessing: check your model_options and try again.')
-                return
-        ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
-        deep_model, cat_vocab_dict = train_image_model(deep_model, train_ds, valid_ds, 
-                                            cat_vocab_dict, keras_options_copy, 
-                                            project_name, save_model_flag)
-        print(deep_model.summary())
-        return deep_model, cat_vocab_dict
+    if not model_use_case == "":
+        if model_use_case.lower() in ['image', 'images', "image_classification"]:
+            ###############   Now do special image processing here ###################################
+            with my_strategy.scope():
+                try:
+                    print('For image use case:')
+                    image_dir = model_options["image_directory"]
+                    train_ds, valid_ds, cat_vocab_dict, model_options = load_image_data(image_dir,
+                                                            target, project_name, keras_options_copy,
+                                                            model_options_copy, verbose)
+                except:
+                    print('    Error in image loading: check your model_options and try again.')
+                    return
+                try:
+                    deep_model = preprocessing_images(train_ds, model_options)
+                except:
+                    print('    Error in image preprocessing: check your model_options and try again.')
+                    return
+            ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
+            deep_model, cat_vocab_dict = train_image_model(deep_model, train_ds, valid_ds, 
+                                                cat_vocab_dict, keras_options_copy, 
+                                                project_name, save_model_flag)
+            print(deep_model.summary())
+            return deep_model, cat_vocab_dict
 
     ########    B E G I N N I N G    O F    S T R A T E G Y    S C O P E    #####################
     #with my_strategy.scope():
@@ -356,10 +357,15 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     inputs = nlp_inputs+meta_inputs
     model_body, keras_options =  create_model(use_my_model, inputs, meta_outputs, 
                                         keras_options, var_df, keras_model_type,
-                                        model_options, cat_vocab_dict)
+                                        model_options)
     
     ###########    C O M P I L E    M O D E L    H E R E         #############
     if not keras_model_type.lower() == 'auto':
+        #### For every keras_model_type other than "auto" use this #################
+        print('Loading a pre-built %s model...' %keras_model_type)
+        final_outputs = add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs)
+        #### This final outputs is the one that is taken into final dense layer and compiled
+        print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
         ###### This is where you compile the model after it is built ###############
         num_classes = model_options["num_classes"]
         num_labels = model_options["num_labels"]
@@ -382,24 +388,9 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         else:
             num_predicts = int(num_classes*num_labels)
             output_activation = "sigmoid"
-        #### For every keras_model_type other than "auto" use this #################
-        if keras_model_type in ['fast1', 'fast2', 'fast']:
-            print('    Not adding inputs and outputs to model. Compiling model...')
-            deep_model = model_body
-            deep_model.compile(
-                    optimizer=optimizer,
-                    loss=val_loss,
-                    metrics=val_metrics,
-                        )
-            print('    compiled.')
-        else:
-            print('Loading a pre-built %s model...' %keras_model_type)
-            final_outputs = add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs)
-            #### This final outputs is the one that is taken into final dense layer and compiled
-            print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
-            ######  You need to compile the non-auto models here ###############
-            deep_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
-                                    num_labels, model_body, optimizer, val_loss, val_metrics, dft.shape[1])
+        ######  You need to compile the non-auto models here ###############
+        deep_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
+                                num_labels, model_body, optimizer, val_loss, val_metrics, dft.shape[1])
         if dft.shape[1] > 100:
             print('Too many columns to show model summary. Continuing...')
         else:

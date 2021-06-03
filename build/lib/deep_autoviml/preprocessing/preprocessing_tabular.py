@@ -164,39 +164,36 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     lats = var_df['lats']
     lons = var_df['lons']
     matched_lat_lons = var_df['matched_pairs']
-
+    ####### Now you need to send max_tokens_zip to all preprocessing layers ###
+    ### just use this to set the limit for max tokens for different variables ###
+    ### we are setting the number of max_tokens to be 2X the number of tokens found in train
+    max_tokens_zip = defaultdict(int)
+    cats_copy = copy.deepcopy(cats)
+    if len(cats_copy) > 0:
+        for each_name in cats_copy:
+            if cat_vocab_dict[each_name]['size_of_vocab'] <= 5:
+                max_tokens_zip[each_name] = int(2*cat_vocab_dict[each_name]['size_of_vocab'])
+            else:
+                max_tokens_zip[each_name] = int(5*cat_vocab_dict[each_name]['size_of_vocab'])
+    high_cats_copy = copy.deepcopy(high_string_vars)
+    if len(high_cats_copy) > 0:
+        for each_name in high_cats_copy:
+            max_tokens_zip[each_name] = int(1.5*cat_vocab_dict[each_name]['size_of_vocab'])
+    copy_int_cats = copy.deepcopy(int_cats)
+    if len(copy_int_cats) > 0:
+        for each_int in copy_int_cats:
+            max_tokens_zip[each_int] = int(6*(cat_vocab_dict[each_int]['size_of_vocab']))
+    copy_ints = copy.deepcopy(ints)
+    if len(copy_ints) > 0:
+        for each_int in copy_ints:
+            max_tokens_zip[each_int] = int(3*(cat_vocab_dict[each_int]['size_of_vocab']))
+    if verbose >= 1:
+        print('Max Tokens for categorical and integer variables: %s' %max_tokens_zip)
     #### These are the most important variables from this program: all inputs and outputs
     all_inputs = []
     all_encoded = []
     all_features = []
     all_input_names = []
-
-    ### just use this to set the limit for max tokens for different variables ###
-    ### we are setting the number of max_tokens to be 2X the number of tokens found in train
-    max_tokens_zip = defaultdict(int)
-    
-    cats_copy = copy.deepcopy(cats)
-    if len(cats_copy) > 0:
-        for each_name in cats_copy:
-            if cat_vocab_dict[each_name]['size_of_vocab'] <= 5:
-                max_tokens_zip[each_name] = int(1*cat_vocab_dict[each_name]['size_of_vocab']) #2 earlier
-            else:
-                max_tokens_zip[each_name] = int(1*cat_vocab_dict[each_name]['size_of_vocab']) ## 5 earlier
-    high_cats_copy = copy.deepcopy(high_string_vars)
-    if len(high_cats_copy) > 0:
-        for each_name in high_cats_copy:
-            max_tokens_zip[each_name] = int(1*cat_vocab_dict[each_name]['size_of_vocab'])
-    copy_int_cats = copy.deepcopy(int_cats)
-    if len(copy_int_cats) > 0:
-        for each_int in copy_int_cats:
-            max_tokens_zip[each_int] = int(1*(cat_vocab_dict[each_int]['size_of_vocab']))
-    copy_ints = copy.deepcopy(ints)
-    if len(copy_ints) > 0:
-        for each_int in copy_ints:
-            max_tokens_zip[each_int] = int(1*(cat_vocab_dict[each_int]['size_of_vocab'])) #3 earlier
-    if verbose >= 1:
-        print('Max Tokens for categorical and integer variables: %s' %max_tokens_zip)
-
     ####### CAVEAT : All the inputs and outputs should follow this same sequence below! ######
     all_date_inputs = []
     all_int_inputs = []
@@ -298,8 +295,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_int_encoded.append(encoded)
                 all_input_names.append(each_int)
                 if verbose:
-                    print('    %s number of categories = %d and bins = %d: after integer hash encoding shape: %s' %(each_int, 
-                                            max_tokens_zip[each_int], nums_bin, encoded.shape[1]))
+                    print('    %s : after integer hash encoding shape: %s' %(each_int, encoded.shape[1]))
                     if encoded.shape[1] > 100:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
@@ -319,8 +315,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_int_cat_encoded.append(encoded)
                 all_input_names.append(each_int)
                 if verbose:
-                    print('    %s number of categories = %d: after integer categorical encoding shape: %s' %(
-                                        each_int, max_tokens, encoded.shape[1]))
+                    print('    %s : after integer categorical encoding shape: %s' %(each_int, encoded.shape[1]))
                     if encoded.shape[1] > 100:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
@@ -379,12 +374,8 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 print('    Error: Skipping %s since Keras Discrete Strings (high cats) preprocessing erroring' %each_cat)
 
     ####  If the feature crosses for categorical variables are requested, then do this here ###
-    if len(cats) == 0:
-        cross_cats =  copy.deep_copy(int_cats)
-    else:
-        cross_cats = copy.deepcopy(cats)
-    if cat_feat_cross_flag and len(cross_cats) > 1:
-        combos = list(combinations(cross_cats, 2))
+    if cat_feat_cross_flag and len(cats) > 1:
+        combos = list(combinations(cats, 2))
         for cat_1, cat_2 in combos:
             try:
                 cat_encoded_input1 = cat_encoded_dict[cat_1]
@@ -503,8 +494,8 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     #####  SEQUENCE OF THESE INPUTS AND OUTPUTS MUST MATCH ABOVE - we gather all outputs above into a single list
     all_inputs = all_date_inputs + all_int_inputs + all_int_cat_inputs + all_cat_inputs + all_num_inputs + all_latlon_inputs 
     all_encoded = all_date_encoded+all_int_encoded+all_int_cat_encoded+all_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+lat_lon_paired_encoded
-    all_low_cat_encoded = all_date_encoded+all_int_encoded+all_cat_encoded+all_latlon_encoded
-    all_numeric_encoded =  all_int_cat_encoded + all_feat_cross_encoded + all_num_encoded + lat_lon_paired_encoded
+    all_low_cat_encoded = all_date_encoded+all_int_encoded+all_int_cat_encoded+all_cat_encoded+all_latlon_encoded
+    all_numeric_encoded =  all_feat_cross_encoded + all_num_encoded + lat_lon_paired_encoded
     ###### This is where we determine the size of different layers #########
     data_size = model_options['DS_LEN']
     if len(all_numeric_encoded) == 0:
@@ -780,7 +771,7 @@ def encode_integer_to_categorical_feature(feature, name, dataset, max_tokens=Non
     """
     # Create a StringLookup layer which will turn strings into integer indices
     ### For now we will leave the max_values as None which means there is no limit.
-    index = IntegerLookup(max_tokens=None, num_oov_indices=2, oov_value=-9999, output_mode='count')
+    index = IntegerLookup(max_values=None, num_oov_indices=10, oov_value=-9999)
 
     # Prepare a Dataset that only yields our feature
     feature_ds = dataset.map(lambda x, y: x[name])
@@ -793,16 +784,16 @@ def encode_integer_to_categorical_feature(feature, name, dataset, max_tokens=Non
     encoded_feature = index(feature)
 
     # Create a CategoryEncoding for our integer indices
-    #encoder = CategoryEncoding(max_tokens=max_tokens, output_mode="binary")
+    encoder = CategoryEncoding(max_tokens=max_tokens, output_mode="binary")
 
     # Prepare a dataset of indices
-    #feature_ds = feature_ds.map(index)
+    feature_ds = feature_ds.map(index)
 
     # Learn the space of possible indices
-    #encoder.adapt(feature_ds)
+    encoder.adapt(feature_ds)
 
     # Apply one-hot encoding to our indices
-    #encoded_feature = encoder(encoded_feature)
+    encoded_feature = encoder(encoded_feature)
 
     return encoded_feature
 
@@ -922,16 +913,16 @@ def encode_any_feature_to_hash_categorical(feature_input, name, dataset, bins_nu
     encoded_feature = hasher(feature_input)
 
     # Create a CategoryEncoding for our integer indices
-    #encoder = CategoryEncoding(max_tokens=bins_num+1, output_mode="binary")
+    encoder = CategoryEncoding(max_tokens=bins_num+1, output_mode="binary")
 
     # Prepare a dataset of indices
-    #feature_ds = feature_ds.map(hasher)
+    feature_ds = feature_ds.map(hasher)
 
     # Learn the space of possible indices
-    #encoder.adapt(feature_ds)
+    encoder.adapt(feature_ds)
 
     # Apply one-hot encoding to our indices
-    #encoded_feature = encoder(encoded_feature)
+    encoded_feature = encoder(encoded_feature)
 
     return encoded_feature
 
@@ -1116,58 +1107,3 @@ def preprocess(features, labels):
         features[feature] = process_continuous_data(features[feature])
     return features, labels
 ##########################################################################################
-import math
-def encode_inputs(inputs, CATEGORICAL_FEATURE_NAMES, CATEGORICAL_FEATURES_WITH_VOCABULARY,
-                         use_embedding=False):
-    encoded_features = []
-    for feature_name in inputs:
-        if feature_name in CATEGORICAL_FEATURE_NAMES:
-            vocabulary = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name]
-            # Create a lookup to convert string values to an integer indices.
-            # Since we are not using a mask token nor expecting any out of vocabulary
-            # (oov) token, we set mask_token to None and  num_oov_indices to 0.
-            extra_oov = 1
-            if len(vocabulary) > 30:
-                use_embedding = True
-            lookup = StringLookup(
-                vocabulary=vocabulary,
-                mask_token=None,
-                num_oov_indices=extra_oov,
-                max_tokens=None,
-                output_mode="int" if use_embedding else "binary",
-            )
-            if use_embedding:
-                # Convert the string input values into integer indices.
-                encoded_feature = lookup(inputs[feature_name])
-                embedding_dims = int(math.sqrt(len(vocabulary)))
-                # Create an embedding layer with the specified dimensions.
-                embedding = layers.Embedding(
-                    input_dim=len(vocabulary)+extra_oov, output_dim=embedding_dims
-                )
-                # Convert the index values to embedding representations.
-                encoded_feature = embedding(encoded_feature)
-            else:
-                # Convert the string input values into a one hot encoding.
-                encoded_feature = lookup(tf.expand_dims(inputs[feature_name], -1))
-        else:
-            # Use the numerical features as-is.
-            encoded_feature = tf.expand_dims(inputs[feature_name], -1)
-
-        encoded_features.append(encoded_feature)
-
-    all_features = layers.concatenate(encoded_features)
-    return all_features
-##################################################################################
-def create_model_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES):
-    inputs = {}
-    for feature_name in FEATURE_NAMES:
-        if feature_name in NUMERIC_FEATURE_NAMES:
-            inputs[feature_name] = layers.Input(
-                name=feature_name, shape=(), dtype=tf.float32
-            )
-        else:
-            inputs[feature_name] = layers.Input(
-                name=feature_name, shape=(), dtype=tf.string
-            )
-    return inputs
-#################################################################################

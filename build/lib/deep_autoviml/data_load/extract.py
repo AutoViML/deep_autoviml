@@ -133,26 +133,26 @@ def transform_train_target(train_target, target, modeltype, model_label, cat_voc
             for each_target in target_copy:
                 target_le = My_LabelEncoder()
                 print('Transforming %s target labels...' %each_target)
-                print('    Original labels dtype is %s ' %train_target[each_target].dtype)
+                print('    Original labels type is %s ' %train_target[each_target].dtype)
                 train_values = target_le.fit_transform(train_target[each_target])
                 train_target[each_target] = train_values
                 cat_vocab_dict['target_le'].append(target_le)
                 print('Target Transformed as follows: %s' %target_le.transformer)
-                print('    Transformed labels dtype to Numeric')
+                print('    Transformed labels type to Numeric')
         else:
             #### This is for Single Label problems ####
             target_le = My_LabelEncoder()
             print('Transforming %s target labels...' %target)
-            print('    Original labels dtype is %s ' %train_target[target].dtype)
+            print('    Original labels type is %s ' %train_target[target].dtype)
             train_values = target_le.fit_transform(train_target[target])
             train_target[target] = train_values
             cat_vocab_dict['target_le'] = target_le
             print('Target Transformed as follows: %s' %target_le.transformer)
-            print('    Transformed labels dtype to Numeric')
+            print('    Transformed labels type to Numeric')
     else:
         target_le = ""
         cat_vocab_dict['target_le'] = target_le
-        print('No Target transformation needed since target dtype is numeric')
+        print('No Target transformation needed since target is numeric')
     train_target = train_target[target]
     return train_target, cat_vocab_dict
 
@@ -645,15 +645,15 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     if isinstance(target, str):
         if target != '':
             labels = train_small[target]
-            features = train_small.drop(target, axis=1)
-            ds = tf.data.Dataset.from_tensor_slices((dict(features), labels))
+            train_small.drop(target, axis=1, inplace=True)
+            ds = tf.data.Dataset.from_tensor_slices((dict(train_small), labels))
         else:
             print('target variable is blank - please fix input and try again')
             return
     elif isinstance(target, list):
             labels = train_small[target]
-            features = train_small.drop(target, axis=1)
-            ds = tf.data.Dataset.from_tensor_slices((dict(features), labels))
+            train_small.drop(target, axis=1, inplace=True)
+            ds = tf.data.Dataset.from_tensor_slices((dict(train_small), labels))
     else:
         ds = tf.data.Dataset.from_tensor_slices(dict(train_small))
     ### batch it if you are creating it from a dataframe
@@ -729,25 +729,23 @@ def load_image_data(train_data_or_file, target, project_name, keras_options, mod
     #### make this a small number - default batch_size ###
     batch_size = check_model_options(model_options, "batch_size", 64)
     model_options["batch_size"] = batch_size
-    full_ds = tf.keras.preprocessing.image_dataset_from_directory(image_train_folder,
+    train_ds = tf.keras.preprocessing.image_dataset_from_directory(image_train_folder,
                                   seed=111,
                                   image_size=(img_height, img_width),
                                   batch_size=batch_size)
     if image_train_split:
         ############## Split train into train and validation datasets here ###############
-        classes = full_ds.class_names
         recover = lambda x,y: y
         print('\nSplitting train into two: train and validation data')
         valid_ds = full_ds.enumerate().filter(is_valid).map(recover)
         train_ds = full_ds.enumerate().filter(is_train).map(recover)
     else:
-        train_ds = full_ds
         valid_ds = tf.keras.preprocessing.image_dataset_from_directory(image_valid_folder,
           seed=111,
           image_size=(img_height, img_width),
           batch_size=batch_size)
-        classes = train_ds.class_names
     ####  Successfully loaded train and validation data sets ################
+    classes = train_ds.class_names
     cat_vocab_dict["image_classes"] = classes
     cat_vocab_dict["target_transformed"] = True
     cat_vocab_dict['modeltype'] =  'Classification'
@@ -812,27 +810,21 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
         print_one_row_from_tf_dataset(ds)
     ####  Set Class Weights for Imbalanced Data Sets here ##########
     modeltype = model_options["modeltype"]
-    #### You need to do this transform only for files. Otherwise, it is done already for dataframes.
-    if isinstance(train_data_or_file, str):
-        if isinstance(target, str):
-            y_train = transform_train_target(train_small[[target]], target, 
-                    modeltype, model_label='Single_Label', cat_vocab_dict=cat_vocab_dict)[0].values
-        else:
-            y_train = transform_train_target(train_small[target], target, 
-                    modeltype, model_label='Multi_Label', cat_vocab_dict=cat_vocab_dict)[0].values
+    if isinstance(target, str):
+        y_train = transform_train_target(train_small[[target]], target, 
+                modeltype, model_label='Single_Label', cat_vocab_dict=cat_vocab_dict)[0].values
     else:
-        if isinstance(target, str):
-            y_train = train_small[target]
-        else:
-            y_train = train_small[target[0]]
+        y_train = transform_train_target(train_small[target], target, 
+                modeltype, model_label='Multi_Label', cat_vocab_dict=cat_vocab_dict)[0].values
     ####  CREATE  CLASS_WEIGHTS HERE #################
     if modeltype != 'Regression':
         find_rare_class(y_train, verbose=1)
-        if keras_options['class_weight']:
-            # create a counter of labels and their counts
-            class_weights = get_class_distribution(y_train)
-            keras_options['class_weight'] = class_weights
-            print('    Class weights calculated: %s' %class_weights)
+    if keras_options['class_weight']:
+        # create a counter of labels and their counts
+        labels_dict = dict(Counter(y_train))
+        class_weights = create_class_weight(labels_dict)
+        keras_options['class_weight'] = class_weights
+        print('    Class weights calculcated: %s' %class_weights)
     else:
         print('    No class weights specified. Continuing...')
     return train_small, model_options, ds, var_df, cat_vocab_dict, keras_options
@@ -857,33 +849,18 @@ def find_rare_class(classes, verbose=0):
     else:
         return int(pd.Series(counts).idxmin())
 ###############################################################################
-from sklearn.utils.class_weight import compute_class_weight
-import copy
-from collections import Counter
-def get_class_distribution(y_input):
-    y_input = copy.deepcopy(y_input)
-    classes = np.unique(y_input)
-    xp = Counter(y_input)
-    class_weights = compute_class_weight('balanced', classes=np.unique(y_input), y=y_input)
-    if len(class_weights[(class_weights> 10)]) > 0:
-        class_weights = (class_weights/10)
-    else:
-        class_weights = (class_weights)
-    #print('    class_weights = %s' %class_weights)
-    class_weights[(class_weights<1)]=1
-    class_rows = class_weights*[xp[x] for x in classes]
-    class_rows = class_rows.astype(int)
-    class_weighted_rows = dict(zip(classes,class_weights))
-    #print('    class_weighted_rows = %s' %class_weighted_rows)
-    return class_weighted_rows
+import math
+# labels_dict : {ind_label: count_label}
+# mu : parameter to tune 
+
+def create_class_weight(labels_dict,mu=0.15):
+    total = np.sum(list(labels_dict.values()))
+    keys = labels_dict.keys()
+    class_weights = dict()
+    
+    for key in keys:
+        score = math.log(mu*total/float(labels_dict[key]))
+        class_weights[key] = score if score > 1.0 else 1.0
+    
+    return class_weights
 ########################################################################
-### Split raw_train_set into train and valid data sets first
-### This is a better way to split a dataset into train and test ####
-### It does not assume a pre-defined size for the data set.
-def is_valid(x, y):
-    return x % 5 == 0
-def is_test(x, y):
-    return x % 2 == 0
-def is_train(x, y):
-    return not is_test(x, y)
-##################################################################################

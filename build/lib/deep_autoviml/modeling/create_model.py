@@ -24,11 +24,9 @@ warnings.filterwarnings(action='ignore')
 import functools
 # Make numpy values easier to read.
 np.set_printoptions(precision=3, suppress=True)
-from collections import defaultdict
 ############################################################################################
 # data pipelines and feature engg here
 from deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
-from deep_autoviml.preprocessing.preprocessing_tabular import encode_inputs, create_model_inputs
 
 # Utils
 from deep_autoviml.utilities.utilities import get_compiled_model, check_if_GPU_exists
@@ -118,7 +116,7 @@ class BalancedAccuracy(tf.keras.metrics.Metric):
         return result
 ##########################################################################################
 def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
-                        keras_model_type, model_options, cat_vocab_dict):
+                        keras_model_type, model_options):
     """
     This is a handy function to create a Sequential model architecture depending on keras_model_type option given.
     It also can re-use a model_body (without input and output layers) given by the user as input for model_body.
@@ -130,32 +128,11 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     modeltype = model_options["modeltype"]
     patience = check_keras_options(keras_options, "patience", 10)
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
-    if not isinstance(meta_outputs, list):
-        data_dim = int(data_size*meta_outputs.shape[1])
-    else:
-        data_dim = int(data_size*cols_len)
+    data_dim = int(data_size*meta_outputs.shape[1])
     #### These can be standard for every keras option that you use layers ######
     kernel_initializer = check_keras_options(keras_options, 'kernel_initializer', 'glorot_uniform')
     activation='relu'    
     
-    ##############  S E T T I N G    U P  DEEP_WIDE, DEEP_CROSS, FAST MODELS    ########################
-    cats = var_df['categorical_vars']  ### these are low cardinality vars - you can one-hot encode them ##
-    high_string_vars = var_df['discrete_string_vars']  ## discrete_string_vars are high cardinality vars ## embed them!
-    int_cats = var_df['int_cats']
-    ints = var_df['int_vars']
-    floats = var_df['continuous_vars']
-    nlps = var_df['nlp_vars']
-
-    FEATURE_NAMES = cats + high_string_vars + int_cats + ints + floats
-    NUMERIC_FEATURE_NAMES = int_cats + ints + floats
-    CATEGORICAL_FEATURE_NAMES = cats + high_string_vars
-    
-    vocab_dict = defaultdict(list)
-    cats_copy = copy.deepcopy(CATEGORICAL_FEATURE_NAMES)
-    if len(cats_copy) > 0:
-        for each_name in cats_copy:
-            vocab_dict[each_name] = cat_vocab_dict[each_name]['vocab']
-
     ######################   set some defaults for model parameters here ##############
     keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, model_options)
     ###################################################################################
@@ -198,59 +175,14 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                     model_body = cnn1.model
                 else:
                     model_body = cnn2.model
-            elif keras_model_type.lower() in ['deep_and_wide','deep_wide','wide_deep', 
-                                'wide_and_deep','deep wide', 'wide deep', 'fast', 'fast1']:
+            elif keras_model_type.lower() in ['regularized']:
                 ########## In case none of the options are specified, then set up a simple model!
-                dropout_rate = 0.1
-                #hidden_units = [32, 32]
-                hidden_units = [dense_layer1, dense_layer2]
-                all_inputs = create_model_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES)
-                wide = encode_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, vocab_dict,
-                                use_embedding=False)
-                wide = layers.BatchNormalization()(wide)
-                deep = encode_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, vocab_dict,
-                                use_embedding=True)
-                keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, model_options)
-                for units in hidden_units:
-                    deep = layers.Dense(units)(deep)
-                    deep = layers.BatchNormalization()(deep)
-                    deep = layers.ReLU()(deep)
-                    deep = layers.Dropout(dropout_rate)(deep)
-                if len(nlps) > 0:
-                    all_inputs = list(all_inputs.values()) ### convert input layers to a list
-                    all_inputs += inputs
-                    merged = layers.concatenate([meta_outputs, wide, deep])
-                    final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
-                    model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
-                else:
-                    merged = layers.concatenate([wide, deep])
-                    final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
-                    model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
-                print('    Created deep and wide %s model, ...' %keras_model_type)
-            elif keras_model_type.lower() in ['deep_and_cross', 'deep_cross', 'deep cross', 'fast2']:
-                dropout_rate = 0.1
-                #hidden_units = [32, 32]
-                hidden_units = [dense_layer1, dense_layer2]
-                all_inputs = create_model_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES)
-                x0 = encode_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, vocab_dict,
-                                use_embedding=True)
-                cross = x0
-                for _ in hidden_units:
-                    units = cross.shape[-1]
-                    x = layers.Dense(units)(cross)
-                    cross = x0 * x + cross
-                cross = layers.BatchNormalization()(cross)
-
-                deep = x0
-                for units in hidden_units:
-                    deep = layers.Dense(units)(deep)
-                    deep = layers.BatchNormalization()(deep)
-                    deep = layers.ReLU()(deep)
-                    deep = layers.Dropout(dropout_rate)(deep)
-                merged = layers.concatenate([cross, deep])
-                final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
-                model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
-                print('    Created deep and cross %s model, ...' %keras_model_type)
+                print('    keras model type = %s , hence building a custom sequential model...' %keras_model_type)
+                num_layers = check_keras_options(keras_options, 'num_layers', 2)
+                model_body = tf.keras.Sequential([])
+                for l_ in range(num_layers):
+                    model_body.add(layers.Dense(32, activation='relu', kernel_initializer="glorot_uniform",
+                                              activity_regularizer=tf.keras.regularizers.l2(0.01)))
                 ################################################################################
             else:
                 ### this means it's an auto model and you create one here 

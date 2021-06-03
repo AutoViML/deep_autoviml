@@ -8,5 +8,7 @@ pandas
 regex
 scikit-learn>=0.23.1
 storm-tuner
+tensorflow-text
 tensorflow>=2.4.1
+tensorflow_hub
 xlrd

@@ -142,20 +142,22 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     ##################  All other Features are Proprocessed Here  ################
     meta_outputs = []
     print('Preprocessing non-NLP layers for %s Keras model...' %keras_model_type)
-    if not keras_model_type.lower() in ['deep_and_wide','deep and wide', 'deep wide','deep_wide', 'fast', 'fast1', 'fast2']:
+    if keras_model_type.lower() in ['deep_and_wide','deep and wide', 'deep wide','deep_wide']:
+        print('    categorical and cat-integer variables go wide while numeric-integer and float layers go deep...')
+    else:
         print('    starting categorical, float and integer layer preprocessing...')
         
-        meta_outputs, meta_inputs, meta_names = preprocessing_tabular(train_ds, var_df, 
-                                                    cat_feat_cross_flag, model_options,
-                                                    cat_vocab_dict, keras_model_type, verbose)
-        print('    All Non-NLP feature preprocessing for %s completed.' %keras_model_type)
+    meta_outputs, meta_inputs, meta_names = preprocessing_tabular(train_ds, var_df, 
+                                                cat_feat_cross_flag, model_options,
+                                                cat_vocab_dict, keras_model_type, verbose)
+    print('    All non-NLP features preprocessing completed.')
 
-        ### this is the order in which columns have been trained ###
-        final_training_order = nlp_names + meta_names
-        ### find their dtypes - remember to use element_spec[0] for train data sets!
-        ds_types = dict([(col_name, train_ds.element_spec[0][col_name].dtype) for col_name in final_training_order ])
-        col_type_tuples = [(name,ds_types[name]) for name in final_training_order]
-        print('Inferred column names, layers and types (double-check for duplicates and correctness!): \n%s' %col_type_tuples)
+    ### this is the order in which columns have been trained ###
+    final_training_order = nlp_names + meta_names
+    ### find their dtypes - remember to use element_spec[0] for train data sets!
+    ds_types = dict([(col_name, train_ds.element_spec[0][col_name].dtype) for col_name in final_training_order ])
+    col_type_tuples = [(name,ds_types[name]) for name in final_training_order]
+    print('Inferred column names, layers and types (double-check for duplicates and correctness!): \n%s' %col_type_tuples)
     ##### You need to send in the ouput from embedding layer to this sequence of layers ####
     nlp_outputs = []
     if len(nlps) > 0:
@@ -173,8 +175,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                 nlp_outputs = layers.Dense(num_predicts, activation=output_activation)(embedding)
         elif keras_model_type.lower() in ['auto']:
             x = layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True))(embedding)
-            x = layers.Bidirectional(tf.keras.layers.LSTM(64))(x)
-            nlp_outputs = layers.Dense(num_predicts, activation=output_activation)(x)
+            nlp_outputs = layers.Bidirectional(tf.keras.layers.LSTM(64))(x)
             # = layers.Bidirectional(layers.LSTM(dense_layer1, dropout=0.3, recurrent_dropout=0.3,
             #                                    return_sequences=False, batch_size=batch_size,
             #                                    kernel_regularizer=regularizers.l2(0.01)))(x)
@@ -183,8 +184,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             x = layers.Bidirectional(tf.keras.layers.LSTM(64))(x)
             x = layers.Dense(64, activation='relu')(x)
             x = layers.Dense(32, activation='relu')(x)
-            x = layers.Dropout(0.2)(x)
-            nlp_outputs = layers.Dense(num_predicts, activation=output_activation)(x)
+            nlp_outputs = layers.Dropout(0.2)(x)
             # = layers.Bidirectional(layers.LSTM(dense_layer1, dropout=0.3, recurrent_dropout=0.3,
             #                                    return_sequences=False, batch_size=batch_size,
             #                                    kernel_regularizer=regularizers.l2(0.01)))(x)
@@ -193,14 +193,12 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             # Conv1D + global max pooling
             x = Conv1D(dense_layer1, 14, name='cnn_dense1', padding="same", 
                                     activation="relu", strides=3)(embedding)
-            x = GlobalMaxPooling1D()(x)
-            nlp_outputs = layers.Dense(num_predicts, activation=output_activation)(x)
+            nlp_outputs = GlobalMaxPooling1D()(x)
         elif keras_model_type.lower() in ['deep','deep_and_wide','deep and wide','deep wide']:
             # We add a vanilla hidden layer that's all
             x = GlobalAveragePooling1D()(embedding)
             x = Dense(dense_layer1, activation="relu")(x)
-            x = Dropout(0.5)(x)
-            nlp_outputs = layers.Dense(num_predicts, activation=output_activation)(x)
+            nlp_outputs = Dropout(0.5)(x)
         elif keras_model_type.lower() in ['gru','cnn2']:
             #### Use this only for Binary-Class classification problems ########
             ####  LSTM with 1D convnet with maxpooling ########
@@ -213,11 +211,10 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             x = GRU(units=gru_units,  dropout=drop_out, recurrent_dropout=drop_out)(x)
             if modeltype == 'Regression':
                 #nlp_outputs = Dense(class_size, activation='linear')(x)
-                x = Dense(128, activation='relu')(x)
+                nlp_outputs = Dense(128, activation='relu')(x)
             else:
                 #nlp_outputs = Dense(class_size, activation='sigmoid')(x)
-                x = Dense(128, activation='relu')(x)
-            nlp_outputs = layers.Dense(num_predicts, activation=output_activation)(x)
+                nlp_outputs = Dense(128, activation='relu')(x)
         else:
             #### Use this only for Multi-Class classification problems #########
             ####  CNN Model: create a 1D convnet with global maxpooling ########
@@ -227,37 +224,32 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             x = MaxPooling1D(kernel_size)(x)
             x = Conv1D(128, kernel_size, activation='relu')(x)
             x = GlobalMaxPooling1D()(x)
-            x = Dense(128, activation='relu')(x)
+            nlp_outputs = Dense(128, activation='relu')(x)
             #nlp_outputs = Dense(class_size, activation='softmax')(x)
-            nlp_outputs = layers.Dense(num_predicts, activation=output_activation)(x)
 
-    if keras_model_type.lower() in ['deep_and_wide','deep and wide', 'deep wide','deep_wide', 'fast', 'fast1', 'fast2']:
-        print('    All Non-NLP feature preprocessing for %s completed.' %keras_model_type)
-        meta_inputs = []
-        return nlp_inputs, meta_inputs, nlp_outputs
-    else:
-        #### This is only for non-deep_and_wide models and other kinds of models ##
-        if isinstance(meta_outputs, list):
-            ### if meta_outputs is a list, it means there is no int, float or cat variable in this data set
-            print('There is no numeric or cat or int variables in this data set.')
-            if isinstance(nlp_outputs, list):
-                ### if NLP_outputs is a list, it means there is no NLP variable in the data set
-                print('    There is no NLP variable in this data set. Returning')
-            else:
-                print('    Shape of output from NLP variable before model training = %s' %(nlp_outputs.shape,))
-                consolidated_outputs = nlp_outputs
+    #### This is common processing for both deep_and_wide models and other kinds of models ##
+    if isinstance(meta_outputs, list):
+        ### if meta_outputs is a list, it means there is no int, float or cat variable in this data set
+        print('There is no numeric or cat or int variables in this data set.')
+        if isinstance(nlp_outputs, list):
+            ### if NLP_outputs is a list, it means there is no NLP variable in the data set
+            print('    There is no NLP variable in this data set. Returning')
         else:
-            print('    Shape of output from numeric+integer+cat variables before model training = %s' %(meta_outputs.shape,))
-            if isinstance(nlp_outputs, list):
-                ### if NLP_outputs is a list, it means there is no NLP variable in the data set
-                print('    There is no NLP variable in this data set. Continuing...')
-                #x = layers.concatenate([meta_outputs])
-                consolidated_outputs = meta_outputs
-            else:
-                ### if NLP_outputs is NOT a list, it means there is some NLP variable in the data set
-                print('    Shape of output from NLP variable before model training = %s' %(nlp_outputs.shape,))
-                consolidated_outputs = layers.concatenate([nlp_outputs, meta_outputs])
+            print('    Shape of output from NLP variable before model training = %s' %(nlp_outputs.shape,))
+            consolidated_outputs = nlp_outputs
+    else:
+        print('    Shape of output from numeric+integer+cat variables before model training = %s' %(meta_outputs.shape,))
+        if isinstance(nlp_outputs, list):
+            ### if NLP_outputs is a list, it means there is no NLP variable in the data set
+            print('    There is no NLP variable in this data set. Continuing...')
+            #x = layers.concatenate([meta_outputs])
+            consolidated_outputs = meta_outputs
+        else:
+            ### if NLP_outputs is NOT a list, it means there is some NLP variable in the data set
+            print('    Shape of output from NLP variable before model training = %s' %(nlp_outputs.shape,))
+            consolidated_outputs = layers.concatenate([nlp_outputs, meta_outputs])
 
-        print('Shape of output from all preprocessing layers before model training = %s' %(consolidated_outputs.shape,))
-        return nlp_inputs, meta_inputs, consolidated_outputs
+    print('Shape of output from all preprocessing layers before model training = %s' %(consolidated_outputs.shape,))
+
+    return nlp_inputs, meta_inputs, consolidated_outputs
 ##########################################################################################
