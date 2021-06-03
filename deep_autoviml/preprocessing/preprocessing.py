@@ -135,7 +135,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
         print('Starting NLP string column layer preprocessing...')
         nlp_inputs, embedding, nlp_names = preprocessing_nlp(train_ds, model_options,
                                                 var_df, cat_vocab_dict, 
-                                                keras_model_type)
+                                                keras_model_type, verbose)
         print('    NLP Preprocessing completed.')
     else:
         print('There are no NLP variables in this dataset for preprocessing...')

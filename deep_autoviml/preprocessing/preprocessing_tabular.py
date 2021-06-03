@@ -343,7 +343,8 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 cat_encoded_dict[each_cat] = encoded
                 all_input_names.append(each_cat)
                 if verbose:
-                    print('    %s : after string to categorical encoding shape: %s' %(each_cat, encoded.shape[1]))
+                    print('    %s number of categories = %d: after string to categorical encoding shape: %s' %(
+                                        each_cat, max_tokens, encoded.shape[1]))
                     if encoded.shape[1] > 100:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
@@ -732,8 +733,9 @@ def encode_string_categorical_feature_categorical(feature, name, dataset, max_to
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
                The Tensor has a shape of (None, 1) - None indicates that it has not been 
     """
+    extra_oov = 5
     # Create a StringLookup layer which will turn strings into integer indices
-    index = StringLookup(max_tokens=max_tokens)
+    index = StringLookup(max_tokens=None, num_oov_indices=extra_oov, output_mode="int")
 
     # Prepare a Dataset that only yields our feature
     feature_ds = dataset.map(lambda x, y: x[name])
@@ -746,16 +748,16 @@ def encode_string_categorical_feature_categorical(feature, name, dataset, max_to
     encoded_feature = index(feature)
 
     # Create a CategoryEncoding for our integer indices
-    encoder = CategoryEncoding(max_tokens=max_tokens, output_mode="binary")
+    #encoder = CategoryEncoding(max_tokens=max_tokens, output_mode="binary")
 
     # Prepare a dataset of indices
-    feature_ds = feature_ds.map(index)
+    #feature_ds = feature_ds.map(index)
 
     # Learn the space of possible indices
-    encoder.adapt(feature_ds)
+    #encoder.adapt(feature_ds)
 
     # Apply one-hot encoding to our indices
-    encoded_feature = encoder(encoded_feature)
+    #encoded_feature = encoder(encoded_feature)
     return encoded_feature
 
 ###########################################################################################
@@ -791,18 +793,6 @@ def encode_integer_to_categorical_feature(feature, name, dataset, max_tokens=Non
 
     # Turn the string input into integer indices
     encoded_feature = index(feature)
-
-    # Create a CategoryEncoding for our integer indices
-    #encoder = CategoryEncoding(max_tokens=max_tokens, output_mode="binary")
-
-    # Prepare a dataset of indices
-    #feature_ds = feature_ds.map(index)
-
-    # Learn the space of possible indices
-    #encoder.adapt(feature_ds)
-
-    # Apply one-hot encoding to our indices
-    #encoded_feature = encoder(encoded_feature)
 
     return encoded_feature
 
@@ -920,18 +910,6 @@ def encode_any_feature_to_hash_categorical(feature_input, name, dataset, bins_nu
 
     # Turn the string input into integer indices
     encoded_feature = hasher(feature_input)
-
-    # Create a CategoryEncoding for our integer indices
-    #encoder = CategoryEncoding(max_tokens=bins_num+1, output_mode="binary")
-
-    # Prepare a dataset of indices
-    #feature_ds = feature_ds.map(hasher)
-
-    # Learn the space of possible indices
-    #encoder.adapt(feature_ds)
-
-    # Apply one-hot encoding to our indices
-    #encoded_feature = encoder(encoded_feature)
 
     return encoded_feature
 
@@ -1116,6 +1094,9 @@ def preprocess(features, labels):
         features[feature] = process_continuous_data(features[feature])
     return features, labels
 ##########################################################################################
+######  This code is a modified version of keras.io documentation code examples ##########
+######   https://keras.io/examples/structured_data/wide_deep_cross_networks/    ##########
+##########################################################################################
 import math
 def encode_inputs(inputs, CATEGORICAL_FEATURE_NAMES, CATEGORICAL_FEATURES_WITH_VOCABULARY,
                          use_embedding=False):
@@ -1127,7 +1108,7 @@ def encode_inputs(inputs, CATEGORICAL_FEATURE_NAMES, CATEGORICAL_FEATURES_WITH_V
             # Since we are not using a mask token nor expecting any out of vocabulary
             # (oov) token, we set mask_token to None and  num_oov_indices to 0.
             extra_oov = 1
-            if len(vocabulary) > 30:
+            if len(vocabulary) > 50:
                 use_embedding = True
             lookup = StringLookup(
                 vocabulary=vocabulary,
@@ -1157,7 +1138,10 @@ def encode_inputs(inputs, CATEGORICAL_FEATURE_NAMES, CATEGORICAL_FEATURES_WITH_V
 
     all_features = layers.concatenate(encoded_features)
     return all_features
-##################################################################################
+##########################################################################################
+######  This code is a modified version of keras.io documentation code examples ##########
+######   https://keras.io/examples/structured_data/wide_deep_cross_networks/    ##########
+##########################################################################################
 def create_model_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES):
     inputs = {}
     for feature_name in FEATURE_NAMES:

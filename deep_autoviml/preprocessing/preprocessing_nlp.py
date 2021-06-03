@@ -97,7 +97,7 @@ def custom_standardization(input_data):
         stripped_html, "[%s]" % re.escape(string.punctuation), ""
     )
 ##############################################################################################
-def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_model_type):
+def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_model_type, verbose=0):
     """
     This produces a preprocessing layer for an incoming NLP column using TextVectorization from keras.
     You need to just send in a tf.data.DataSet from the training portion of your dataset and an nlp_column name.
@@ -133,7 +133,35 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         print('Using Tensorflow Hub model: %s given as input' %tf_hub_model)
         tf_hub = True
     ##### This is where we use different pre-trained models to create word and sentence embeddings ##
+    if keras_model_type.lower() in ['bert','nlp','text']:
+        if tf_hub:
+            tfhub_handle_encoder = model_options['tf_hub_model']
+            bert_model_name = map_hub_to_name[tfhub_handle_encoder]
+            tfhub_handle_preprocess = map_name_to_preprocess[bert_model_name]
+        else:
+            tfhub_handle_preprocess = "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3"
+            tfhub_handle_encoder = 'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-512_A-8/2'
+        preprocessor = hub.KerasLayer(tfhub_handle_preprocess, name='BERT_preprocessing')
+        encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
+    elif keras_model_type.lower() in ["use"]:
+        if tf_hub:
+            tfhub_handle_encoder = model_options['tf_hub_model']
+            bert_model_name = map_hub_to_name[tfhub_handle_encoder]
+            tfhub_handle_preprocess = map_name_to_preprocess[bert_model_name]
+        else:
+            tfhub_handle_preprocess = "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3"
+            tfhub_handle_encoder = 'https://tfhub.dev/google/universal-sentence-encoder-cmlm/en-base/1'
+        preprocessor = hub.KerasLayer(tfhub_handle_preprocess, name='USE_preprocessing')
+        encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=False, name='USE_encoder')
+    else:
+        if tf_hub:
+            #### If it is not BERT, then you don't have to do special preprocessing
+            tfhub_handle_encoder = model_options['tf_hub_model']
+            encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='Non_BERT_encoder')
+    ##### Now we do preprocessing one NLP input at a time using the above models #########
     for nlp_column in nlp_columns:
+        if verbose:
+            print('    transforming %s with NLP text embeddings' %nlp_column)
         #### Next, we add an NLP layer to map those vocab indices into a space of dimensionality
         #### Vocabulary size defines how many unique words you think might be in that training data
         ### Sequence length defines how we should convert each word into a sequence of integers of fixed length
@@ -150,41 +178,20 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         ##### Now we handle multiple choices in embedding and model building ###
         try:
             if keras_model_type.lower() in ['bert','nlp','text']:
-                if tf_hub:
-                    tfhub_handle_encoder = model_options['tf_hub_model']
-                    bert_model_name = map_hub_to_name[tfhub_handle_encoder]
-                    tfhub_handle_preprocess = map_name_to_preprocess[bert_model_name]
-                else:
-                    tfhub_handle_preprocess = "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3"
-                    tfhub_handle_encoder = 'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-512_A-8/2'
                 ### You need to do some special pre-processing if it is a BERT model
                 print(f'    BERT model auto-selected: {tfhub_handle_encoder}')
-                print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')                    
-                preprocessor = hub.KerasLayer(tfhub_handle_preprocess, name='BERT_preprocessing')
-                encoder_inputs = preprocessor(nlp_input)
-                encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
+                print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')        
                 x = encoder(preprocessor(nlp_input))['pooled_output']
             elif keras_model_type.lower() in ["use"]:
-                if tf_hub:
-                    tfhub_handle_encoder = model_options['tf_hub_model']
-                    bert_model_name = map_hub_to_name[tfhub_handle_encoder]
-                    tfhub_handle_preprocess = map_name_to_preprocess[bert_model_name]
-                else:
-                    tfhub_handle_preprocess = "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3"
-                    tfhub_handle_encoder = 'https://tfhub.dev/google/universal-sentence-encoder-cmlm/en-base/1'
                 ### You need to do some special pre-processing if it is a BERT model
                 print(f'    Universal Sentence Encoder auto-selected: {tfhub_handle_encoder}')
                 print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')                    
-                preprocessor = hub.KerasLayer(tfhub_handle_preprocess, name='USE_preprocessing')
-                encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=False, name='USE_encoder')
                 x = encoder(preprocessor(nlp_input))["default"]
             else:
                 if tf_hub:
                     #### If it is not BERT, then you don't have to do special preprocessing
-                    tfhub_handle_encoder = model_options['tf_hub_model']
                     nlp_vectorized = encode_NLP_column(train_ds, nlp_column, nlp_input, 
                                         vocab_size, sequence_length)
-                    encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='Non_BERT_encoder')
                     x = encoder(nlp_vectorized)
                     #net = outputs['pooled_output']
                     #x = tf.keras.layers.Dropout(0.1)(net)
