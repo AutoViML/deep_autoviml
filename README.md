@@ -77,7 +77,8 @@ pip install git+https://github.com/AutoViML/deep_autoviml.git
 ```
 
 ## Usage
-![usage](deep_5.jpg)
+
+![deep_usage](deep_5.jpg)
 deep_autoviml can be invoked with a simple import and run statement:
 
 ```
@@ -89,15 +90,18 @@ Load a data set (any .csv or .gzip or .gz or .txt file) into deep_autoviml and i
 ```
 model, cat_vocab_dict = deepauto.fit(train, target, keras_model_type="auto",
             project_name="deep_autoviml", keras_options={}, model_options={}, 
-            save_model_flag=True, use_my_model='', verbose=0)
+            save_model_flag=True, use_my_model='', model_use_case='', verbose=0)
 ```
 
 Once deep_autoviml writes your saved model and cat_vocab_dict files to disk in the project_name directory, you can load it from anywhere (including cloud) for predictions like this using the model and cat_vocab_dict generated above:
 
+There are two kinds of predictions: This is the usual (typical) format.
 ```
 predictions = deepauto.predict(model, project_name, test_dataset=test,
             keras_model_type=keras_model_type, cat_vocab_dict=cat_vocab_dict)
 ```
+
+In case you are performing image classification, then you need to use `deepauto.predict_images()` for making predictions. See the Image section below for more details.
 
 ## API
 **Arguments**
@@ -142,7 +146,7 @@ You can then call deep_autoviml for training the model as usual with these input
 ```model, dicti = deepauto.fit(trainfile, target, keras_model_type=keras_model_type,  project_name='leaf_classification', save_model_flag=False, model_options=model_options, keras_options=keras_options, use_my_model='', verbose=0)```
 
 To make predictions, you need to provide the dictionary ("dicti") from above and the trained model. You also need to provide where the test images are stored as follows.
-`test_image_dir = datapath + 'leaf_classification/test'`
+`test_image_dir = 'leaf_classification/test'`
 `predictions = deepauto.predict_images(test_image_dir, model, dicti)`
 
 ## NLP
