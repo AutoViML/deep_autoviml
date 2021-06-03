@@ -381,7 +381,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
 
     ####  If the feature crosses for categorical variables are requested, then do this here ###
     if len(cats) == 0:
-        cross_cats =  copy.deepcopy(int_cats)
+        cross_cats =  copy.deep_copy(int_cats)
     else:
         cross_cats = copy.deepcopy(cats)
     if cat_feat_cross_flag and len(cross_cats) > 1:
