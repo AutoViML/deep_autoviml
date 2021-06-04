@@ -118,7 +118,7 @@ def classify_features(dfte, depVar, model_options={}, verbose=0):
     categorical_vars = var_df['cat_vars'] + var_df['factor_vars'] +  var_df['string_bool_vars']
     date_vars = var_df['date_vars']
     continuous_vars = var_df['continuous_vars']
-    ####### No search for latitude and longitude variables ######
+    ####### Now search for latitude and longitude variables ######
     lats, lons, matched_pairs = find_latitude_longitude_columns_in_df(dfte[orig_preds], verbose)
     if len(lats+lons) > 0:
         continuous_vars = left_subtract(continuous_vars, lats+lons)
@@ -703,11 +703,21 @@ def find_latitude_columns(df, verbose=0):
             if not lati_keyword == '':
                 lat_keywords[lat_word] = lat_word.replace(lati_keyword,'')
     ###### This is where we find whether they are truly latitudes ############
-    #print('selected columns = %s, keywords = %s' %(sel_columns, lat_keywords))
+    print('Possible latitude columns in dataset: %s' %sel_columns)
+    sel_columns_copy = copy.deepcopy(sel_columns)
+    for sel_col in sel_columns_copy: 
+        if not lat_keywords[sel_col]:
+            sel_columns.remove(sel_col)
+    print('    after further analysis, selected latitude columns = %s' %sel_columns)
+     #### If there are any more columns left, then do further analysis #######
     if len(sel_columns) > 0:
         sel_cols_float = df[sel_columns].select_dtypes(include='float').columns.tolist()
         if len(sel_cols_float) > 0:
             for sel_column in sel_cols_float:
+                if df[sel_column].isnull().sum() > 0:
+                    print('Null values in possible latitude column %s. Removing it' %sel_column)
+                    sel_columns.remove(sel_column)
+                    continue
                 if df[sel_column].min() >= -90 and df[sel_column].max() <= 90:
                     if verbose:
                         print('    %s found as latitude column' %sel_column)
@@ -835,12 +845,22 @@ def find_longitude_columns(df, verbose=0):
             long_keyword = find_longitude_keyword(lon_word, columns, sel_columns)
             if not long_keyword == '':
                 lon_keywords[lon_word] = lon_word.replace(long_keyword,'')
-    #print('selected columns = %s, keywords = %s' %(sel_columns, lon_keywords))
+    #####  This is where we test whether they are indeed longitude columns ####
+    print('Possible latitude columns in dataset: %s' %sel_columns)
+    sel_columns_copy = copy.deepcopy(sel_columns)
+    for sel_col in sel_columns_copy: 
+        if not lon_keywords[sel_col]:
+            sel_columns.remove(sel_col)
+    print('    after further analysis, selected longitude columns = %s' %sel_columns)
     ###### This is where we find whether they are truly longitudes ############
     if len(sel_columns) > 0:
         sel_cols_float = df[sel_columns].select_dtypes(include='float').columns.tolist()
         if len(sel_cols_float) > 0:
             for sel_column in sel_cols_float:
+                if df[sel_column].isnull().sum() > 0:
+                    print('Null values in possible longitude column %s. Removing it' %sel_column)
+                    sel_columns.remove(sel_column)
+                    continue
                 if df[sel_column].min() >= -180 and df[sel_column].max() <= 180:
                     if verbose:
                         print('    %s found as longitude column' %sel_column)

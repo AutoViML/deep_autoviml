@@ -157,6 +157,8 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
         col_type_tuples = [(name,ds_types[name]) for name in final_training_order]
         print('Inferred column names, layers and types (double-check for duplicates and correctness!): \n%s' %col_type_tuples)
     ##### You need to send in the ouput from embedding layer to this sequence of layers ####
+    fast_models = ['fast', 'fast1','fast2','deep_and_cross','deep and cross',
+                        'deep cross','deep_and_wide','deep and wide','deep wide']
     nlp_outputs = []
     if len(nlps) > 0:
         if keras_model_type.lower() in ['bert','nlp','text', 'use']:
@@ -195,7 +197,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                                     activation="relu", strides=3)(embedding)
             x = GlobalMaxPooling1D()(x)
             nlp_outputs = layers.Dense(num_predicts, activation=output_activation)(x)
-        elif keras_model_type.lower() in ['deep','deep_and_wide','deep and wide','deep wide']:
+        elif keras_model_type.lower() in fast_models:
             # We add a vanilla hidden layer that's all
             x = GlobalAveragePooling1D()(embedding)
             x = Dense(dense_layer1, activation="relu")(x)
@@ -231,7 +233,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             #nlp_outputs = Dense(class_size, activation='softmax')(x)
             nlp_outputs = layers.Dense(num_predicts, activation=output_activation)(x)
 
-    if keras_model_type.lower() in ['deep_and_wide','deep and wide', 'deep wide','deep_wide', 'fast', 'fast1', 'fast2']:
+    if keras_model_type.lower() in fast_models:
         print('    All Non-NLP feature preprocessing for %s completed.' %keras_model_type)
         meta_inputs = []
         return nlp_inputs, meta_inputs, nlp_outputs
