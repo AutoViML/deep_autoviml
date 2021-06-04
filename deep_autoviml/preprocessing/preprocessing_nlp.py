@@ -109,23 +109,36 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
     all_nlp_embeddings = []
     nlp_col_names = []
     nlp_columns = var_df['nlp_vars']
+    nlp_columns =  list(set(nlp_columns))
     #### max_tokens_zip calculate the max number of unique words in a vocabulary ####
     max_tokens_zip = defaultdict(int)
+    #### seq_tokens_zip calculates the max sequence length in a vocabulary ####
+    seq_tokens_zip = defaultdict(int)
+    #### embed_tokens_zip calculates the embedding dimension for each nlp_column ####
+    embed_tokens_zip = defaultdict(int)
     cats_copy = copy.deepcopy(nlp_columns)
+    seq_lengths = []
     if len(cats_copy) > 0:
         for each_name in cats_copy:
+            print('For nlp column = %s' %each_name)
             max_tokens_zip[each_name] = cat_vocab_dict[each_name]['size_of_vocab']
+            print('    size of vocabulary = %s' %max_tokens_zip[each_name])
+            seq_tokens_zip[each_name] = cat_vocab_dict[each_name]['seq_length']
+            seq_lengths.append(seq_tokens_zip[each_name])
+            print('    sequence length = %s' %seq_tokens_zip[each_name])
+            vocab_size = cat_vocab_dict[each_name]['size_of_vocab']
+            best_embedding_size = max(10, vocab_size//400)
+            print('    recommended embedding_size = %s' %best_embedding_size)
+            input_embedding_size = check_model_options(model_options, "embedding_size", best_embedding_size)
+            if input_embedding_size != best_embedding_size:
+                print('    input embedding size given as %d. Overriding recommended embedding_size...' %input_embedding_size)
+                best_embedding_size = input_embedding_size
+            embed_tokens_zip[each_name] = best_embedding_size
+    maximum_sequence_length = max(seq_lengths)
 
     ###### Let us set up the defauls for embedding size and max tokens to process each column
-    nlp_columns =  list(set(nlp_columns))
     nlp_columns_copy  = copy.deepcopy(nlp_columns)
-    embedding_sizes = []
-    for each_col in nlp_columns_copy:
-        vocab_size = max_tokens_zip[each_col]
-        embedding_sizes.append(max(10, vocab_size//400))
-    best_embedding_size = int(np.mean(embedding_sizes))
-    print('    best embedding_size chosen = %s' %best_embedding_size)
-    best_embedding_size = check_model_options(model_options, "embedding_size", best_embedding_size)
+
     #### Now perform NLP preproprocessing for each nlp_column ######
     tf_hub_model = model_options["tf_hub_model"]
     tf_hub = False
@@ -159,14 +172,15 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
             tfhub_handle_encoder = model_options['tf_hub_model']
             encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='Non_BERT_encoder')
     ##### Now we do preprocessing one NLP input at a time using the above models #########
-    for nlp_column in nlp_columns:
+    for nlp_column in nlp_columns_copy:
         if verbose:
-            print('    transforming %s with NLP text embeddings' %nlp_column)
+            print('Transforming %s with NLP text embeddings' %nlp_column)
         #### Next, we add an NLP layer to map those vocab indices into a space of dimensionality
         #### Vocabulary size defines how many unique words you think might be in that training data
         ### Sequence length defines how we should convert each word into a sequence of integers of fixed length
         max_features = vocab_size = max_tokens_zip[nlp_column]
-        embedding_dim = sequence_length = best_embedding_size
+        sequence_length = maximum_sequence_length
+        embedding_dim = embed_tokens_zip[nlp_column]
 
         # Use the text vectorization layer to normalize, split, and map strings to
         # integers. Note that the layer uses the custom standardization defined above.
@@ -174,21 +188,26 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         ### if you used custom_standardization function, you cannot load the saved model!! be careful!
         #### Now let us process each column by using embeddings from Keras ####
         # A string input for each string column ###############################
-        nlp_input = tf.keras.layers.Input(shape=(), dtype=tf.string, name=nlp_column)
         ##### Now we handle multiple choices in embedding and model building ###
         try:
             if keras_model_type.lower() in ['bert','nlp','text']:
+                nlp_input = tf.keras.layers.Input(shape=(), dtype=tf.string, name=nlp_column)
                 ### You need to do some special pre-processing if it is a BERT model
                 print(f'    BERT model auto-selected: {tfhub_handle_encoder}')
                 print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')        
                 x = encoder(preprocessor(nlp_input))['pooled_output']
             elif keras_model_type.lower() in ["use"]:
+                nlp_input = tf.keras.layers.Input(shape=(), dtype=tf.string, name=nlp_column)
                 ### You need to do some special pre-processing if it is a BERT model
                 print(f'    Universal Sentence Encoder auto-selected: {tfhub_handle_encoder}')
                 print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')                    
                 x = encoder(preprocessor(nlp_input))["default"]
             else:
                 if tf_hub:
+                    # Start by creating an explicit input layer. It needs to have a shape of
+                    # (1,) (because we need to guarantee that there is exactly one string
+                    # input per batch), and the dtype needs to be 'string'.
+                    nlp_input = tf.keras.layers.Input(shape=(1,), dtype=tf.string, name=nlp_column)
                     #### If it is not BERT, then you don't have to do special preprocessing
                     nlp_vectorized = encode_NLP_column(train_ds, nlp_column, nlp_input, 
                                         vocab_size, sequence_length)
@@ -196,10 +215,14 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
                     #net = outputs['pooled_output']
                     #x = tf.keras.layers.Dropout(0.1)(net)
                 else:
+                    # Start by creating an explicit input layer. It needs to have a shape of
+                    # (1,) (because we need to guarantee that there is exactly one string
+                    # input per batch), and the dtype needs to be 'string'.
+                    nlp_input = tf.keras.layers.Input(shape=(1,), dtype=tf.string, name=nlp_column)
                     #### If nothing is given, then just choose a basic embedding ######
                     nlp_vectorized = encode_NLP_column(train_ds, nlp_column, nlp_input, 
                                             vocab_size, sequence_length)
-                    x = Embedding(max_features, embedding_dim, name=nlp_column+'_embedding')(nlp_vectorized)
+                    x = Embedding(max_features+1, embedding_dim, name=nlp_column+'_embedding')(nlp_vectorized)
                     #x = Flatten()(x)
                     #x = Dropout(0.25)(x)  ### don't use Dropout after embedding - makes it less accurate!
             nlp_inputs.append(nlp_input)
@@ -258,7 +281,6 @@ def preprocess(features, labels):
 ##########################################################################################
 def encode_NLP_column(train_ds, nlp_column, nlp_input, vocab_size, sequence_length):
     text_ds = train_ds.map(lambda x,y: x[nlp_column])
-
     vectorize_layer = TextVectorization(
         #standardize=custom_standardization,
         standardize = 'lower_and_strip_punctuation',
@@ -271,10 +293,7 @@ def encode_NLP_column(train_ds, nlp_column, nlp_input, vocab_size, sequence_leng
 
     ###### This is where you put NLP embedding layer into your data ####
     nlp_vectorized = vectorize_layer(nlp_input)
-    try:
-        print(f"    {nlp_column} vocab size = {vocab_size}, embedding_dim={sequence_length}, sample :\t{vectorize_layer.get_vocabulary()[:5]}")
-    except:
-        ### Sometimes the get_vocabulary() errors due to special chars in utf-8. Hence avoid it.
-        print(f"    {nlp_column} vocab size = {vocab_size}, embedding_dim={sequence_length}")
+    ### Sometimes the get_vocabulary() errors due to special chars in utf-8. Hence avoid it.
+    #print(f"    {nlp_column} vocab size = {vocab_size}, sequence_length={sequence_length}")
     return nlp_vectorized
 ################################################################################################

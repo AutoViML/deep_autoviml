@@ -414,6 +414,14 @@ def classify_columns(df_preds, model_options={}, verbose=0):
     ###############  This is where you print all the types of variables ##############
     ####### Returns 8 vars in the following order: continuous_vars,int_vars,cat_vars,
     ###  string_bool_vars,discrete_string_vars,nlp_vars,date_or_id_vars,cols_delete
+    cat_vars_copy = copy.deepcopy(cat_vars)
+    for each_cat in cat_vars_copy:
+        if len(train[each_cat].value_counts()) > cat_limit:
+            discrete_string_vars.append(each_cat)
+            cat_vars.remove(each_cat)
+    sum_all_cols['cat_vars'] = cat_vars
+    sum_all_cols['discrete_string_vars'] = discrete_string_vars
+    #########  The variables can now be printed ##############
     if verbose == 1:
         print("    Number of Numeric Columns = ", len(continuous_vars))
         print("    Number of Integer-Categorical Columns = ", len(int_vars))
@@ -549,8 +557,12 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     discrete_strings.remove(key)
                     var_df1['discrete_string_vars'] = discrete_strings                    
                 print('    %s is detected as an NLP variable' %key)
-                var_df1['nlp_vars'].append(key)
-                feats_max_min[key]['size_of_vocab'] = int(np.sum(data_sample[key].fillna("missing").map(len))/5)
+                if key not in var_df1['nlp_vars']:
+                    var_df1['nlp_vars'].append(key)
+                feats_max_min[key]['seq_length'] = int(data_sample[key].fillna("missing").map(len).max())
+                num_words_in_each_row = data_sample[key].fillna("missing").map(lambda x: len(x.split(" "))).mean()
+                num_rows_in_data = model_options['DS_LEN']
+                feats_max_min[key]['size_of_vocab'] = int(num_rows_in_data*num_words_in_each_row)
             else:
                 ### This is for string variables ########
                 ####  Now we select features if they are present in the data set ###

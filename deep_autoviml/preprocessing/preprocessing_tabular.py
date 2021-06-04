@@ -185,7 +185,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     high_cats_copy = copy.deepcopy(high_string_vars)
     if len(high_cats_copy) > 0:
         for each_name in high_cats_copy:
-            max_tokens_zip[each_name] = int(1*cat_vocab_dict[each_name]['size_of_vocab'])
+            max_tokens_zip[each_name] = cat_vocab_dict[each_name]['vocab']
     copy_int_cats = copy.deepcopy(int_cats)
     if len(copy_int_cats) > 0:
         for each_int in copy_int_cats:
@@ -194,8 +194,13 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     if len(copy_ints) > 0:
         for each_int in copy_ints:
             max_tokens_zip[each_int] = int(1*(cat_vocab_dict[each_int]['size_of_vocab'])) #3 earlier
-    if verbose >= 1:
-        print('Max Tokens for categorical and integer variables: %s' %max_tokens_zip)
+    if verbose > 1:
+        print('    Number of categories in:')
+        for each_name in max_tokens_zip.keys():
+            if not each_name in high_cats_copy:
+                print('        %s: %s' %(each_name, max_tokens_zip[each_name]))
+            else:
+                continue
 
     ####### CAVEAT : All the inputs and outputs should follow this same sequence below! ######
     all_date_inputs = []
@@ -217,6 +222,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     cat_encoded_dict = dict([])
     cat_input_dict = dict([])
     ###############################
+    high_cats_alert = 50 ### set this number to alery you when a variable has high dimensions. Should it?
     ####### We start creating variables encoding with date-time variables first ###########
     dates_copy = copy.deepcopy(dates)
     if len(dates) > 0:
@@ -231,7 +237,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_date_encoded.append(encoded_hour)
                 if verbose:
                     print('    %s : after date-hour encoding shape: %s' %(each_date, encoded_hour.shape[1]))
-                    if encoded_hour.shape[1] > 100:
+                    if encoded_hour.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras Date hourofday preprocessing erroring' %each_date)
@@ -241,7 +247,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_date_encoded.append(encoded_day)
                 if verbose:
                     print('    %s : after date-day encoding shape: %s' %(each_date, encoded_day.shape[1]))
-                    if encoded_day.shape[1] > 100:
+                    if encoded_day.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras Date dayofweek preprocessing erroring' %each_date)
@@ -251,7 +257,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_date_encoded.append(encoded_month)
                 if verbose:
                     print('    %s : after date-month encoding shape: %s' %(each_date, encoded_month.shape[1]))
-                    if encoded_month.shape[1] > 100:
+                    if encoded_month.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras Date dayofweek preprocessing erroring' %each_date)
@@ -262,7 +268,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_date_encoded.append(encoded_hour_day)
                 if verbose:
                     print('    %s : after date-hour-day encoding shape: %s' %(each_date, encoded_hour_day.shape[1]))
-                    if encoded_hour_day.shape[1] > 100:
+                    if encoded_hour_day.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras Date day-hour cross preprocessing erroring' %each_date)
@@ -273,13 +279,14 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_date_encoded.append(encoded_month_day)
                 if verbose:
                     print('    %s : after date-day-month encoding shape: %s' %(each_date, encoded_month_day.shape[1]))
-                    if encoded_month_day.shape[1] > 100:
+                    if encoded_month_day.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras Date month-day cross preprocessing erroring' %each_date)
 
     
     ######  This is where we handle high cardinality >50 categories integers ##################
+    
     ints_copy = copy.deepcopy(ints)
     if len(ints_copy) > 0:
         for each_int in ints_copy:
@@ -292,7 +299,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 else:
                     nums_bin = max(20, int(max_tokens_zip[each_int]/40))
                 int_input = keras.Input(shape=(1,), name=each_int, dtype="int64")
-                encoded = encode_any_feature_to_hash_categorical(int_input, each_int,
+                encoded = encode_any_integer_to_hash_categorical(int_input, each_int,
                                                                         train_ds, nums_bin)
                 all_int_inputs.append(int_input)
                 all_int_encoded.append(encoded)
@@ -300,7 +307,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 if verbose:
                     print('    %s number of categories = %d and bins = %d: after integer hash encoding shape: %s' %(each_int, 
                                             max_tokens_zip[each_int], nums_bin, encoded.shape[1]))
-                    if encoded.shape[1] > 100:
+                    if encoded.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras Integer preprocessing erroring' %each_int)
@@ -321,7 +328,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 if verbose:
                     print('    %s number of categories = %d: after integer categorical encoding shape: %s' %(
                                         each_int, max_tokens, encoded.shape[1]))
-                    if encoded.shape[1] > 100:
+                    if encoded.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras Integer Categorical preprocessing erroring' %each_int)
@@ -345,7 +352,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 if verbose:
                     print('    %s number of categories = %d: after string to categorical encoding shape: %s' %(
                                         each_cat, max_tokens, encoded.shape[1]))
-                    if encoded.shape[1] > 100:
+                    if encoded.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras Categorical preprocessing erroring' %each_cat)
@@ -358,23 +365,18 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
             if each_cat in lats+lons:
                 continue    ### skip if these variables are already in another list
             try:
-                cat_input = keras.Input(shape=(1,), name=each_cat, dtype="string")
-                cat_input_dict[each_cat] = cat_input
-                if max_tokens_zip[each_cat] <= 100:
-                    nums_bin = max(5, int(max_tokens_zip[each_cat]/10))
-                elif max_tokens_zip[each_cat] > 100 and max_tokens_zip[each_cat] <= 1000:
-                    nums_bin = max(10, int(max_tokens_zip[each_cat]/20))
-                else:
-                    nums_bin = max(20, int(max_tokens_zip[each_cat]/40))
-                encoded = encode_any_feature_to_hash_categorical(cat_input, each_cat,
-                                                                     train_ds, nums_bin)
+                #### The next line is not a typo: this input should be left without shape. Be Careful!
+                cat_input = keras.Input(shape=(), name=each_cat, dtype="string")
+                vocabulary = max_tokens_zip[each_cat]
+                encoded = encode_any_feature_to_embed_categorical(cat_input, each_cat,
+                                                                     train_ds, vocabulary)
                 all_cat_inputs.append(cat_input)
                 all_high_cat_encoded.append(encoded)
                 cat_encoded_dict[each_cat] = encoded
                 all_input_names.append(each_cat)
                 if verbose:
                     print('    %s : after high cardinality cat encoding shape: %s' %(each_cat, encoded.shape[1]))
-                    if encoded.shape[1] > 100:
+                    if encoded.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras Discrete Strings (high cats) preprocessing erroring' %each_cat)
@@ -398,7 +400,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_feat_cross_encoded.append(feat_cross_encoded)
                 if verbose:
                     print('    %s + %s : after cat feature cross encoding shape: %s' %(cat_1, cat_2, feat_cross_encoded.shape[1]))
-                    if feat_cross_encoded.shape[1] > 100:
+                    if feat_cross_encoded.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping (%s, %s) since Keras feature-cross preprocessing erroring' %(cat_1, cat_2))
@@ -454,7 +456,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_input_names.append(each_lat)
                 if verbose:
                     print('    %s : after latitude binning encoding shape: %s' %(each_lat, lat_lon_encoded.shape[1]))
-                    if lat_lon_encoded.shape[1] > 100:
+                    if lat_lon_encoded.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras latitudes var preprocessing erroring' %each_lat)
@@ -480,7 +482,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_input_names.append(each_lon)
                 if verbose:
                     print('    %s : after longitude binning encoding shape: %s' %(each_lon, lat_lon_encoded.shape[1]))
-                    if lat_lon_encoded.shape[1] > 100:
+                    if lat_lon_encoded.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras longitudes var preprocessing erroring' %each_lon)
@@ -496,7 +498,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 lat_lon_paired_encoded.append(encoded_pair)
                 if verbose:
                     print('    %s + %s : after matched lat-lon crosses encoding shape: %s' %(lat_in_pair, lon_in_pair, encoded_pair.shape[1]))
-                    if encoded_pair.shape[1] > 100:
+                    if encoded_pair.shape[1] > high_cats_alert:
                         print('    Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping (%s, %s) since Keras lat-lon paired preprocessing erroring' %(lat_in_pair, lon_in_pair))
@@ -504,8 +506,8 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     #####  SEQUENCE OF THESE INPUTS AND OUTPUTS MUST MATCH ABOVE - we gather all outputs above into a single list
     all_inputs = all_date_inputs + all_int_inputs + all_int_cat_inputs + all_cat_inputs + all_num_inputs + all_latlon_inputs 
     all_encoded = all_date_encoded+all_int_encoded+all_int_cat_encoded+all_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+lat_lon_paired_encoded
-    all_low_cat_encoded = all_date_encoded+all_int_encoded+all_cat_encoded+all_latlon_encoded
-    all_numeric_encoded =  all_int_cat_encoded + all_feat_cross_encoded + all_num_encoded + lat_lon_paired_encoded
+    all_low_cat_encoded = all_date_encoded+all_int_encoded
+    all_numeric_encoded =  all_cat_encoded+all_int_cat_encoded+all_high_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+all_latlon_encoded+lat_lon_paired_encoded
     ###### This is where we determine the size of different layers #########
     data_size = model_options['DS_LEN']
     if len(all_numeric_encoded) == 0:
@@ -732,10 +734,11 @@ def encode_string_categorical_feature_categorical(feature, name, dataset, max_to
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
                The Tensor has a shape of (None, 1) - None indicates that it has not been 
+    When the output_mode = "binary" or "count", the output is in float otherwise it is integer.
     """
-    extra_oov = 5
+    extra_oov = 3
     # Create a StringLookup layer which will turn strings into integer indices
-    index = StringLookup(max_tokens=None, num_oov_indices=extra_oov, output_mode="int")
+    index = StringLookup(max_tokens=None, num_oov_indices=extra_oov, output_mode="count")
 
     # Prepare a Dataset that only yields our feature
     feature_ds = dataset.map(lambda x, y: x[name])
@@ -779,10 +782,13 @@ def encode_integer_to_categorical_feature(feature, name, dataset, max_tokens=Non
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
                The Tensor has a shape of (None, 1) - None indicates that it has not been 
+    When the output_mode = "binary" or "count", the output is in float otherwise it is integer.
     """
+    extra_oov = 3
     # Create a StringLookup layer which will turn strings into integer indices
     ### For now we will leave the max_values as None which means there is no limit.
-    index = IntegerLookup(max_tokens=None, num_oov_indices=2, oov_value=-9999, output_mode='count')
+    index = IntegerLookup(max_tokens=None, num_oov_indices=extra_oov, 
+                        oov_value=-9999, output_mode='count')
 
     # Prepare a Dataset that only yields our feature
     feature_ds = dataset.map(lambda x, y: x[name])
@@ -878,7 +884,7 @@ def encode_feature_crosses_lat_lon_numeric(cat_pickup_lat, cat_pickup_lon, datas
     
     return embed_cross_pick_lon_lat
 ################################################################################
-def encode_any_feature_to_hash_categorical(feature_input, name, dataset, bins_num=30):
+def encode_any_integer_to_hash_categorical(feature_input, name, dataset, bins_num=30):
     """
     Inputs:
     ----------
@@ -897,7 +903,7 @@ def encode_any_feature_to_hash_categorical(feature_input, name, dataset, bins_nu
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
             The Tensor has a shape of (None, bins_num) - None indicates data has been batched
-    """    
+    """
     # Use the Hashing layer to hash the values to the range [0, 30]
     hasher = Hashing(num_bins=bins_num, salt=1337)
 
@@ -910,6 +916,53 @@ def encode_any_feature_to_hash_categorical(feature_input, name, dataset, bins_nu
 
     # Turn the string input into integer indices
     encoded_feature = hasher(feature_input)
+
+    return encoded_feature
+
+###########################################################################################
+def encode_any_feature_to_embed_categorical(feature_input, name, dataset, vocabulary):
+    """
+    Inputs:
+    ----------
+    feature_input: must be a keras.Input variable, so make sure you create a variable first for the 
+             column in your dataset that want to transform. Please make sure it has a
+             shape of (None, 1).
+    name: this is the name of the column in your dataset that you want to transform
+    dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
+            for example: it can be a batched or a prefetched dataset. 
+            Warning: You must be careful to set num_epochs when creating this dataset.
+                   If num_epochs=None, this function will loop forever. If you set it to a number, 
+                   it will stop after that many epochs. So be careful! 
+    vocabulary: this is the number of bins you want the hashing layer to split the data into
+            
+    Outputs:
+    -----------
+    encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
+            The Tensor has a shape of (None, bins_num) - None indicates data has been batched
+    """
+    extra_oov = 4
+    # Use the lookup table first and then use embedding layer
+    lookup = StringLookup(
+        vocabulary=vocabulary,
+        mask_token=None,
+        num_oov_indices=extra_oov,
+        max_tokens=None,
+        output_mode="int"
+    )
+    # Convert the string input values into integer indices.
+    #feature_ds = dataset.map(lambda x, y: x[name])
+    #feature_ds = feature_ds.map(lambda x: tf.expand_dims(x, -1))
+
+    # Learn the set of possible string values and assign them a fixed integer index
+    #lookup.adapt(feature_ds)
+    encoded_feature = lookup(feature_input)
+    embedding_dims = int(math.sqrt(len(vocabulary)))
+    # Create an embedding layer with the specified dimensions.
+    embedding = tf.keras.layers.Embedding(
+        input_dim=len(vocabulary)+extra_oov, output_dim=embedding_dims
+    )
+    # Convert the index values to embedding representations.
+    encoded_feature = embedding(encoded_feature)
 
     return encoded_feature
 
@@ -1107,7 +1160,7 @@ def encode_inputs(inputs, CATEGORICAL_FEATURE_NAMES, CATEGORICAL_FEATURES_WITH_V
             # Create a lookup to convert string values to an integer indices.
             # Since we are not using a mask token nor expecting any out of vocabulary
             # (oov) token, we set mask_token to None and  num_oov_indices to 0.
-            extra_oov = 1
+            extra_oov = 3
             if len(vocabulary) > 50:
                 use_embedding = True
             lookup = StringLookup(
@@ -1133,7 +1186,6 @@ def encode_inputs(inputs, CATEGORICAL_FEATURE_NAMES, CATEGORICAL_FEATURES_WITH_V
         else:
             # Use the numerical features as-is.
             encoded_feature = tf.expand_dims(inputs[feature_name], -1)
-
         encoded_features.append(encoded_feature)
 
     all_features = layers.concatenate(encoded_features)

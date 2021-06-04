@@ -279,7 +279,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     model_options_defaults["header"] = 0 ### this is the header row for pandas to read
     model_options_defaults["max_trials"] = 10 ## number of Storm Tuner trials ###
     model_options_defaults['tuner'] = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
-    model_options_defaults["embedding_size"] = 50 ## this is the NLP embedding size minimum
+    model_options_defaults["embedding_size"] = "" ## this is the NLP embedding size minimum
     model_options_defaults["tf_hub_model"] = "" ## If you want to use a pretrained Hub model, provide URL here.
     model_options_defaults["image_directory"] = "" ## this is where images are input in form of folder
     model_options_defaults['image_height'] = "" ## the height of the image must be given in number of pixels
@@ -423,7 +423,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 #################################################################################
     """)
     if keras_model_type.lower() == 'auto':
-        print('Building and training an automatic model using %s Tuner...' %model_options_defaults['tuner'])
+        print('Building and training an automatic model using %s Tuner...' %model_options['tuner'])
         deep_model, cat_vocab_dict = train_custom_model(inputs, meta_outputs,
                                          batched_data, target, keras_model_type, keras_options, 
                                          model_options, var_df, cat_vocab_dict, project_name, 

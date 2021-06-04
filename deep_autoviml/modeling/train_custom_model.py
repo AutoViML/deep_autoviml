@@ -187,20 +187,25 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     #reset_keras()
     #tf.keras.backend.reset_uids()
 
-    n_layers = trial.suggest_int("n_layers", 1, 4)
-    num_hidden = trial.suggest_categorical("n_units", [32, 64, 128, 256])
+    n_layers = trial.suggest_int("n_layers", 1, 6)
+    num_hidden = trial.suggest_categorical("n_units", [16, 32, 48, 64, 96])
     weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
-    model = tf.keras.Sequential()
-
+    use_bias = trial.suggest_categorical("use_bias", [True, False])
     batch_norm = trial.suggest_categorical("batch_norm", [True, False])
     add_noise = trial.suggest_categorical("add_noise", [True, False])
     dropout = trial.suggest_float("dropout", 0, 0.5)
     activation_fn = trial.suggest_categorical("activation", ['relu', 'tanh', 'elu', 'selu'])
+    kernel_initializer = trial.suggest_categorical("kernel_initializer",
+                                 ['glorot_uniform','he_normal','lecun_normal','he_uniform'])
+
+    model = tf.keras.Sequential()
+
     for i in range(n_layers):
         model.add(
             tf.keras.layers.Dense(
                 num_hidden,
-                name="opt_dense_"+str(i),
+                name="opt_dense_"+str(i), use_bias=use_bias,
+                kernel_initializer=kernel_initializer,
                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
             )
         )
@@ -251,24 +256,29 @@ def build_model_storm(hp):
 
     # example of model-wide unordered categorical parameter
     activation_fn = hp.Param('activation', ['tanh','relu', 'selu', 'elu'])
+    use_bias = hp.Param('use_bias', [True, False])
+    weight_decay = hp.Param("weight_decay", np.logspace(-8, -3))
+    batch_norm = hp.Param("batch_norm", [True, False])
+    kernel_initializer = hp.Param("kernel_initializer",
+                        ['glorot_uniform','he_normal','lecun_normal','he_uniform'], ordered=False)
+    dropout_flag = hp.Param('use_dropout', [True, False])
+    batch_norm_flag = hp.Param('use_batch_norm', [True, False])
 
     # example of per-block parameter
     model_body.add(Dense(hp.Param('kernel_size_' + str(0), 
-                             sorted(np.linspace(64,400,100).astype(int),reverse=True), 
-                             ordered=True), use_bias=False,
-                         kernel_initializer = hp.Param('kernel_initializer',
-                      ['glorot_uniform','he_normal','lecun_normal','he_uniform'],ordered=False),
-                         name="storm_dense_0",
-                             kernel_regularizer=keras.regularizers.l2(0.01)))
+                            [16, 32, 48, 64, 96], ordered=True),
+                            use_bias=use_bias,
+                            kernel_initializer = kernel_initializer,
+                            name="storm_dense_0",
+                            kernel_regularizer=keras.regularizers.l2(weight_decay)))
 
     model_body.add(Activation(activation_fn,name="activation_0"))
 
     # example of boolean param
-    if hp.Param('use_batch_norm', [True, False]):
+    if batch_norm_flag:
         model_body.add(BatchNormalization(name="batch_norm_0"))
 
-    if hp.Param('use_dropout', [True, False]):
-
+    if dropout_flag:
         # example of nested param
         #
         # this param will not affect the configuration hash, if this block of code isn't executed
@@ -276,23 +286,23 @@ def build_model_storm(hp):
         # but have different values for unused parameters
         model_body.add(Dropout(hp.Param('dropout_value', [0.1, 0.2, 0.3, 0.4, 0.5], ordered=True),
                                         name="dropout_0"))
+
     kernel_size =  hp.values['kernel_size_' + str(0)]
-    dropout_flag = hp.values['use_dropout']
     if dropout_flag:
         dropout_value = hp.values['dropout_value']
     else:
-        dropout_value =  0.05
+        dropout_value =  0.00
     batch_norm_flag = hp.values['use_batch_norm']
     # example of inline ordered parameter
     for x in range(hp.Param('num_layers', [1, 2, 3, 4, 5, 6], ordered=True)):
-
+        #### slowly reduce the kernel size after each round ####
         kernel_size = int(0.75*kernel_size)
         # example of per-block parameter
-        model_body.add(Dense(kernel_size, name="storm_dense_"+str(x+1), use_bias=False,
-                         kernel_initializer = hp.Param('kernel_initializer',
-                      ['glorot_uniform','he_normal','lecun_normal','he_uniform'],ordered=False),
-                             kernel_regularizer=keras.regularizers.l2(0.01)))
-        
+        model_body.add(Dense(kernel_size, name="storm_dense_"+str(x+1),
+                            use_bias=use_bias,
+                            kernel_initializer = kernel_initializer,
+                            kernel_regularizer=keras.regularizers.l2(weight_decay)))
+
         model_body.add(Activation(activation_fn, name="activation_"+str(x+10)))
 
         # example of boolean param
@@ -358,13 +368,13 @@ class MyTuner(Tuner):
         #batch_size = hp.Param('batch_size', [64, 128, 256], ordered=True)
         train_ds = train_ds.unbatch().batch(batch_size)
         train_ds = train_ds.shuffle(shuffle_size, 
-                        reshuffle_each_iteration=False, seed=42).prefetch(batch_size).repeat(5)
+                        reshuffle_each_iteration=False, seed=42).prefetch(batch_size)#.repeat(5)
         valid_ds = valid_ds.unbatch().batch(batch_size)
-        valid_ds = valid_ds.prefetch(batch_size).repeat(5)
+        valid_ds = valid_ds.prefetch(batch_size)#.repeat(5)
         steps = 20
         #scores = []
-        history = comp_model.fit(train_ds, epochs=epochs, steps_per_epoch=steps,# batch_size=batch_size, 
-                            validation_data=valid_ds, validation_steps=steps,
+        history = comp_model.fit(train_ds, epochs=epochs, #steps_per_epoch=steps,# batch_size=batch_size, 
+                            validation_data=valid_ds, #validation_steps=steps,
                             callbacks=callbacks_list, shuffle=True, class_weight=class_weights,
                             verbose=0)            
         # here we can define custom logic to assign a score to a configuration
@@ -495,8 +505,11 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print("    Early stopping : %s" %early_stopping)
     NUMBER_OF_EPOCHS = check_keras_options(keras_options, "epochs", 100)
     learning_rate = 5e-1
-    steps = max(10, data_size//(batch_size*25))
-    steps = min(40, steps)
+    if len(var_df['nlp_vars']) > 0:
+        steps = 10
+    else:
+        steps = max(50, data_size//(batch_size*25))
+        steps = min(300, steps)
     print('    recommended steps per epoch = %d' %steps)
     STEPS_PER_EPOCH = check_keras_options(keras_options, "steps_per_epoch", 
                         steps)
@@ -784,10 +797,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     
     #train_ds = train_ds.unbatch().batch(best_batch)
     train_ds = train_ds.shuffle(shuffle_size, 
-                reshuffle_each_iteration=False, seed=42).prefetch(best_batch).repeat()
+                reshuffle_each_iteration=False, seed=42).prefetch(best_batch)#.repeat()
 
     #valid_ds = valid_ds.unbatch().batch(best_batch)
-    valid_ds = valid_ds.prefetch(best_batch).repeat()
+    valid_ds = valid_ds.prefetch(best_batch)#.repeat(5)
 
     ####################################################################################
     ############### F I R S T  T R A I N   F O R  1 0 0   E P O C H S ##################
@@ -810,9 +823,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     
     ####  Do this with LR scheduling but NO early stopping since we want the model fully trained #####
     history = best_model.fit(train_ds, validation_data=valid_ds, batch_size=best_batch,
-            epochs=NUMBER_OF_EPOCHS, steps_per_epoch=STEPS_PER_EPOCH, 
+            epochs=NUMBER_OF_EPOCHS, #steps_per_epoch=STEPS_PER_EPOCH, 
             callbacks=callbacks_list, class_weight=class_weights,
-            validation_steps=STEPS_PER_EPOCH, 
+            #validation_steps=STEPS_PER_EPOCH, 
            shuffle=True)
 
     #################################################################################
@@ -967,7 +980,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print('\nTraining full train dataset. This will take time...')
     full_ds = full_ds.unbatch().batch(best_batch)
     full_ds = full_ds.shuffle(shuffle_size, 
-            reshuffle_each_iteration=False, seed=42).prefetch(best_batch).repeat()
+            reshuffle_each_iteration=False, seed=42).prefetch(best_batch)#.repeat()
 
     #################   B E S T    D E E P   M O D E L       ##########################
 
@@ -983,14 +996,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print("    set learning rate using best model:", deep_model.optimizer.learning_rate.numpy())
     ####   Dont set the epochs too low - let them be back to where they were stopped  ####
     print('    max epochs for training = %d' %stopped_epoch)
-    if modeltype != 'Regression':
-        deep_model.fit(full_ds, epochs=stopped_epoch, steps_per_epoch=STEPS_PER_EPOCH, 
-                    batch_size=best_batch,
-                    callbacks=[rlr],  shuffle=True, verbose=0)
-    else:
-        deep_model.fit(full_ds, epochs=stopped_epoch, steps_per_epoch=STEPS_PER_EPOCH, 
-                    batch_size=best_batch, class_weight = class_weights,
-                    callbacks=[rlr],  shuffle=True, verbose=0)
+    deep_model.fit(full_ds, epochs=stopped_epoch, #steps_per_epoch=STEPS_PER_EPOCH, 
+                batch_size=best_batch, class_weight = class_weights,
+                callbacks=[rlr],  shuffle=True, verbose=0)
     ##################################################################################
     #######        S A V E the model here using save_model_name      #################
     ##################################################################################

@@ -244,7 +244,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                 ### if NLP_outputs is a list, it means there is no NLP variable in the data set
                 print('    There is no NLP variable in this data set. Returning')
             else:
-                print('    Shape of output from NLP variable before model training = %s' %(nlp_outputs.shape,))
+                print('    Number of predictions = %s from NLP variable fed into model' %(nlp_outputs.shape,))
                 consolidated_outputs = nlp_outputs
         else:
             print('    Shape of output from numeric+integer+cat variables before model training = %s' %(meta_outputs.shape,))
@@ -255,7 +255,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                 consolidated_outputs = meta_outputs
             else:
                 ### if NLP_outputs is NOT a list, it means there is some NLP variable in the data set
-                print('    Shape of output from NLP variable before model training = %s' %(nlp_outputs.shape,))
+                print('    Number of predictions = %s from NLP variable fed into model' %(nlp_outputs.shape,))
                 consolidated_outputs = layers.concatenate([nlp_outputs, meta_outputs])
 
         print('Shape of output from all preprocessing layers before model training = %s' %(consolidated_outputs.shape,))
