@@ -182,7 +182,7 @@ You can use the following arguments in your input to make deep_autoviml work bes
 
 ## Contributing
 
-See [the contributing file](CONTRIBUTING.md)!
+See [the contributing file](contributing.md)!
 
 PRs accepted.
 

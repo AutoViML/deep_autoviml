@@ -125,30 +125,36 @@ def transform_train_target(train_target, target, modeltype, model_label, cat_voc
     train_target = copy.deepcopy(train_target)
     cat_vocab_dict = copy.deepcopy(cat_vocab_dict)
     ### Just have to change the target from string to Numeric in entire dataframe! ###
+    
     if modeltype != 'Regression':
         if model_label == 'Multi_Label':
             target_copy = copy.deepcopy(target)
             print('Train target shape = %s' %(train_target.shape,))
             #### This is for multi-label problems #####
+            cat_vocab_dict['target_le'] = []
             for each_target in target_copy:
+                cat_vocab_dict[each_target+'_original_classes'] = np.unique(train_target[target])
                 target_le = My_LabelEncoder()
                 print('Transforming %s target labels...' %each_target)
-                print('    Original labels dtype is %s ' %train_target[each_target].dtype)
+                print('    Original target labels data type is %s ' %train_target[each_target].dtype)
                 train_values = target_le.fit_transform(train_target[each_target])
+                cat_vocab_dict[each_target+'_transformed_classes'] = np.unique(train_values)
                 train_target[each_target] = train_values
                 cat_vocab_dict['target_le'].append(target_le)
-                print('Target Transformed as follows: %s' %target_le.transformer)
-                print('    Transformed labels dtype to Numeric')
+                print('%s transformed as follows: %s' %(each_target, target_le.transformer))
+                print('    transformed target labels data type to numeric or ordered from 0')
         else:
             #### This is for Single Label problems ####
+            cat_vocab_dict['original_classes'] = np.unique(train_target[target])
             target_le = My_LabelEncoder()
             print('Transforming %s target labels...' %target)
             print('    Original labels dtype is %s ' %train_target[target].dtype)
             train_values = target_le.fit_transform(train_target[target])
+            cat_vocab_dict['transformed_classes'] = np.unique(train_values)
             train_target[target] = train_values
             cat_vocab_dict['target_le'] = target_le
-            print('Target Transformed as follows: %s' %target_le.transformer)
-            print('    Transformed labels dtype to Numeric')
+            print('%s transformed as follows: %s' %(target, target_le.transformer))
+            print('    transformed target labels data type to numeric or ordered from 0')
     else:
         target_le = ""
         cat_vocab_dict['target_le'] = target_le
@@ -264,53 +270,55 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         sel_preds = ["_".join(x.split(" ")) for x in list(train_small) ]
     if isinstance(target, str):
         target = "_".join(target.split(" "))
+        model_label = 'Single_Label'
     else:
         target = ["_".join(x.split(" ")) for x in target ]
+        model_label = 'Multi_Label'
+
     print('    Modified column names to fit no-spaces-in-column-names Rule in Tensorflow!')
     train_small.columns = sel_preds
-    ### modeltype and usecols are very important to know before doing any processing #####
-    model_label = ''
+    ### modeltype and usecols are very important to know before doing any processing #####    
     #### usecols is a very handy tool to handle a target which can be single label or multi-label!
     if modeltype == '':
         ### usecols is basically target in a list format. Very handy to know when target is a list.
-        modeltype, model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
+        modeltype, _, usecols = find_problem_type(train_small, target, model_options, verbose)
     else:
         ### if modeltype is given, then do not find the model type using this function
-        _,  model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
+        _,  _, usecols = find_problem_type(train_small, target, model_options, verbose)
     
     label_encode_flag = False
     ##########  Find small details about the data to help create the right model ###
     if modeltype == 'Classification' or modeltype == 'Multi_Classification':
         if isinstance(target, str):
+            #### This is for Single-Label problems ########
             if train_small[target].dtype == 'object' or str(train_small[target].dtype).lower() == 'category':
                 label_encode_flag = True
-                target_vocab = train_small[target].unique()
-                num_classes = len(target_vocab)
-            else:
-                if 0 not in np.unique(train_small[target]):
-                    label_encode_flag = True ### label encoding must be done since no zero class!
-                    target_vocab = train_small[target].unique()
-                num_classes = len(train_small[target].value_counts())
+            elif 0 not in np.unique(train_small[target]):
+                label_encode_flag = True ### label encoding must be done since no zero class!
+            target_vocab = train_small[target].unique()
+            num_classes = len(target_vocab)
         elif isinstance(target, list):
-            if train_small[target[0]].dtype == 'object' or str(train_small[target[0]].dtype).lower() == 'category':
-                label_encode_flag = True
-                target_vocab = train_small[target].unique().tolist()
-                num_classes = len(target_vocab)
-            else:
-                num_classes = train_small[target].apply(np.unique).apply(len).max()
+            #### This is for Multi-Label problems ########
+            num_classes = []
+            for each_target in target:
+                if train_small[each_target].dtype == 'object' or str(train_small[target[0]].dtype).lower() == 'category':
+                    label_encode_flag = True
+                elif 0 not in np.unique(train_small[each_target]):
+                    label_encode_flag = True
+                target_vocab = train_small[each_target].unique().tolist()
+                num_classes.append(len(target_vocab))
     else:
         num_classes = 1
         target_vocab = []
     #### This is where we set the model_options for num_classes and num_labels #########
     model_options['num_classes'] = num_classes
-    
 
     #############   Sample Data classifying features into variaous types ##################  
     print('Loaded a small data sample of size = %s into pandas dataframe to analyze...' %(train_small.shape,))
     ### classify variables using the small dataframe ##
     print('    Classifying variables using data sample in pandas...')
     var_df1, cat_vocab_dict = classify_features_using_pandas(train_small, target, model_options, verbose=verbose)
-
+    
     model_options['modeltype'] = modeltype
     model_options['model_label'] = model_label
     cat_vocab_dict['modeltype'] = modeltype
@@ -329,8 +337,9 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                                                dtype=tf.int64)),
             default_value=int(len(target_vocab)+1))
 
-        _, cat_vocab_dict = transform_train_target(train_small, target, modeltype, 
+        trans_output, cat_vocab_dict = transform_train_target(train_small, target, modeltype, 
                                     model_label, cat_vocab_dict)
+        train_small[target] = trans_output.values
     
     #### Set column defaults while reading dataset from CSV files - that way, missing values avoided!
     ### The following are valid CSV dtypes for missing values: float32, float64, int32, int64, or string
@@ -395,8 +404,8 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         print('Error: Target %s type not understood' %type(target))
         return
 
-    #########    T F  D A T A   D A T A S E T   L O A D I N G     H E R E ################
-    ############    Create a Tensorflow Dataset using the make_csv function ######################
+    ################    T F  D A T A   D A T A S E T   L O A D I N G     H E R E ################
+    ############    Create a Tensorflow Dataset using the make_csv function #####################
     if http_url:
         print('Since input is http URL file we load it into pandas and then tf.data.Dataset...')
         ### Now load the URL file loaded into pandas into a tf.data.dataset  #############
@@ -408,8 +417,9 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                 print('target variable is blank - please fix input and try again')
                 return
         elif isinstance(target, list):
-                labels = train_small.pop(target)
-                data_batches = tf.data.Dataset.from_tensor_slices((dict(train_small), labels))
+            ##### For multi-label problems, you need to use dict of labels as well ###
+            labels = train_small.pop(target)
+            data_batches = tf.data.Dataset.from_tensor_slices((dict(train_small), dict(labels)))
         else:
             data_batches = tf.data.Dataset.from_tensor_slices(dict(train_small))
         ### batch it if you are creating it from a dataframe
@@ -557,12 +567,13 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     train_small.columns = sel_preds
     if isinstance(target, str):
         target = "_".join(target.split(" "))
+        model_label = 'Single_Label'
     else:
         target = ["_".join(x.split(" ")) for x in target ]
+        model_label = 'Multi_Label'
     print('    Modified file names to fit no-space in column names rule in Tensorflow!')
 
     ### usecols is basically target in a list format. Very handy to know when target is a list.
-    model_label = ''
         
     try:
         modeltype = model_options["modeltype"]
@@ -592,6 +603,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     target_transformed = False
     if modeltype != 'Regression':
         if isinstance(target, str):
+            #### This is for Single Label Problems ######
             if train_small[target].dtype == 'object' or str(train_small[target].dtype).lower() == 'category':
                 target_transformed = True
                 target_vocab = train_small[target].unique()
@@ -602,12 +614,20 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
                     target_vocab = train_small[target].unique()
                 num_classes = len(train_small[target].value_counts())
         elif isinstance(target, list):
-            if train_small[target[0]].dtype == 'object' or str(train_small[target[0]].dtype).lower() == 'category':
-                target_transformed = True
-                target_vocab = train_small[target].unique().tolist()
-                num_classes = len(target_vocab)
-            else:
-                num_classes = train_small[target].apply(np.unique).apply(len).max()
+            #### This is for Multi-Label Problems #######
+            copy_target = copy.deepcopy(target)
+            num_classes = []
+            for each_target in copy_target:
+                if train_small[target[0]].dtype == 'object' or str(train_small[target[0]].dtype).lower() == 'category':
+                    target_transformed = True
+                    target_vocab = train_small[target].unique().tolist()
+                    num_classes_each = len(target_vocab)
+                else:
+                    if 0 not in np.unique(train_small[target[0]]):
+                        target_transformed = True ### label encoding must be done since no zero class!
+                        target_vocab = train_small[target[0]].unique()
+                    num_classes_each = train_small[target].apply(np.unique).apply(len).max()
+                num_classes.append(int(num_classes_each))
     else:
         num_classes = 1
         target_vocab = []
@@ -643,6 +663,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
                                                 model_label, cat_vocab_dict)
 
     if isinstance(target, str):
+        #### For single label do this: labels can be without names since there is only one label
         if target != '':
             labels = train_small[target]
             features = train_small.drop(target, axis=1)
@@ -651,9 +672,10 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
             print('target variable is blank - please fix input and try again')
             return
     elif isinstance(target, list):
+        #### For multi label do this: labels must be dict and hence with names since there are many targets
             labels = train_small[target]
             features = train_small.drop(target, axis=1)
-            ds = tf.data.Dataset.from_tensor_slices((dict(features), labels))
+            ds = tf.data.Dataset.from_tensor_slices((dict(features), dict(labels)))
     else:
         ds = tf.data.Dataset.from_tensor_slices(dict(train_small))
     ### batch it if you are creating it from a dataframe
@@ -772,7 +794,7 @@ from collections import defaultdict
 from collections import Counter
 
 def load_train_data(train_data_or_file, target, project_name, keras_options, model_options,
-                  model_use_case="", verbose=0):
+                  verbose=0):
     """
     Handy function that loads a file or a sequence of files (*.csv) into a tf.data.Dataset 
     You can also load a pandas dataframe instead of a file if you wanted to. It accepts both!
@@ -813,27 +835,28 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     ####  Set Class Weights for Imbalanced Data Sets here ##########
     modeltype = model_options["modeltype"]
     #### You need to do this transform only for files. Otherwise, it is done already for dataframes.
-    if isinstance(train_data_or_file, str):
-        if isinstance(target, str):
-            y_train = transform_train_target(train_small[[target]], target, 
-                    modeltype, model_label='Single_Label', cat_vocab_dict=cat_vocab_dict)[0].values
-        else:
-            y_train = transform_train_target(train_small[target], target, 
-                    modeltype, model_label='Multi_Label', cat_vocab_dict=cat_vocab_dict)[0].values
+    if isinstance(target, str):
+        y_train = train_small[target]
+        if modeltype != 'Regression' and not cat_vocab_dict['target_transformed']:
+            cat_vocab_dict["original_classes"] = np.unique(train_small[target])
     else:
-        if isinstance(target, str):
-            y_train = train_small[target]
-        else:
-            y_train = train_small[target[0]]
+        y_train = train_small[target[0]]
+        target_copy = copy.deepcopy(target)
+        if modeltype != 'Regression' and not cat_vocab_dict['target_transformed']:
+            for each_t in target_copy:
+                cat_vocab_dict[each_t+"_original_classes"] = np.unique(train_small[each_t])
     ####  CREATE  CLASS_WEIGHTS HERE #################
     if modeltype != 'Regression':
         find_rare_class(y_train, verbose=1)
-        if keras_options['class_weight']:
-            # create a counter of labels and their counts
+        if keras_options['class_weight'] and not model_options['model_label']=='Multi_Label':
+            # Class weights are only applicable to single labels in Keras right now
             class_weights = get_class_distribution(y_train)
             keras_options['class_weight'] = class_weights
             print('    Class weights calculated: %s' %class_weights)
+        else:
+            keras_options['class_weight'] = {}
     else:
+        keras_options['class_weight'] = {}
         print('    No class weights specified. Continuing...')
     return train_small, model_options, ds, var_df, cat_vocab_dict, keras_options
 ##########################################################################################################

@@ -29,10 +29,13 @@ from collections import defaultdict
 # data pipelines and feature engg here
 from deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_inputs, create_model_inputs
+from deep_autoviml.modeling.train_custom_model import return_optimizer
 
 # Utils
-from deep_autoviml.utilities.utilities import get_compiled_model, check_if_GPU_exists
+from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_uncompiled_model
 from deep_autoviml.utilities.utilities import get_model_defaults, check_keras_options
+from deep_autoviml.utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
+
 ############################################################################################
 # TensorFlow ≥2.4 is required
 import tensorflow as tf
@@ -128,6 +131,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     num_classes = model_options["num_classes"]
     num_labels = model_options["num_labels"]
     modeltype = model_options["modeltype"]
+    targets = cat_vocab_dict['target_variables']
     patience = check_keras_options(keras_options, "patience", 10)
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
     if not isinstance(meta_outputs, list):
@@ -157,7 +161,22 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
             vocab_dict[each_name] = cat_vocab_dict[each_name]['vocab']
 
     ######################   set some defaults for model parameters here ##############
-    keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, model_options)
+    keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, 
+                                                                    model_options, targets)
+    ###### This is where you compile the model after it is built ###############
+    num_classes = model_options["num_classes"]
+    num_labels = model_options["num_labels"]
+    modeltype = model_options["modeltype"]
+    val_mode = keras_options["mode"]
+    val_monitor = keras_options["monitor"]
+    val_loss = keras_options["loss"]
+    val_metrics = keras_options["metrics"]
+    if not keras_options['optimizer']:
+        ### if it is an empty string, use the default Adam optimizer
+        optimizer = Adam(lr=0.01, beta_1=0.9, beta_2=0.999)
+    else:
+        optimizer = return_optimizer(keras_options['optimizer'])
+
     ###################################################################################
     if data_dim <= 1e6:
         dense_layer1 = max(96,int(data_dim/30000))
@@ -176,7 +195,26 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     dense_layer3 = min(100,dense_layer3)
     print('Recommended hidden layers (with units in each Dense Layer)  = (%d, %d, %d)\n' %(
                                 dense_layer1,dense_layer2,dense_layer3))
+    fast_models = ['deep_and_wide','deep_wide','wide_deep', 
+                                'wide_and_deep','deep wide', 'wide deep', 'fast', 'fast1']
+    
     #### The Deep and Wide Model is a bit more complicated. So it needs some changes in inputs! ######
+    prebuilt_models = ['basic', 'simple', 'default','simple_dnn','sample model',
+                        'deep', 'big_deep', 'big deep', 'giant_deep', 'giant deep',
+                        'cnn1', 'cnn','cnn2'] 
+    ######   Just do a simple check for auto models here ####################
+    if keras_model_type.lower() in fast_models+prebuilt_models:
+            all_inputs = copy.deepcopy(inputs)
+    else:
+        ### this means it's an auto model and you create one here 
+        print('    building a %s model...' %keras_model_type)
+        num_layers = check_keras_options(keras_options, 'num_layers', 1)
+        model_body = tf.keras.Sequential([])
+        for l_ in range(num_layers):
+            model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
+                                      activity_regularizer=tf.keras.regularizers.l2(0.01)))
+        return model_body, keras_options
+    ##########################   This is for non-auto models #####################################
     if isinstance(use_my_model, str) :
         if use_my_model == "":
             if keras_model_type.lower() in ['basic', 'simple', 'default','simple_dnn','sample model']:
@@ -198,8 +236,13 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                     model_body = cnn1.model
                 else:
                     model_body = cnn2.model
-            elif keras_model_type.lower() in ['deep_and_wide','deep_wide','wide_deep', 
-                                'wide_and_deep','deep wide', 'wide deep', 'fast', 'fast1']:
+            ###### You have to do this for all prebuilt models ####################
+            if keras_model_type.lower() in prebuilt_models:
+                print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
+                model_body = add_inputs_outputs_to_model_body(model_body, all_inputs, meta_outputs)
+                #### This final outputs is the one that is taken into final dense layer and compiled
+                print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
+            if keras_model_type.lower() in fast_models:
                 ########## In case none of the options are specified, then set up a simple model!
                 dropout_rate = 0.1
                 #hidden_units = [32, 32]
@@ -210,7 +253,6 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                 wide = layers.BatchNormalization()(wide)
                 deep = encode_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, vocab_dict,
                                 use_embedding=True)
-                keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, model_options)
                 for units in hidden_units:
                     deep = layers.Dense(units)(deep)
                     deep = layers.BatchNormalization()(deep)
@@ -220,12 +262,14 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                     all_inputs = list(all_inputs.values()) ### convert input layers to a list
                     all_inputs += inputs
                     merged = layers.concatenate([meta_outputs, wide, deep])
-                    final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
-                    model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
                 else:
                     merged = layers.concatenate([wide, deep])
-                    final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
-                    model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
+                merged = layers.Dense(dense_layer1)(merged)
+                merged = layers.Dense(int(0.5*dense_layer1))(merged)
+                model_body = layers.Dense(int(0.25*dense_layer1))(merged)
+                ##### This is where you create the last layer to deliver predictions ####
+                #final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
+                #model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
                 print('    Created deep and wide %s model, ...' %keras_model_type)
             elif keras_model_type.lower() in ['deep_and_cross', 'deep_cross', 'deep cross', 'fast2']:
                 dropout_rate = 0.1
@@ -240,7 +284,6 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                     x = layers.Dense(units)(cross)
                     cross = x0 * x + cross
                 cross = layers.BatchNormalization()(cross)
-
                 deep = x0
                 for units in hidden_units:
                     deep = layers.Dense(units)(deep)
@@ -248,18 +291,14 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                     deep = layers.ReLU()(deep)
                     deep = layers.Dropout(dropout_rate)(deep)
                 merged = layers.concatenate([cross, deep])
-                final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
-                model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
+                merged = layers.Dense(dense_layer1)(merged)
+                merged = layers.Dense(int(0.5*dense_layer1))(merged)
+                model_body = layers.Dense(int(0.25*dense_layer1))(merged)
+                ##### This is where you create the last layer to deliver predictions ####
+                #final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
+                #model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
                 print('    Created deep and cross %s model, ...' %keras_model_type)
                 ################################################################################
-            else:
-                ### this means it's an auto model and you create one here 
-                print('    building a %s model...' %keras_model_type)
-                num_layers = check_keras_options(keras_options, 'num_layers', 1)
-                model_body = tf.keras.Sequential([])
-                for l_ in range(num_layers):
-                    model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
-                                              activity_regularizer=tf.keras.regularizers.l2(0.01)))
         else:
             try:
                 new_module = __import__(use_my_model)
@@ -270,11 +309,27 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                 print('    Loading %s model is erroring, hence building a simple sequential model with one layer...' %keras_model_type)
                 ########## In case none of the loading of files works, then set up a simple model!
                 model_body = Sequential([layers.Dense(dense_layer1, activation='relu')])
+            ############   This is what you need to add to pre-built model body shells ###
+            print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
+            model_body = add_inputs_outputs_to_model_body(model_body, all_inputs, meta_outputs)
+            #### This final outputs is the one that is taken into final dense layer and compiled
+            print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
     else:
         print('    Using your custom model given as input...')
         model_body = use_my_model
-    ###########################################################################
+        ############   This is what you need to add to pre-built model body shells ###
+        print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
+        model_body = add_inputs_outputs_to_model_body(model_body, all_inputs, meta_outputs)
+        #### This final outputs is the one that is taken into final dense layer and compiled
+        print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
+    #############  You need to compile the non-auto models here ###############
+    model_body = get_compiled_model(all_inputs, model_body, output_activation, num_predicts, 
+                            num_labels, optimizer, val_loss, val_metrics, cols_len, targets)
     print('    %s model loaded and compiled successfully...' %keras_model_type)
+    if cols_len > 100:
+        print('Too many columns to show model summary. Continuing...')
+    else:
+        print(model_body.summary())
     return model_body, keras_options
 ###############################################################################
 

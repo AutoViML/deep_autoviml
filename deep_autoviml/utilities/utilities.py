@@ -52,6 +52,9 @@ from tensorflow.keras import regularizers
 from tensorflow.keras import layers
 from tensorflow.keras.models import Model, load_model
 ################################################################################
+from deep_autoviml.modeling.one_cycle import OneCycleScheduler
+
+################################################################################
 import os
 def check_if_GPU_exists(verbose=0):
     GPU_exists = False
@@ -123,46 +126,6 @@ def check_if_GPU_exists(verbose=0):
             print('Setting CPU strategy using %d devices' %strategy.num_replicas_in_sync)
     return strategy
 ######################################################################################
-def get_uncompiled_model(inputs, result, model_body, output_activation, 
-                    num_predicts, num_labels, cols_len):
-    ### The next 3 steps are most important! Don't mess with them! 
-    #model_preprocessing = Model(inputs, meta_outputs)
-    #preprocessed_inputs = model_preprocessing(inputs)
-    #result = model_body(preprocessed_inputs)
-    ##### now you
-    multi_label_predictions = defaultdict(list)
-    for each_label in range(num_labels):
-        key = 'predictions'        
-        value = layers.Dense(num_predicts, activation=output_activation,
-                            name='output_'+str(each_label))(result)
-        multi_label_predictions[key].append(value)
-    outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
-
-    ##### Set the inputs and outputs of the model here
-    uncompiled_model = Model(inputs=inputs, outputs=outputs)
-    return uncompiled_model
-
-def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, num_labels, 
-                      model_body, optimizer, val_loss, val_metrics, cols_len):
-    model = get_uncompiled_model(inputs, meta_outputs, model_body, output_activation, 
-                        num_predicts, num_labels, cols_len)
-    model.compile(
-        optimizer=optimizer,
-        loss=val_loss,
-        metrics=val_metrics,
-    )
-    return model
-###############################################################################
-def add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs):
-    ##### This is the simplest way to convert a sequential model to functional!
-    for num, each_layer in enumerate(model_body.layers):
-        if num == 0:
-            final_outputs = each_layer(meta_outputs)
-        else:
-            final_outputs = each_layer(final_outputs)
-    return final_outputs
-
-###############################################################################
 def print_one_row_from_tf_dataset(test_ds):
     """
     No matter how big a dataset or batch size, this handy function will print the first row.
@@ -203,12 +166,13 @@ def print_one_row_from_tf_label(test_label):
             dict_row = list(test_label.as_numpy_iterator())[0]
         else:
             dict_row = test_label
-        print("Printing 10 samples from labels data:")
+        print("Printing samples from labels data:")
         preds = list(dict_row.element_spec[0].keys())
+        labels = list(dict_row.element_spec[0].keys())
         if dict_row.element_spec[0][preds[0]].shape[0] is None or isinstance(
                 dict_row.element_spec[0][preds[0]].shape[0], int):
-            for feats, labs in dict_row.take(1): 
-                print(labs[:10])
+            for feats, labs in dict_row.take(1):
+                print(labs)
     except:
         print(list(test_label.as_numpy_iterator())[0])
 ###########################################################################################
@@ -280,8 +244,9 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 #################################################################################
-def plot_history(history, metric, num_labels):
-    if num_labels == 1:
+def plot_history(history, metric, targets):
+    if isinstance(targets, str):
+        #### This is for single label problems
         fig = plt.figure(figsize=(15,6))
         #### first metric is always the loss - just plot it!
         hist = pd.DataFrame(history.history)
@@ -294,16 +259,24 @@ def plot_history(history, metric, num_labels):
         ##### Now let's plot the second metric ####
         plot_one_history_metric(history, metric, ax2)
     else:
-        ### You must choose one of the label outputs to monitor - we will choose the last one
-        for i in range(num_labels):
+        ### This is for Multi-Label problems
+        for each_target in targets:
             fig = plt.figure(figsize=(15,6))
             hist = pd.DataFrame(history.history)
             hist['epoch'] = history.epoch
             ax1 = plt.subplot(1, 2, 1)
             ax1.set_title('Model Training vs Validation Loss')
-            plot_one_history_metric(history, "loss", ax1)
+            plot_one_history_metric(history, each_target+"_loss", ax1)
             ax2 = plt.subplot(1, 2, 2)
-            metric2 = 'output_'+str(i)+'_' + metric
+            ### Since we are using total loss, we must find another metric to show. 
+            ###  This is how we do it - by collecting all metrics with target name 
+            ###  and pick the first one. This may or may not always get the best answer, but we will see.
+            metric1 = [x for x in hist.columns.tolist() if (each_target in x) & ("loss" not in x) ]
+            metric2 = metric1[0]
+            ### the next line is not a typo! it should always be target[0]
+            ### since val_monitor is based on the first target's metric only!
+            #metric1 = metric.replace(targets[0],'')
+            #metric2 = each_target + metric1
             ax2.set_title('Model Training vs Validation %s' %metric2)
             plot_one_history_metric(history, metric2, ax2)
     plt.show();
@@ -322,7 +295,6 @@ from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.metrics import balanced_accuracy_score
 from collections import OrderedDict
 from collections import Counter
-
 def print_classification_model_stats(y_true, predicted):
     """
     This prints classification metrics in a nice format only for binary classes
@@ -343,11 +315,10 @@ def print_classification_model_stats(y_true, predicted):
 from sklearn.metrics import classification_report
 import matplotlib.pyplot as plt
 import seaborn as sns
-def plot_classification_results(y_true, y_probas, labels, target_names):
+def plot_classification_results(y_true, y_pred, labels, target_names, title_string=""):
     try:
-        y_pred = y_probas.argmax(axis=1)
         fig, axes = plt.subplots(1,2,figsize=(15,6))
-        draw_confusion_matrix(y_true, y_pred, 'Confusion Matrix', ax=axes[0])
+        draw_confusion_matrix(y_true, y_pred, labels, target_names, '%s Confusion Matrix' %title_string, ax=axes[0])
         try:
             clf_report = classification_report(y_true,
                                                y_pred,
@@ -365,7 +336,7 @@ def plot_classification_results(y_true, y_probas, labels, target_names):
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, f1_score
-def draw_confusion_matrix(y_test,y_pred, model_name='Model',ax=''):
+def draw_confusion_matrix(y_test,y_pred, labels, target_names, model_name='Model',ax=''):
     """
     This plots a beautiful confusion matrix based on input: ground truths and predictions
     """
@@ -382,10 +353,10 @@ def draw_confusion_matrix(y_test,y_pred, model_name='Model',ax=''):
     #Get the confusion matrix and put it into a df
 
     cm = confusion_matrix(y_test, y_pred)
-
+    
     cm_df = pd.DataFrame(cm,
-                         index = np.unique(y_test).tolist(),
-                         columns = np.unique(y_test).tolist(),
+                         index = labels,
+                         columns = target_names,
                         )
 
     sns.heatmap(cm_df,
@@ -508,6 +479,23 @@ from sklearn import metrics
 import matplotlib.pyplot as plt
 import copy
 import pdb
+def print_classification_header(num_classes, num_labels, target_name):
+    ######## This is where you start printing metrics ###############
+    if isinstance(num_classes, list) :
+        if np.max(num_classes) > 2:
+            print('Multi Label (multi-output) Multi-Class Report: %s' %target_name)
+            print('#################################################################')
+        else:            
+            print('Multi Label (multi-output) Binary Class Metrics Report: %s' %target_name)
+            print('#################################################################')
+    else:
+        if num_classes > 2:
+            print('Single Label (single-output), Multi-Class Report: %s' %target_name)
+            print('#################################################################')
+        else:
+            print('Single Label, Multi Class Model Metrics Report: %s' %target_name)
+            print('#################################################################')
+
 def print_classification_metrics(y_test, y_probs, proba_flag=True):
     """
     #######  Send in the actual_values and prediction_probabilities for binary classes
@@ -516,27 +504,15 @@ def print_classification_metrics(y_test, y_probs, proba_flag=True):
     y_test = copy.deepcopy(y_test)
     multi_label_flag = False
     multi_class_flag = False
-    try:
-        if y_test.shape[1] > 0:
-            multi_label_flag = True
-    except:
-        pass
-    ######## This is where you start printing metrics ###############
-    if len(np.unique(y_test)) > 2:
-        multi_class_flag = True
-        print('Multi Class Model Metrics Report')
-        print('#####################################################')
-    else:
-        print('Binary Class Model Metrics Report')
-        print('#####################################################')
     #### for some cases, you won't get proba, so check the proba_flag
     if proba_flag:
-        if multi_label_flag:
-            y_preds = (y_probs>0.5).astype(int)
-        else:
-            y_preds = y_probs.argmax(axis=1)
+        y_preds = y_probs.argmax(axis=1)
     else:
         y_preds = copy.deepcopy(y_probs)
+    ##### check if it is multi-class #####
+    if len(np.unique(y_test)) > 2:
+        multi_class_flag = True
+    
     if not multi_class_flag  and not multi_label_flag:
         # Calculate comparison metrics for Binary classification results.
         accuracy = metrics.accuracy_score(y_test, y_preds)
@@ -743,7 +719,7 @@ def predict_plot_images(model, test_ds, classes):
 
         plt.axis("off")
 #######################################################################################
-def get_model_defaults(keras_options, model_options):
+def get_model_defaults(keras_options, model_options, targets):
     num_classes = model_options["num_classes"]
     num_labels = model_options["num_labels"]
     modeltype = model_options["modeltype"]
@@ -756,43 +732,76 @@ def get_model_defaults(keras_options, model_options):
         val_metrics = check_keras_options(keras_options,'metrics',['mae','mse'])
         #val_metrics=['mae', 'mse']
         num_predicts = 1*num_labels
+        ####### If you change the val_metrics above, you must also change its name here ####
+        val_metric = 'mae'
         output_activation = 'linear' ### use "relu" or "softplus" if you want positive values as output
     elif modeltype == 'Classification':
         ##### This is for Binary Classification Problems
-        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
+        #val_metrics = [check_keras_options(keras_options,'metrics','AUC')]
+        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
+        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         val_loss = check_keras_options(keras_options,'loss', cat_loss)
         bal_acc = BalancedSparseCategoricalAccuracy()
         val_metrics = check_keras_options(keras_options,'metrics',bal_acc)
-        #val_metrics = [check_keras_options(keras_options,'metrics','AUC')]
-        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
-        num_predicts = int(num_classes*num_labels)
+        if num_labels <= 1:
+            num_predicts = int(num_classes*num_labels)
+        else:
+            #### This is for multi-label problems wihere number of classes will be a list
+            num_predicts = num_classes
         output_activation = "sigmoid"
+        ####### If you change the val_metrics above, you must also change its name here ####
+        val_metric = 'balanced_sparse_categorical_accuracy'
     else:
         #### this is for multi-class problems ####
         cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
-        val_loss = check_keras_options(keras_options,'loss', cat_loss)
-        bal_acc = BalancedSparseCategoricalAccuracy()
-        val_metrics = check_keras_options(keras_options, 'metrics', bal_acc)
         #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
-        num_predicts = int(num_classes*num_labels)
+        if num_labels <= 1:
+            num_predicts = int(num_classes*num_labels)
+            val_loss = check_keras_options(keras_options,'loss', cat_loss)
+            bal_acc = BalancedSparseCategoricalAccuracy()
+            val_metrics = check_keras_options(keras_options, 'metrics', bal_acc)
+        else:
+            #### This is for multi-label problems wihere number of classes will be a list
+            num_predicts = num_classes
+            val_loss = []
+            for i in range(num_labels):
+                val_loss.append(cat_loss)
+            bal_acc = BalancedSparseCategoricalAccuracy()
+            val_metrics = check_keras_options(keras_options, 'metrics', bal_acc)
         output_activation = 'softmax'
+        ####### If you change the val_metrics above, you must also change its name here ####
+        val_metric = 'balanced_sparse_categorical_accuracy'
     ##############  Suggested number of neurons in each layer ##################
     if modeltype == 'Regression':
-        val_monitor = check_keras_options(keras_options, 'monitor', 'val_mae')
+        val_monitor = check_keras_options(keras_options, 'monitor', 'val_'+val_metric)
         val_mode = check_keras_options(keras_options,'mode', 'min')
     elif modeltype == 'Classification':
         ##### This is for Binary Classification Problems
-        val_monitor = check_keras_options(keras_options,'monitor', 'val_balanced_sparse_categorical_accuracy')
+        if num_labels <= 1:
+            val_monitor = check_keras_options(keras_options,'monitor', 'val_'+val_metric)
+            val_mode = check_keras_options(keras_options,'mode', 'max')
+        else:
+            val_metric = 'balanced_sparse_categorical_accuracy'
+            ### you cannot combine multiple metrics here unless you write a new function.
+            target_A = targets[0]
+            val_monitor = 'val_loss' ### this combines all losses and is best to minimize
+            val_mode = check_keras_options(keras_options,'mode', 'min')
         #val_monitor = check_keras_options(keras_options,'monitor', 'val_auc')
         #val_monitor = check_keras_options(keras_options,'monitor', 'val_accuracy')
-        val_mode = check_keras_options(keras_options,'mode', 'max')
     else:
         #### this is for multi-class problems
-        val_monitor = check_keras_options(keras_options,'monitor', 'val_balanced_sparse_categorical_accuracy')
+        if num_labels <= 1:
+            val_monitor = check_keras_options(keras_options,'monitor', 'val_'+val_metric)
+            val_mode = check_keras_options(keras_options, 'mode', 'max')
+        else:
+            val_metric = 'balanced_sparse_categorical_accuracy'
+            ### you cannot combine multiple metrics here unless you write a new function.
+            target_A = targets[0]
+            val_monitor = 'val_loss'
+            val_mode = check_keras_options(keras_options,'mode', 'min')
         #val_monitor = check_keras_options(keras_options, 'monitor','val_accuracy')
-        val_mode = check_keras_options(keras_options, 'mode', 'max')
     ##############################################################################
     keras_options["mode"] = val_mode
     keras_options["monitor"] = val_monitor
@@ -802,6 +811,49 @@ def get_model_defaults(keras_options, model_options):
     keras_options['use_bias'] = use_bias
     keras_options['optimizer'] = optimizer
     return keras_options, model_options, num_predicts, output_activation
+###############################################################################
+def get_uncompiled_model(inputs, result, output_activation, 
+                    num_predicts, num_labels, cols_len, targets):
+    ### The next 3 steps are most important! Don't mess with them! 
+    #model_preprocessing = Model(inputs, meta_outputs)
+    #preprocessed_inputs = model_preprocessing(inputs)
+    #result = model_body(preprocessed_inputs)
+    ##### now you
+    multi_label_predictions = defaultdict(list)
+    if num_labels <= 1:
+        outputs = layers.Dense(num_predicts, activation=output_activation,
+                            name=targets[0])(result)
+    else:
+        for each_label in range(num_labels):
+            key = 'predictions'
+            value = layers.Dense(num_predicts[each_label], activation=output_activation,
+                                name=targets[each_label])(result)
+            multi_label_predictions[key].append(value)
+        outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
+
+    ##### Set the inputs and outputs of the model here
+    uncompiled_model = Model(inputs=inputs, outputs=outputs)
+    return uncompiled_model
+
+def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, num_labels, 
+                       optimizer, val_loss, val_metrics, cols_len, targets):
+    model = get_uncompiled_model(inputs, meta_outputs, output_activation, 
+                        num_predicts, num_labels, cols_len, targets)
+    model.compile(
+        optimizer=optimizer,
+        loss=val_loss,
+        metrics=val_metrics,
+    )
+    return model
+###############################################################################
+def add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs):
+    ##### This is the simplest way to convert a sequential model to functional!
+    for num, each_layer in enumerate(model_body.layers):
+        if num == 0:
+            final_outputs = each_layer(meta_outputs)
+        else:
+            final_outputs = each_layer(final_outputs)
+    return final_outputs
 
 ###############################################################################
 class BalancedSparseCategoricalAccuracy(keras.metrics.SparseCategoricalAccuracy):
@@ -829,3 +881,110 @@ def check_keras_options(keras_options, name, default):
         value = default
     return value
 #####################################################################################
+# Callback for printing the LR at the end of each epoch.
+class PrintLR(tf.keras.callbacks.Callback):
+  def on_epoch_end(self, epoch, logs=None):
+    print('\nLearning rate for epoch {} is {}'.format(epoch + 1,
+                                                      self.model.optimizer.lr.numpy()))
+#######################################################################################
+# Function for decaying the learning rate.
+# You can define any decay function you need.
+def schedules(epoch):
+    return 1e-2 * (0.95 ** np.floor(epoch / 2))
+
+def decay(epoch):
+    return 0.01 - 0.02 * (0.5 ** (1 + epoch))
+#####################################################################################
+import os
+def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_only, steps=100):
+    """
+    ####################################################################################
+    #####    LEARNING RATE SCHEDULING : Setup Learning Rate Multiple Ways #########
+    ####################################################################################
+    """
+    logdir = "deep_autoviml"
+    callbacks_dict = {}
+    tensorboard_logpath = os.path.join(logdir,"mylogs")
+    print('    Tensorboard log directory can be found at: %s' %tensorboard_logpath)
+
+    cp = keras.callbacks.ModelCheckpoint("deep_autoviml", save_best_only=True,
+                                         save_weights_only=save_weights_only, save_format='tf')
+    ### sometimes a model falters and restore_best_weights gives len() not found error. So avoid True option!
+    lr_patience = max(5,int(patience*0.5))
+    rlr = keras.callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.90,
+                    patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.00001, cooldown=0, verbose=1)
+
+    ###### This is one variation of onecycle #####
+    onecycle = OneCycleScheduler(steps=steps, lr_max=1e-4)
+
+    ###### This is another variation of onecycle #####
+    onecycle2 = OneCycleScheduler2(iterations=steps, max_rate=1e-3)
+
+    lr_sched = keras.callbacks.LearningRateScheduler(schedules)
+
+      # Setup Learning Rate decay.
+    lr_decay_cb = keras.callbacks.LearningRateScheduler(decay)
+
+    es = keras.callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
+                        verbose=1, mode=val_mode, baseline=None, restore_best_weights=True)
+    
+    tb = keras.callbacks.TensorBoard(tensorboard_logpath)
+
+    pr = PrintLR()
+    
+    callbacks_dict['onecycle'] = onecycle
+    callbacks_dict['onecycle2'] = onecycle2
+    callbacks_dict['cp'] = cp
+    callbacks_dict['lr_sched'] = lr_sched
+    callbacks_dict['es'] = es
+    callbacks_dict['tb'] = tb
+    callbacks_dict['pr'] = pr
+    callbacks_dict['rlr'] = rlr
+    callbacks_dict['lr_decay_cb'] = lr_decay_cb
+
+    return callbacks_dict, tensorboard_logpath
+####################################################################################
+def get_chosen_callback(callbacks_dict, keras_options):
+    ##### Setup Learning Rate decay.
+    #### Onecycle is another fast way to find the best learning in large datasets ######
+    ##########  This is where we look for various schedulers
+    if keras_options['lr_scheduler'] == "onecycle2":
+        lr_scheduler = callbacks_dict['onecycle2']
+    elif keras_options['lr_scheduler'] == 'onecycle':
+        lr_scheduler = callbacks_dict['onecycle']
+    elif keras_options['lr_scheduler'] == 'rlr':
+        lr_scheduler = callbacks_dict['rlr']
+    elif keras_options['lr_scheduler'] == 'decay':
+        lr_scheduler = callbacks_dict['lr_decay_cb']
+    else:
+        lr_scheduler = callbacks_dict['lr_sched']
+        keras_options['lr_scheduler'] = "lr_sched"
+    print('Selected keras LR scheduler = %s' %keras_options['lr_scheduler'])
+    return lr_scheduler
+################################################################################################
+import math
+class OneCycleScheduler2(keras.callbacks.Callback):
+    def __init__(self, iterations, max_rate, start_rate=None,
+                 last_iterations=None, last_rate=None):
+        self.iterations = iterations
+        self.max_rate = max_rate
+        self.start_rate = start_rate or max_rate / 10
+        self.last_iterations = last_iterations or iterations // 10 + 1
+        self.half_iteration = (iterations - self.last_iterations) // 2
+        self.last_rate = last_rate or self.start_rate / 1000
+        self.iteration = 0
+    def _interpolate(self, iter1, iter2, rate1, rate2):
+        return ((rate2 - rate1) * (self.iteration - iter1)
+                / (iter2 - iter1) + rate1)
+    def on_batch_begin(self, batch, logs):
+        if self.iteration < self.half_iteration:
+            rate = self._interpolate(0, self.half_iteration, self.start_rate, self.max_rate)
+        elif self.iteration < 2 * self.half_iteration:
+            rate = self._interpolate(self.half_iteration, 2 * self.half_iteration,
+                                     self.max_rate, self.start_rate)
+        else:
+            rate = self._interpolate(2 * self.half_iteration, self.iterations,
+                                     self.start_rate, self.last_rate)
+        self.iteration += 1
+        K.set_value(self.model.optimizer.lr, rate)
+#####################################################################################################

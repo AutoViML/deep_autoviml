@@ -79,7 +79,7 @@ def left_subtract(l1,l2):
     return lst
 #############################################################################################
 def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
-                           keras_options, model_options, cat_feat_cross_flag=False, verbose=0):
+                           keras_options, model_options, verbose=0):
     """
     Remember this is the most valuable part of this entire library!
     This is one humongous preprocessing step to build everything needed for preprocessing into a keras model!
@@ -92,6 +92,9 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     num_labels = model_options["num_labels"]
     modeltype = model_options["modeltype"]
     embedding_size = model_options["embedding_size"]
+    cat_feat_cross_flag = model_options["cat_feat_cross_flag"]
+    targets = cat_vocab_dict["target_variables"]
+
     batch_size = 32
     ##### set the defaults for the LSTM or GRU model here #########################
     # Convolution
@@ -127,7 +130,8 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     ###########     F E A T U R E    P R E P R O C E S S I N G   H E R E      #######
     #################################################################################
     nlps = var_df['nlp_vars']
-    keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, model_options)
+    keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, 
+                                    model_options, targets)
     ##################  NLP Text Features are Proprocessed Here  ################
     nlp_inputs = []
     nlp_names = []

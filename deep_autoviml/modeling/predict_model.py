@@ -28,6 +28,8 @@ np.set_printoptions(precision=3, suppress=True)
 ############################################################################################
 # TensorFlow ≥2.4 is required
 import tensorflow as tf
+import tensorflow_text as text
+
 np.random.seed(42)
 tf.random.set_seed(42)
 from tensorflow.keras import layers
@@ -124,12 +126,15 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
             no_cat_vocab_dict = True
     ####################################################
     ### classify variables using the small dataframe ##
+    model_options = {}
     if no_cat_vocab_dict:
+        model_options['DS_LEN'] = 10000  ### Just set some default #######
         var_df, cat_vocab_dict = classify_features_using_pandas(test_small, target=target_name, 
-                                    model_options={}, verbose=verbose)
+                                    model_options=model_options, verbose=verbose)
     else:
+        model_options['DS_LEN'] = cat_vocab_dict['DS_LEN'] ### you need this to classify features
         var_df, _ = classify_features_using_pandas(test_small, target=target_name, 
-                            model_options={}, verbose=verbose)
+                            model_options=model_options, verbose=verbose)
     ############  Now load the file or dataframe into tf.data.DataSet here #################
     preds = list(test_small)
     #batch_size = 64   ## artificially set a size ###
@@ -180,9 +185,10 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
                 #print('\ntarget variable is blank - continuing')
                 data_batches = tf.data.Dataset.from_tensor_slices(dict(test_small))
         elif isinstance(target, list):
-                labels = test_small[target]
-                test_small.drop(target, axis=1, inplace=True)
-                data_batches = tf.data.Dataset.from_tensor_slices((dict(test_small), labels))
+            ##### For multi-label problems, you need to use dict of labels as well ###
+            labels = test_small[target]
+            test_small.drop(target, axis=1, inplace=True)
+            data_batches = tf.data.Dataset.from_tensor_slices((dict(test_small), dict(labels)))
         else:
             data_batches = tf.data.Dataset.from_tensor_slices(dict(test_small))
         ### batch it if you are creating it from a dataframe
@@ -281,13 +287,103 @@ def predict(model_or_model_path, project_name, test_dataset,
         num_steps = 1
     #########  See if you can predict here if not return the null result #####
     print('    number of steps needed to predict: %d' %num_steps)
+    y_test_preds_list = []
+    targets = cat_vocab_dict2['target_variables']
+    
     try:
-        y_probas = model.predict(test_ds, steps=num_steps)[:DS_LEN,:]
+        y_probas = model.predict(test_ds, steps=num_steps)
+        if len(targets) == 1:
+            y_test_preds_list.append(y_probas)    
+        else:
+            y_test_preds_list = copy.deepcopy(y_probas)
     except Exception as error:
         print('Could not predict using given model and inputs.\nError: %s\n Please check your inputs and try again.' %error)
-        return []
+        return y_test_preds_list
+
+    ##### Now you need to save the predictions ###
+    modeltype = cat_vocab_dict2['modeltype']
+
+    if len(targets) == 1:
+        if modeltype != 'Regression':
+            y_test_preds = y_probas.argmax(axis=1)
+        else:
+            if y_test.dtype == 'int':
+                y_test_preds = y_probas.round().astype(int)
+            else:
+                y_test_preds = y_probas.ravel()
+    else:
+        if modeltype != 'Regression':
+            #### This is for multi-label binary or multi-class problems ##
+            for each_t in range(len(targets)):
+                if each_t == 0:
+                    y_test_preds = y_probas[each_t].argmax(axis=1).astype(int)
+                else:
+                    y_test_preds = np.c_[y_test_preds, y_probas[each_t].argmax(axis=1).astype(int)]
+        else:
+            ### This is for Multi-Label Regression ###
+            for each_t in range(len(targets)):
+                if each_t == 0:
+                    y_test_preds = y_probas[each_t].mean(axis=1)
+                else:
+                    y_test_preds = np.c_[y_test_preds, y_probas[each_t].mean(axis=1)]
+                if y_test.dtype == 'int':
+                    y_test_preds = y_test_preds.round().astype(int)
+
+    ##### Now you have to convert the output to original classes and labels ####
+    
+    num_labels = cat_vocab_dict['num_labels']
+    num_classes = cat_vocab_dict['num_classes']
+    if num_labels <= 1:
+        #### This is for Single-Label Problems only ################################
+        if modeltype == 'Regression':
+            y_pred = copy.deepcopy(y_test_preds)
+        else:
+            labels = cat_vocab_dict['original_classes']
+            if cat_vocab_dict['target_transformed']:
+                target_names = cat_vocab_dict['transformed_classes']
+                target_le = cat_vocab_dict['target_le']
+                y_pred = y_probas.argmax(axis=1)
+                y_pred = target_le.inverse_transform(y_pred)
+            else:
+                y_pred = y_probas.argmax(axis=1)
+    else:
+        if modeltype == 'Regression':
+            #### This is for Multi-Label Regression ################################
+            y_pred = copy.deepcopy(y_test_preds)
+        else:
+            #### This is for Multi-Label Classification ################################
+            try:
+                for i, each_target in enumerate(targets):
+                    labels = cat_vocab_dict[each_target+'_original_classes']
+                    if cat_vocab_dict['target_transformed']:
+                        ###### Use a nice classification matrix printing module here #########
+                        target_names = cat_vocab_dict[each_target+'_transformed_classes']
+                        target_le = cat_vocab_dict['target_le'][i]
+                        y_pred_trans = y_probas[i].argmax(axis=1)
+                        y_pred_trans = target_le.inverse_transform(y_pred_trans)
+                        if i == 0:
+                            y_pred = copy.deepcopy(y_pred_trans)
+                        else:
+                            y_pred = np.c_[y_pred, y_pred_trans]
+                    else:
+                        y_pred_trans = y_probas[i].argmax(axis=1)
+                        if i == 0:
+                            y_pred = copy.deepcopy(y_pred_trans)
+                        else:
+                            y_pred = np.c_[y_pred, y_pred_trans]
+            except:
+                print('Error in inverse transforming predictions...')
+                y_pred = y_test_preds
+
+    #### save the predictions only upto input size ###
+    if num_labels <= 1:
+        y_test_preds = y_pred[:DS_LEN]
+    else:
+        y_test_preds = y_pred[:DS_LEN,:]
+
     ###### Now collect the predictions if there are more than one target ###
-    y_test_preds_list = convert_predictions_from_model(y_probas, cat_vocab_dict2)
+    y_test_preds_list.append(y_test_preds)
+
     #####  We now show how many items are in the output  ###################
     print('Returning model predictions in form of a list...of length %d' %len(y_test_preds_list))
     print('Time taken in mins for predictions = %0.0f' %((time.time()-start_time2)/60))

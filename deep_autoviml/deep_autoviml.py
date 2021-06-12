@@ -184,7 +184,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                     We will figure out single label or multi-label problem based on your target 
                             being string or list.
             "header": default = 0 ### this is the header row for pandas to read
-            "max_trials": default = 10 ## number of Storm Tuner trials ###
+            "max_trials": default = 30 ## number of Storm Tuner trials ### Lower this for faster processing.
             "tuner": default = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
             "embedding_size": default = 50 ## this is the NLP embedding size minimum
             "tf_hub_model": default "" (empty string). If you want to supply TF hub model, provide URL here.
@@ -277,7 +277,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     model_options_defaults["variable_cat_limit"] = 30
     model_options_defaults["csv_encoding"] = 'utf-8'
     model_options_defaults["header"] = 0 ### this is the header row for pandas to read
-    model_options_defaults["max_trials"] = 10 ## number of Storm Tuner trials ###
+    model_options_defaults["max_trials"] = 30 ## number of Storm Tuner trials ###
     model_options_defaults['tuner'] = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
     model_options_defaults["embedding_size"] = "" ## this is the NLP embedding size minimum
     model_options_defaults["tf_hub_model"] = "" ## If you want to use a pretrained Hub model, provide URL here.
@@ -294,18 +294,11 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 print('    %s : %s' %(key, model_options_copy[key]))
                 model_options[key] = model_options_copy[key]
 
-    BUFFER_SIZE = int(1e4)
-
-    idcols = model_options["idcols"]
-    modeltype = model_options["modeltype"]
-    sep = model_options["sep"]
-    csv_encoding = model_options["csv_encoding"]
-    model_use_case = model_options["model_use_case"]
-    nlp_char_limit = model_options["nlp_char_limit"]
-    cat_feat_cross_flag = model_options["cat_feat_cross_flag"]
-    variable_cat_limit = model_options["variable_cat_limit"]
-    header = model_options["header"]
-    max_trials = model_options["max_trials"]
+    if keras_model_type.lower() in ['fast', 'fast1', 'fast2']:
+        print('Max Trials is 10 for faster processing. Please increase max_trials if you want more performance...')
+        model_options["max_trials"] = 10
+    else:
+        print('Max Trials : %s. Please lower max_trials if you want to run faster...' %model_options["max_trials"])
 
     print("""
 #################################################################################
@@ -314,7 +307,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         """)
     dft, model_options, batched_data, var_df, cat_vocab_dict, keras_options = load_train_data(
                                     train_data_or_file, target, project_name, keras_options, 
-                                    model_options, model_use_case=model_use_case, verbose=verbose)
+                                    model_options, verbose=verbose)
 
     try:
         data_size = cat_vocab_dict['DS_LEN']
@@ -334,7 +327,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     nlp_inputs, meta_inputs, meta_outputs = perform_preprocessing(batched_data, var_df, 
                                                 cat_vocab_dict, keras_model_type, 
                                                 keras_options, model_options, 
-                                                cat_feat_cross_flag, verbose)
+                                                verbose)
 
     if isinstance(model_use_case, str):
         if model_use_case:
@@ -352,6 +345,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 #################################################################################
         ''')
     ######### this is where you get the model body either by yourself or sent as input ##
+    fast_models = ['deep_and_wide','deep_wide','wide_deep', 'wide_and_deep','deep wide', 
+            'wide deep', 'fast', 'fast1', 'deep_and_cross', 'deep cross', 'deep and cross'] 
     ##### This takes care of providing multi-output predictions! ######
     inputs = nlp_inputs+meta_inputs
     model_body, keras_options =  create_model(use_my_model, inputs, meta_outputs, 
@@ -359,54 +354,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                                         model_options, cat_vocab_dict)
     
     ###########    C O M P I L E    M O D E L    H E R E         #############
-    if not keras_model_type.lower() == 'auto':
-        ###### This is where you compile the model after it is built ###############
-        num_classes = model_options["num_classes"]
-        num_labels = model_options["num_labels"]
-        modeltype = model_options["modeltype"]
-        val_mode = keras_options["mode"]
-        val_monitor = keras_options["monitor"]
-        val_loss = keras_options["loss"]
-        val_metrics = keras_options["metrics"]
-        if not keras_options['optimizer']:
-            ### if it is an empty string, use the default Adam optimizer
-            optimizer = Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999)
-        else:
-            optimizer = return_optimizer(keras_options['optimizer'])
-        if modeltype == 'Regression':
-            num_predicts = 1*num_labels
-            output_activation = "linear"
-        elif modeltype == 'Classification':
-            num_predicts = int(num_classes*num_labels)
-            output_activation = "sigmoid"
-        else:
-            num_predicts = int(num_classes*num_labels)
-            output_activation = "sigmoid"
-        #### For every keras_model_type other than "auto" use this #################
-        if keras_model_type in ['fast1', 'fast2', 'fast']:
-            print('    Not adding inputs and outputs to model. Compiling model...')
-            deep_model = model_body
-            deep_model.compile(
-                    optimizer=optimizer,
-                    loss=val_loss,
-                    metrics=val_metrics,
-                        )
-            print('    compiled.')
-        else:
-            print('Loading a pre-built %s model...' %keras_model_type)
-            final_outputs = add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs)
-            #### This final outputs is the one that is taken into final dense layer and compiled
-            print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
-            ######  You need to compile the non-auto models here ###############
-            deep_model = get_compiled_model(inputs, final_outputs, output_activation, num_predicts, 
-                                    num_labels, model_body, optimizer, val_loss, val_metrics, dft.shape[1])
-        if dft.shape[1] > 100:
-            print('Too many columns to show model summary. Continuing...')
-        else:
-            print(deep_model.summary())
-    else:
-        ### For auto models we will add input and output layers later. See below... #########
-        deep_model = model_body
+    ### For auto models we will add input and output layers later. See below... #########
+    deep_model = model_body
 
     if dft.shape[1] <= 100 :
         plot_filename = 'deep_autoviml_'+project_name+'_'+keras_model_type+'_model_before.png'

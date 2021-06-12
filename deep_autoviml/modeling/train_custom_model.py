@@ -57,11 +57,12 @@ from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, pri
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
 from deep_autoviml.utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
-from deep_autoviml.utilities.utilities import check_if_GPU_exists
-from deep_autoviml.utilities.utilities import save_valid_predictions
+from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_chosen_callback
+from deep_autoviml.utilities.utilities import save_valid_predictions, get_callbacks
+from deep_autoviml.utilities.utilities import print_classification_header
+from deep_autoviml.utilities.utilities import get_model_defaults, check_keras_options
 
 from deep_autoviml.data_load.extract import find_batch_size
-from deep_autoviml.modeling.create_model import check_keras_options
 from deep_autoviml.modeling.one_cycle import OneCycleScheduler
 #####################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
@@ -89,6 +90,8 @@ def left_subtract(l1,l2):
 ##############################################################################################
 import time
 import os
+import math
+
 from sklearn.metrics import balanced_accuracy_score, classification_report
 from sklearn.metrics import confusion_matrix, roc_auc_score, accuracy_score
 from collections import defaultdict
@@ -100,52 +103,6 @@ from tensorflow.keras import callbacks
 #########################################################################################
 from storm_tuner import Tuner
 #########################################################################################
-# Callback for printing the LR at the end of each epoch.
-class PrintLR(tf.keras.callbacks.Callback):
-  def on_epoch_end(self, epoch, logs=None):
-    print('\nLearning rate for epoch {} is {}'.format(epoch + 1,
-                                                      self.model.optimizer.lr.numpy()))
-#######################################################################################
-# Function for decaying the learning rate.
-# You can define any decay function you need.
-def schedules(epoch):
-    return 1e-2 * (0.95 ** np.floor(epoch / 2))
-
-def decay(epoch):
-    return 0.01 - 0.02 * (0.5 ** (1 + epoch))
-#####################################################################################
-import os
-def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_only):
-    logdir = "deep_autoviml"
-    tensorboard_logpath = os.path.join(logdir,"mylogs")
-    #print('    Tensorboard log directory can be found at: %s' %tensorboard_logpath)
-    cp = keras.callbacks.ModelCheckpoint("deep_autoviml", save_best_only=True,
-                                         save_weights_only=save_weights_only, save_format='tf')
-    ### sometimes a model falters and restore_best_weights gives len() not found error. So avoid True option!
-    lr_patience = max(5,int(patience*0.5))
-    rlr = callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.90,
-                    patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.00001, cooldown=0, verbose=1)
-
-    steps = 10
-    #onecycle = OneCycleScheduler(iterations=steps, max_rate=0.05)
-    onecycle = OneCycleScheduler(steps=steps, lr_max=0.1)
-
-    lr_sched = callbacks.LearningRateScheduler(schedules)
-
-      # Setup Learning Rate decay.
-    lr_decay_cb = callbacks.LearningRateScheduler(decay)
-
-    es = callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
-                        verbose=1, mode=val_mode, baseline=None, restore_best_weights=True)
-    
-    tb = callbacks.TensorBoard(tensorboard_logpath)
-
-    pr = PrintLR()
-    
-    callbacks_list = [cp, lr_sched, es, tb, pr]
-
-    return callbacks_list, tensorboard_logpath
-####################################################################################
 ### Split raw_train_set into train and valid data sets first
 ### This is a better way to split a dataset into train and test ####
 ### It does not assume a pre-defined size for the data set.
@@ -180,7 +137,7 @@ def reset_keras():
     set_session(tf.compat.v1.Session(config=config))
 ##################################################################################
 def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predicts, 
-                        num_labels, optimizer_options, loss_fn, val_metrics, cols_len):
+                        num_labels, optimizer_options, loss_fn, val_metrics, cols_len, targets):
 
     #tf.compat.v1.reset_default_graph()
     #K.clear_session()
@@ -245,13 +202,28 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     opt_outputs = add_inputs_outputs_to_model_body(model, inputs, meta_outputs)
 
     comp_model = get_compiled_model(inputs, opt_outputs, output_activation, num_predicts, 
-                        num_labels, model, optimizer, loss_fn, val_metrics, cols_len)
+                        num_labels, optimizer, loss_fn, val_metrics, cols_len, targets)
 
     return comp_model
 
 ###############################################################################
-def build_model_storm(hp):
+def build_model_storm(hp, *args):
+    #### Before every sequential model definition you need to clear the Keras backend ##
+    keras.backend.clear_session()
 
+    ######  we need to use the batch_size in a few small sizes ####
+    if len(args) == 2:
+        batch_limit, batch_nums = args[0], args[1]
+        batch_size = hp.Param('batch_size', sorted(np.linspace(16,
+                batch_limit, batch_nums).astype(int), reverse=True),
+                 ordered=True)
+    elif len(args) == 1:
+        batch_size = args[0]
+        hp.Param('batch_size', [batch_size])
+    else:
+        hp.Param('batch_size', [32])
+
+    ##### Now let us build the model body ###############
     model_body = Sequential([])
 
     # example of model-wide unordered categorical parameter
@@ -316,13 +288,20 @@ def build_model_storm(hp):
             # but have different values for unused parameters
             model_body.add(Dropout(dropout_value, name="dropout_"+str(x+1)))
 
-    return model_body
+    selected_optimizer = hp.Param('optimizer', ["Adam", "AdaMax", "Adagrad", "SGD", "RMSprop", "Nadam", 'nesterov'],
+                                  ordered=False)
+    optimizer = return_optimizer_trials(hp, selected_optimizer)
+
+    return model_body, optimizer
+
 ############################################################################################
 class MyTuner(Tuner):
 
     def run_trial(self, trial, *args):
         hp = trial.hyperparameters
-        model_body = build_model_storm(hp)
+        #### Before every sequential model definition you need to clear the Keras backend ##
+        keras.backend.clear_session()
+
         ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
         train_ds, valid_ds = args[0], args[1]
         epochs, steps =  args[2], args[3]
@@ -334,10 +313,11 @@ class MyTuner(Tuner):
         val_mode, DS_LEN = args[14], args[15]
         learning_rate, val_monitor = args[16], args[17]
         callbacks_list, modeltype = args[18], args[19]
-        class_weights =  args[20]
+        class_weights, batch_size =  args[20], args[21]
+        batch_limit, batch_nums =  args[22], args[23]
+        targets = args[24]
 
-        ##  now load the model_body and convert it to functional model
-        #print('Loading custom model...')
+        model_body, optimizer = build_model_storm(hp, batch_limit, batch_nums)
 
         ##### This is the simplest way to convert a sequential model to functional model!
         storm_outputs = add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs)
@@ -347,22 +327,9 @@ class MyTuner(Tuner):
 
         ###### This is where you compile the model after it is built ###############
         #### Add a final layer for outputs during compiled model phase #############
-        np.random.seed(42)
-        selected_optimizer = hp.Param('optimizer', ["Adam","AdaMax","Adagrad","SGD",
-                                "RMSprop","Nadam",'nesterov'],
-                            ordered=False)
-        optimizer = return_optimizer_trials(hp, selected_optimizer)
-        
         comp_model = get_compiled_model(inputs, storm_outputs, output_activation, num_predicts, 
-                            num_labels, model_body, optimizer, val_loss, val_metrics, cols_len)
+                            num_labels, optimizer, val_loss, val_metrics, cols_len, targets)
 
-        # here we can access params generated in the builder function
-        # example of supplementary paramteter that will be accessed elsewhere  ##
-        batch_limit = int(2*find_batch_size(DS_LEN))
-        batch_nums = int(max(10, 0.1*batch_limit))
-        batch_size = hp.Param('batch_size', sorted(np.linspace(32,
-                            batch_limit,batch_nums).astype(int),reverse=True),
-                            ordered=True)
         #print('    Custom model compiled successfully. Training model next...')
         shuffle_size = 1000000
         #batch_size = hp.Param('batch_size', [64, 128, 256], ordered=True)
@@ -382,8 +349,9 @@ class MyTuner(Tuner):
             score = np.mean(history.history[val_monitor][-5:])
         else:
             for i in range(num_labels):
-                val_metric = val_monitor.split("_")[-1]
-                val_metric = 'val_output_'+str(i)+'_' + val_metric
+                ### the next line uses the list of metrics to find one that is a closest match
+                metric1 = [x for x in history.history.keys() if (targets[i] in x) & ("loss" not in x) ]
+                val_metric = metric1[0]
                 if i == 0:
                     results = history.history[val_metric][-5:]
                 else:
@@ -392,10 +360,11 @@ class MyTuner(Tuner):
             #scores.append(score)
         ##### This is where we capture the best learning rate from the optimizer chosen ######
         model_lr = comp_model.optimizer.learning_rate.numpy()
+        
         self.user_var = model_lr
         #print('    model lr = %s' %model_lr)
         trial.metrics['final_lr'] = history.history['lr'][-1]
-        #print('    trial lr = %s' %trial.metrics['final_lr'])
+        #print('    trial final_lr = %s' %trial.metrics['final_lr'])
         self.score_trial(trial, score) 
         #self.score_trial(trial, min(scores)) 
 #####################################################################################
@@ -487,6 +456,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     """
     start_time = time.time()
     ########################   STORM TUNER and other DEFAULTS     ####################
+    targets = cat_vocab_dict['target_variables']
     max_trials = model_options["max_trials"]
     overwrite_flag = True ### This overwrites the trials so every time it runs it is new
     data_size = check_keras_options(keras_options, 'data_size', 10000)
@@ -526,20 +496,14 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     lr_scheduler = check_keras_options(keras_options, 'lr_scheduler', "")
     onecycle_steps = max(10, np.ceil(data_size/(2*batch_size))*NUMBER_OF_EPOCHS)
     print('    Onecycle steps = %d' %onecycle_steps)
-    #######################################################################
+    ######################   set some defaults for model parameters here ##############
+    keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, 
+                                                                    model_options, targets)
+    ###################################################################################
     val_mode = keras_options["mode"]
     val_monitor = keras_options["monitor"]
     val_loss = keras_options["loss"]
     val_metrics = keras_options["metrics"]
-    if modeltype == 'Regression':
-        num_predicts = 1*num_labels
-        output_activation = "linear"
-    elif modeltype == 'Classification':
-        num_predicts = int(num_classes*num_labels)
-        output_activation = "sigmoid"
-    else:
-        num_predicts = int(num_classes*num_labels)
-        output_activation = "sigmoid"
     ########################################################################
     print('    loss fn = %s\n    num predicts = %s, output_activation = %s' %(
                         val_loss, num_predicts, output_activation))
@@ -553,8 +517,11 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print('    steps_per_epoch = %s, number epochs = %s' %(STEPS_PER_EPOCH, NUMBER_OF_EPOCHS))
     print('    val mode = %s, val monitor = %s, patience = %s' %(val_mode, val_monitor, patience))
 
-    callbacks_list, tb_logpath = get_callbacks(val_mode, val_monitor, patience,
-                                               learning_rate, save_weights_only)
+    onecycle_steps = math.ceil(STEPS_PER_EPOCH * NUMBER_OF_EPOCHS)
+    print('    recommended OneCycle steps = %d' %onecycle_steps)
+
+    callbacks_dict, tb_logpath = get_callbacks(val_mode, val_monitor, patience,
+                                    learning_rate, save_weights_only, onecycle_steps)
 
     ###### You can use Storm Tuner to set the batch size ############
     ############## Split train into train and validation datasets here ###############
@@ -571,7 +538,24 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ###   V E R Y    I M P O R T A N T  S T E P   B E F O R E   M O D E L   F I T  ###    
     ##################################################################################
     shuffle_size = 100000
-    y_test = np.concatenate(list(heldout_ds.map(lambda x,y: y).as_numpy_iterator()))
+    
+    if num_labels <= 1:
+        y_test = np.concatenate(list(heldout_ds.map(lambda x,y: y).as_numpy_iterator()))
+        print('Single-Label: Heldout data shape: %s' %(y_test.shape,))
+    else:
+        iters = int(data_size/batch_size) + 1
+        for inum, each_target in enumerate(target):
+            add_ls = []
+            for feats, labs in heldout_ds.take(iters): 
+                add_ls.append(list(labs[each_target].numpy()))
+            flat_list = [item for sublist in add_ls for item in sublist]
+            if inum == 0:
+                each_array = np.array(flat_list)
+            else:
+                each_array = np.c_[each_array, np.array(flat_list)]
+        y_test = copy.deepcopy(each_array)
+        print('Multi-Label: Heldout data shape: %s' %(y_test.shape,))
+
     if modeltype == 'Regression':
         if (y_test>=0).all() :
             ### if there are no negative values, then set output as positives only
@@ -592,49 +576,15 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     tf.compat.v1.reset_default_graph()
     K.clear_session()
     
-    print_one_row_from_tf_label(heldout_ds)
-
-    ####################################################################################
-    #####    LEARNING RATE CHEDULING : Setup Learning Rate Multiple Ways #########
-    ####################################################################################
-
-    ####  This lr_sched is a fast way to reduce LR but it can easily overfit quickly #####
-    #### lr_decay originally used to give good results but not anymore #######
-    lr_sched = callbacks.LearningRateScheduler(schedules)
-
-    ## RLR is the easiest one to handle as it reduces learning rate when there is no improvement ##
-    lr_patience = max(5,int(patience*0.5))
-    rlr = callbacks.ReduceLROnPlateau(monitor=val_monitor, factor=0.95,
-                    patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.001, cooldown=0, verbose=1)
+    if verbose:
+        print_one_row_from_tf_label(heldout_ds)
 
     #######################################################################################
     ###    E A R L Y    S T O P P I N G    T O    P R E V E N T   O V E R F I T T I N G  ##
     #######################################################################################
-    ### Early Stopping is great for preventing overfitting ####
-    es = callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
-                        verbose=1, mode=val_mode, baseline=None, restore_best_weights=True)
-
-    # Setup Learning Rate decay.
-    lr_decay_cb = callbacks.LearningRateScheduler(decay)
-
-    #### Onecycle is another fast way to find the best learning in large datasets ######
-    onecycle = OneCycleScheduler(steps=onecycle_steps, lr_max=0.05)
-
-    if keras_options['lr_scheduler'] == "scheduler":
-        lr_scheduler = lr_sched
-    elif keras_options['lr_scheduler'] == 'onecycle':
-        lr_scheduler = onecycle
-    elif keras_options['lr_scheduler'] == 'rlr':
-        lr_scheduler = rlr   #onecycle
-    elif keras_options['lr_scheduler'] == 'decay':
-        lr_scheduler = lr_decay_cb
-    else:
-        lr_scheduler = onecycle
-        keras_options['lr_scheduler'] = "onecycle"
-    print('Keras Learning Rate Scheduler = %s' %keras_options['lr_scheduler'])
-
-    callbacks_list_tuner = [rlr, es]
-    
+    chosen_callback = get_chosen_callback(callbacks_dict, keras_options)
+    callbacks_list_tuner = [chosen_callback, callbacks_dict['es']]
+    targets = cat_vocab_dict["target_variables"]
     ############################################################################
     ########     P E R FO R M     T U N I N G    H E R E  ######################
     ############################################################################
@@ -659,70 +609,71 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         print('    STORM Tuner max_trials = %d, randomization factor = %0.1f' %(
                             max_trials, randomization_factor))
         tuner_epochs = 100  ### keep this low so you can run fast
-        tuner_steps = steps  ## keep this also very low 
+        tuner_steps = STEPS_PER_EPOCH  ## keep this also very low 
+        batch_limit = int(2 * find_batch_size(data_size))
+        batch_nums = int(min(5, 0.1 * batch_limit))
+        print('Max. batch size = %d, number of batch sizes to try: %d' %(batch_limit, batch_nums))
+
         #### You have to make sure that inputs are unique, otherwise error ####
         tuner.search(train_ds, valid_ds, tuner_epochs, tuner_steps, 
                             inputs, meta_outputs, cols_len, output_activation,
                             num_predicts, num_labels, optimizer, val_loss,
                             val_metrics, patience, val_mode, data_size,
                             learning_rate, val_monitor, callbacks_list_tuner,
-                            modeltype,  class_weights)
+                            modeltype,  class_weights, batch_size, 
+                            batch_limit, batch_nums, targets)
         best_trial = tuner.get_best_trial()
         print('    best trial selected as %s' %best_trial)
         ##### get the best model parameters now. Also split it into two models ###########
-        hpq = tuner.get_best_config()
-        try:
-            best_model = build_model_storm(hpq)
-            deep_model = build_model_storm(hpq)
-        except:
-            ### Sometimes the tuner cannot find a config that works!
-            deep_model = return_model_body(keras_options)
-            best_model = return_model_body(keras_options)
-
         print('Time taken for tuning hyperparameters = %0.0f (mins)' %((time.time()-start_time1)/60))
         ##########    S E L E C T   B E S T   O P T I M I Z E R and L R  H E R E ############
         try:
-            #optimizer_lr = tuner.model_lr
-            optimizer_lr = best_trial.metrics['final_lr']
-        except:
-            optimizer_lr = 0.01
-            print('    trial lr erroring. Seting default LR as %s' %optimizer_lr)
-        try:
+            hpq = tuner.get_best_config()
+            best_model, best_optimizer = build_model_storm(hpq, batch_size)
             best_batch = hpq.values['batch_size']
             hpq_optimizer = hpq.values['optimizer']
-            best_optimizer = return_optimizer(hpq_optimizer)
+            optimizer_lr = best_trial.metrics['final_lr']
+            print('\nBest optimizer = %s and best learning_rate = %s' %(hpq_optimizer, optimizer_lr))
+            print('Best hyperparameters: %s' %hpq.values)
         except:
+            ### Sometimes the tuner cannot find a config that works!
+            deep_model = return_model_body(keras_options)
             ### In some cases, the tuner doesn't select a good config in that case ##
             best_batch = batch_size
             hpq_optimizer = 'SGD'
             best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
+            optimizer_lr = 0.01
+            print('    Storm Tuner is erroring. Hence picking defaults including lr = %s' %optimizer_lr)
+
+        ### Sometimes the learning rate is below zero - so reset it here!
         ### Set the learning rate for the best optimizer here ######
         if optimizer_lr < 0:
             print('    best learning rate less than zero. Resetting it....')
             optimizer_lr = 0.01
-        print('\nBest optimizer = %s and best learning_rate = %s' %(hpq_optimizer, optimizer_lr))
         K.set_value(best_optimizer.learning_rate, optimizer_lr)
-        #### Now add layers to the model body ################
-        best_outputs = add_inputs_outputs_to_model_body(best_model, inputs, meta_outputs)
-        best_model = get_compiled_model(inputs, best_outputs, output_activation, num_predicts, 
-                            num_labels, deep_model, best_optimizer, val_loss, val_metrics, cols_len)
+
+        ##### This is the simplest way to convert a sequential model to functional model!
+        storm_outputs = add_inputs_outputs_to_model_body(best_model, inputs, meta_outputs)
+
+        #### This final outputs is the one that is taken into final dense layer and compiled
+        #print('    Custom model loaded successfully. Now compiling model...')
+
+        ###### This is where you compile the model after it is built ###############
+        #### Add a final layer for outputs during compiled model phase #############
+
+        best_model = get_compiled_model(inputs, storm_outputs, output_activation, num_predicts, 
+                            num_labels, best_optimizer, val_loss, val_metrics, cols_len, targets)
+        deep_model = best_model
         #######################################################################################
-        print('Best hyperparameters: %s' %hpq.values)
-        ##### You need to set the best optimizer from the best_model #################
-        deep_outputs = add_inputs_outputs_to_model_body(deep_model, inputs, meta_outputs)
-        ## The deep_model will be trained on full_dataset and saved as the final model ##########
-        deep_model = get_compiled_model(inputs, deep_outputs, output_activation, num_predicts, 
-                            num_labels, deep_model, best_optimizer, val_loss, val_metrics, cols_len)
     elif tuner.lower() == "optuna":
-        # Reset Keras Session
-        ######     O P T U N A    ###########################
-        ### This is where you build the optuna model #####
+        ######     O P T U N A    ##########################
+        ### This is where you build the optuna model   #####
         ####################################################
         optuna_scores = []
         def objective(trial):
             optimizer_options = ""
             opt_model = build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predicts, 
-                        num_labels, optimizer_options, val_loss, val_metrics, cols_len)
+                        num_labels, optimizer_options, val_loss, val_metrics, cols_len, targets)
             history = opt_model.fit(train_ds, validation_data=valid_ds, 
                         epochs=NUMBER_OF_EPOCHS, shuffle=True,
                         callbacks=callbacks_list_tuner,
@@ -731,8 +682,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
                 score = np.mean(history.history[val_monitor][-5:])
             else:
                 for i in range(num_labels):
-                    val_metric = val_monitor.split("_")[-1]
-                    val_metric = 'val_output_'+str(i)+'_' + val_metric
+                    ### the next line uses the list of metrics to find one that is a closest match
+                    metric1 = [x for x in history.history.keys() if (targets[i] in x) & ("loss" not in x) ]
+                    val_metric = metric1[0]
                     if i == 0:
                         results = history.history[val_metric][-5:]
                     else:
@@ -753,10 +705,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         print('    Best params: %s' %study.best_params)
         optimizer_options = study.best_params['optimizer']
         best_model = build_model_optuna(study.best_trial, inputs, meta_outputs, output_activation, num_predicts, 
-                        num_labels, optimizer_options, val_loss, val_metrics, cols_len)
+                        num_labels, optimizer_options, val_loss, val_metrics, cols_len, targets)
         best_optimizer = best_model.optimizer
         deep_model = build_model_optuna(study.best_trial, inputs, meta_outputs, output_activation, num_predicts, 
-                        num_labels, optimizer_options, val_loss, val_metrics, cols_len)
+                        num_labels, optimizer_options, val_loss, val_metrics, cols_len, targets)
         best_batch = batch_size
         optimizer_lr = best_optimizer.learning_rate.numpy()
         print('\nBest optimizer = %s and best learning_rate = %s' %(best_optimizer, optimizer_lr))
@@ -775,9 +727,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         #######################################################################################
         #### The best_model will be used for predictions on valid_ds to get metrics #########
         best_model = get_compiled_model(inputs, best_outputs, output_activation, num_predicts, 
-                            num_labels, best_model, best_optimizer, val_loss, val_metrics, cols_len)
+                            num_labels, best_optimizer, val_loss, val_metrics, cols_len, targets)
         deep_model = get_compiled_model(inputs, deep_outputs, output_activation, num_predicts, 
-                            num_labels, best_model, best_optimizer, val_loss, val_metrics, cols_len)
+                            num_labels, best_optimizer, val_loss, val_metrics, cols_len, targets)
     #######################################################################################
     #### here we can define the custom logic to assign a score to the model to monitor
     if num_labels > 1:
@@ -785,15 +737,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         val_monitor = val_monitor.split("_")[-1]
         val_monitor = 'val_output_'+str(num_labels-1)+'_' + val_monitor
 
-    ##### Now you must try the best_model to choose the best learning_rate ####
-    logdir = "deep_autoviml"
-    tensorboard_logpath = os.path.join(logdir,"mylogs")
-    tb = callbacks.TensorBoard(tensorboard_logpath)
-
     ####################################################################################
     #####   T E N S O R  B O A R D    C  A  N     B E   F O U N D    H E R E ######
     ####################################################################################
-    print('\nTensorboard log directory can be found at: %s' %tensorboard_logpath)
     
     #train_ds = train_ds.unbatch().batch(best_batch)
     train_ds = train_ds.shuffle(shuffle_size, 
@@ -809,13 +755,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     np.random.seed(42)
     tf.random.set_seed(42)
 
-    ### lr_decay_cb is not working so well. rlr works best so far. Onecycle works well.
-    pr = PrintLR()
-
     if early_stopping:
-        callbacks_list = [lr_scheduler, es, tb, pr]
+        callbacks_list = [chosen_callback, callbacks_dict['es'], callbacks_dict['tb']]
     else:
-        callbacks_list = [lr_scheduler, tb, pr]
+        callbacks_list = [chosen_callback, callbacks_dict['tb']]
 
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
     for each_callback in callbacks_list:
@@ -841,18 +784,17 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ###   Once the best learning rate is chosen the model is ready to be trained on full data
     print('    Model training metrics available: %s' %history.history.keys())
     try:
-        stopped_epoch = pd.DataFrame(history.history).shape[0] ## this is where it stopped
+        stopped_epoch = int(pd.DataFrame(history.history).shape[0] - patience) ## this is where it stopped
     except:
         stopped_epoch = 100
     ###  Plot the epochs and loss metrics here #####################
     try:
-        #print('    Additionally, Tensorboard logs can be found here: %s' %tb_logpath)
         if modeltype == 'Regression':
-            plot_history(history, val_monitor[4:], num_labels)
+            plot_history(history, val_monitor[4:], target)
         elif modeltype == 'Classification':
-            plot_history(history, val_monitor[4:], num_labels)
+            plot_history(history, val_monitor[4:], target)
         else:
-            plot_history(history, val_monitor[4:], num_labels)
+            plot_history(history, val_monitor[4:], target)
     except:
         print('    Plot history is erroring. Tensorboard logs can be found here: %s' %tb_logpath)
 
@@ -869,7 +811,6 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         print_one_row_from_tf_label(heldout_ds)
     ###########################################################################
     y_probas = best_model.predict(heldout_ds)
-    y_test_preds_list = []
     
     if isinstance(target, str):
         if modeltype != 'Regression':
@@ -879,29 +820,23 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
                 y_test_preds = y_probas.round().astype(int)
             else:
                 y_test_preds = y_probas.ravel()
-        y_test_preds_list.append(y_test_preds)
     else:
         if modeltype != 'Regression':
-            ### This is for Multi-Label Classification ###
-            for each_target in target:
-                #### Modify: Not sure about how this will work for multi-class, multi-output problems
-                y_test_preds = y_test_preds.argmax(axis=1)
-            else:
-                if y_test.dtype == 'int':
-                    y_test_preds = y_test_preds.round().astype(int)
+            #### This is for multi-label binary or multi-class problems ##
+            for each_t in range(len(target)):
+                if each_t == 0:
+                    y_test_preds = y_probas[each_t].argmax(axis=1).astype(int)
                 else:
-                    y_test_preds = y_test_preds
-            y_test_preds_list.append(y_test_preds.ravel())
+                    y_test_preds = np.c_[y_test_preds, y_probas[each_t].argmax(axis=1).astype(int)]
         else:
-            ### This is for Multi-Label Regressison ###
-            for each_t in range(len(y_probas)):
+            ### This is for Multi-Label Regression ###
+            for each_t in range(len(target)):
                 if each_t == 0:
                     y_test_preds = y_probas[each_t].mean(axis=1)
                 else:
                     y_test_preds = np.c_[y_test_preds, y_probas[each_t].mean(axis=1)]
-            if y_test.dtype == 'int':
-                y_test_preds = y_test_preds.round().astype(int)
-            y_test_preds_list.append(y_test_preds)
+                if y_test.dtype == 'int':
+                    y_test_preds = y_test_preds.round().astype(int)
 
     print('\nHeld out predictions shape:%s' %(y_test_preds.shape,))
     if verbose >= 1:
@@ -920,36 +855,68 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print('         Held-out test data set Results:')
     num_labels = cat_vocab_dict['num_labels']
     num_classes = cat_vocab_dict['num_classes']
+
+    ######## Check for NaN in predictions ###############################
     if check_for_nan_in_array(y_probas):
         y_probas = pd.DataFrame(y_probas).fillna(0).values
     elif check_for_nan_in_array(y_test_preds):
         y_test_preds = pd.DataFrame(y_test_preds).fillna(0).values.ravel()
+
+    ###############           P R I N T I N G   R E S U L T S      #################
     if num_labels <= 1:
+        #### This is for Single-Label Problems only ################################
         if modeltype == 'Regression':
-            print_regression_model_stats(y_test, y_test_preds,target,plot_name="deep_autoviml")
+            print_regression_model_stats(y_test, y_test_preds,target,plot_name=project_name)
         else:
-            if num_classes <= 2:
-                labels = target_names = np.unique(y_test)
-                plot_classification_results(y_test, y_probas, labels, target_names)
-                print_classification_metrics(y_test, y_probas, proba_flag=True)
+            print_classification_header(num_classes, num_labels, target)
+            labels = cat_vocab_dict['original_classes']
+            if cat_vocab_dict['target_transformed']:
+                target_names = cat_vocab_dict['transformed_classes']
+                target_le = cat_vocab_dict['target_le']
+                y_pred = y_probas.argmax(axis=1)
+                y_test_trans = target_le.inverse_transform(y_test)
+                y_pred_trans = target_le.inverse_transform(y_pred)
+                labels = np.unique(y_test_trans) ### sometimes there is less classes
+                plot_classification_results(y_test_trans, y_pred_trans, labels, labels, target)
             else:
-                ###### Use a nice classification matrix printing module here #########
-                labels = target_names = np.unique(y_test)
-                try:
-                    plot_classification_results(y_test, y_probas, labels, target_names)
-                except:
-                    pass
-                print_classification_metrics(y_test, y_probas, proba_flag=True)
-                print(classification_report(y_test,y_test_preds))
-                print(confusion_matrix(y_test, y_test_preds))
+                y_pred = y_probas.argmax(axis=1)
+                labels = np.unique(y_test) ### sometimes there are fewer classes ##
+                plot_classification_results(y_test, y_pred, labels, labels, target)
+            print_classification_metrics(y_test, y_probas, proba_flag=True)
     else:
         if modeltype == 'Regression':
             #### This is for Multi-Label Regression ################################
-            print_regression_model_stats(y_test, y_test_preds,target,plot_name="deep_autoviml")
+            print_regression_model_stats(y_test, y_test_preds,target,plot_name=project_name)
         else:
             #### This is for Multi-Label Classification ################################
-            print_classification_metrics(y_test, y_test_preds, False)
-            print(classification_report(y_test, y_test_preds ))
+            try:
+                targets = cat_vocab_dict["target_variables"]
+                for i, each_target in enumerate(targets):
+                    print_classification_header(num_classes, num_labels, each_target)
+                    labels = cat_vocab_dict[each_target+'_original_classes']
+                    if cat_vocab_dict['target_transformed']:
+                        ###### Use a nice classification matrix printing module here #########
+                        target_names = cat_vocab_dict[each_target+'_transformed_classes']
+                        target_le = cat_vocab_dict['target_le'][i]
+                        y_pred = y_probas[i].argmax(axis=1)
+                        y_test_trans = target_le.inverse_transform(y_test[:,i])
+                        y_pred_trans = target_le.inverse_transform(y_pred)
+                        labels = np.unique(y_test_trans) ### sometimes there is less classes
+                        plot_classification_results(y_test_trans, y_pred_trans, labels, labels, each_target)
+                    else:
+                        y_pred = y_probas[i].argmax(axis=1)
+                        labels = np.unique(y_test[:,i]) ### sometimes there are fewer classes ##
+                        plot_classification_results(y_test[:,i], y_pred, labels, labels, each_target)
+                    print_classification_metrics(y_test[:,i], y_probas[i], proba_flag=True)
+                    #### This prints additional metrics #############
+                    print(classification_report(y_test[:,i],y_test_preds[:,i]))
+                    print(confusion_matrix(y_test[:,i], y_test_preds[:,i]))
+            except:
+                print_classification_metrics(y_test, y_test_preds, False)
+                print(classification_report(y_test, y_test_preds ))
+    ###############           P R I N T I N G   C O M P L E T E D      #################
+
+
     ### plot the regression results here #########
     if modeltype == 'Regression':
         if isinstance(target, str):
@@ -996,9 +963,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print("    set learning rate using best model:", deep_model.optimizer.learning_rate.numpy())
     ####   Dont set the epochs too low - let them be back to where they were stopped  ####
     print('    max epochs for training = %d' %stopped_epoch)
+    callbacks_list = [ callbacks_dict['rlr'] ]
     deep_model.fit(full_ds, epochs=stopped_epoch, #steps_per_epoch=STEPS_PER_EPOCH, 
                 batch_size=best_batch, class_weight = class_weights,
-                callbacks=[rlr],  shuffle=True, verbose=0)
+                callbacks=callbacks_list,  shuffle=True, verbose=0)
     ##################################################################################
     #######        S A V E the model here using save_model_name      #################
     ##################################################################################
