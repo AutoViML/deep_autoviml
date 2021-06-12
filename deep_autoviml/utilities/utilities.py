@@ -835,6 +835,7 @@ def get_uncompiled_model(inputs, result, output_activation,
     uncompiled_model = Model(inputs=inputs, outputs=outputs)
     return uncompiled_model
 
+#####################################################################################
 def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, num_labels, 
                        optimizer, val_loss, val_metrics, cols_len, targets):
     model = get_uncompiled_model(inputs, meta_outputs, output_activation, 
@@ -886,15 +887,16 @@ class PrintLR(tf.keras.callbacks.Callback):
   def on_epoch_end(self, epoch, logs=None):
     print('\nLearning rate for epoch {} is {}'.format(epoch + 1,
                                                       self.model.optimizer.lr.numpy()))
-#######################################################################################
+#####################################################################################
 # Function for decaying the learning rate.
 # You can define any decay function you need.
-def schedules(epoch):
-    return 1e-2 * (0.95 ** np.floor(epoch / 2))
+def schedules(epoch, lr):
+    return lr * (0.997 ** np.floor(epoch / 2))
 
+LEARNING_RATE = 0.01
 def decay(epoch):
-    return 0.001 - 0.02 * (0.5 ** (1 + epoch))
-#####################################################################################
+    return LEARNING_RATE - 0.0099 * (0.75 ** (1 + epoch/2))
+#######################################################################################
 import os
 def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_only, steps=100):
     """
@@ -915,10 +917,10 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
                     patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.00001, cooldown=0, verbose=1)
 
     ###### This is one variation of onecycle #####
-    onecycle = OneCycleScheduler(steps=steps, lr_max=1e-4)
+    onecycle = OneCycleScheduler(steps=steps, lr_max=1e-2, lr_min=1e-5)
 
     ###### This is another variation of onecycle #####
-    onecycle2 = OneCycleScheduler2(iterations=steps, max_rate=1e-3)
+    onecycle2 = OneCycleScheduler2(iterations=steps, max_rate=1e-2, start_rate=1e-5)
 
     lr_sched = keras.callbacks.LearningRateScheduler(schedules)
 
@@ -931,7 +933,7 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
     tb = keras.callbacks.TensorBoard(tensorboard_logpath)
 
     pr = PrintLR()
-    
+
     callbacks_dict['onecycle'] = onecycle
     callbacks_dict['onecycle2'] = onecycle2
     callbacks_dict['cp'] = cp
@@ -959,7 +961,7 @@ def get_chosen_callback(callbacks_dict, keras_options):
     else:
         lr_scheduler = callbacks_dict['lr_sched']
         keras_options['lr_scheduler'] = "lr_sched"
-    print('Selected keras LR scheduler = %s' %keras_options['lr_scheduler'])
+    print('    chosen keras LR scheduler = %s' %keras_options['lr_scheduler'])
     return lr_scheduler
 ################################################################################################
 import math

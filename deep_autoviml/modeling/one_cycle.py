@@ -55,9 +55,9 @@ class OneCycleScheduler(Callback):
     only two phases are used and the adaptation is done using cosine annealing.
     """
 
-    def __init__(self, lr_max, steps, mom_min=0.85, mom_max=0.95, phase_1_pct=0.3, div_factor=25.):
+    def __init__(self, lr_max, steps, lr_min=None, mom_min=0.85, mom_max=0.95, phase_1_pct=0.3, div_factor=25.):
         super(OneCycleScheduler, self).__init__()
-        lr_min = lr_max / div_factor
+        lr_min = lr_min or (lr_max / div_factor)
         final_lr = lr_max / (div_factor * 1e4)
         phase_1_steps = steps * phase_1_pct
         phase_2_steps = steps - phase_1_steps

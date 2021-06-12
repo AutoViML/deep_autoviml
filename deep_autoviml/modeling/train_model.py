@@ -120,23 +120,25 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
     print('    original datasize = %s, initial batchsize = %s' %(data_size, batch_size))
     NUMBER_OF_EPOCHS = check_keras_options(keras_options, "epochs", 100)
-    learning_rate = 5e-1
+    if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
+        print('    chosen ExponentialDecay learning rate scheduler')
+        expo_steps = (NUMBER_OF_EPOCHS*data_size)//batch_size
+        learning_rate = keras.optimizers.schedules.ExponentialDecay(0.01, expo_steps, 0.1)
+    else:
+        learning_rate = check_keras_options(keras_options, "learning_rate", 5e-1)
     steps = max(10, 1*(data_size//batch_size))
     print('    recommended steps per epoch = %d' %steps)
     onecycle_steps = math.ceil(data_size / batch_size) * NUMBER_OF_EPOCHS
     print('    recommended OneCycle steps = %d' %onecycle_steps)
     STEPS_PER_EPOCH = check_keras_options(keras_options, "steps_per_epoch", 
                         steps)
-    optimizer = tf.keras.optimizers.RMSprop(lr=learning_rate)
-    #keras.optimizers.schedules.ExponentialDecay(0.01,STEPS_PER_EPOCH, 0.95)
     #### These can be standard for every keras option that you use layers ######
     kernel_initializer = check_keras_options(keras_options, 'kernel_initializer', 'lecun_normal')
     activation='selu'
     print('    default initializer = %s, default activation = %s' %(kernel_initializer, activation))
-    #####   set some defaults for model parameters here ##
-    optimizer = check_keras_options(keras_options,'optimizer', Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999))
-    #optimizer = SGD(lr=learning_rate, momentum = 0.9)
-    print('    Using optimizer = %s' %str(optimizer).split(".")[-1][:8])
+    default_optimizer = keras.optimizers.SGD(learning_rate)
+    optimizer = check_keras_options(keras_options,'optimizer', default_optimizer)
+    print('    Using default optimizer = %s' %str(optimizer).split(".")[-1][:8])
     use_bias = check_keras_options(keras_options, 'use_bias', True)
     val_monitor = keras_options['monitor']
     val_mode = keras_options['mode']
@@ -148,12 +150,17 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
         patience = patience * 1.2
     callbacks_dict, tb_logpath = get_callbacks(val_mode, val_monitor, patience, learning_rate, 
                             save_weights_only, onecycle_steps)
-    chosen_callback = get_chosen_callback(callbacks_dict, keras_options)
 
-    if keras_options['early_stopping']:
-        callbacks_list = [chosen_callback,  callbacks_dict['tb'],  callbacks_dict['pr'], callbacks_dict['es']]
+    if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
+        if early_stopping:
+            callbacks_list = [callbacks_dict['es'], callbacks_dict['pr']]
+        else:
+            callbacks_list = [callbacks_dict['pr']]
     else:
-        callbacks_list = [chosen_callback, callbacks_dict['tb'],  callbacks_dict['pr']]
+        if keras_options['early_stopping']:
+            callbacks_list = [chosen_callback,  callbacks_dict['tb'], callbacks_dict['es']]
+        else:
+            callbacks_list = [chosen_callback, callbacks_dict['tb'], callbacks_dict['pr']]
 
     print('    val mode = %s, val monitor = %s, patience = %s' %(val_mode, val_monitor, patience))
     print('    number of epochs = %d, steps per epoch = %d' %(NUMBER_OF_EPOCHS, STEPS_PER_EPOCH))
@@ -177,8 +184,12 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     train_ds = train_ds.prefetch(batch_size).shuffle(shuffle_size, 
                             reshuffle_each_iteration=False, seed=42)#.repeat()
     valid_ds = valid_ds.prefetch(batch_size)#.repeat()
-    print('Training %s model now. This will take time...' %keras_model_type)
+
+    print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
+    for each_callback in callbacks_list:
+        print('    Callback added: %s' %str(each_callback).split(".")[-1])
     
+    ############################    M O D E L     T R A I N I N G   ##################
     np.random.seed(42)
     tf.random.set_seed(42)
     history = deep_model.fit(train_ds, validation_data=valid_ds, class_weight=class_weights,
@@ -186,7 +197,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
                     callbacks=callbacks_list, #validation_steps=STEPS_PER_EPOCH,
                    shuffle=False)
 
-    print('    Model training metrics available: %s' %history.history.keys())
+    print('    Model training completed. Following metrics available: %s' %history.history.keys())
     try:
         ##### this is where it stopped - you have toi subtract patience from it
         stopped_epoch = int(pd.DataFrame(history.history).shape[0] - patience )

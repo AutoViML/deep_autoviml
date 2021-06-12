@@ -360,8 +360,8 @@ class MyTuner(Tuner):
             #scores.append(score)
         ##### This is where we capture the best learning rate from the optimizer chosen ######
         model_lr = comp_model.optimizer.learning_rate.numpy()
-        self.user_var = model_lr
-        print('    model lr = %s' %model_lr)
+        #self.user_var = model_lr
+        print('    found best learning rate = %s' %model_lr)
         trial.metrics['final_lr'] = model_lr
         #print('    trial final_lr = %s' %trial.metrics['final_lr'])
         self.score_trial(trial, score) 
@@ -408,14 +408,15 @@ def return_optimizer(hpq_optimizer):
     This returns the keras optimizer with proper inputs if you send the string.
     hpq_optimizer: input string that stands for an optimizer such as "Adam", etc.
     """
+    learning_rate_set = 5e-2
     ##### These are the various optimizers we use ################################
-    momentum = keras.optimizers.SGD(lr=0.001, momentum=0.9)
-    nesterov = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
-    adagrad = keras.optimizers.Adagrad(lr=0.001)
-    rmsprop = keras.optimizers.RMSprop(lr=0.001, rho=0.9)
-    adam = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999)
-    adamax = keras.optimizers.Adamax(lr=0.001, beta_1=0.9, beta_2=0.999)
-    nadam = keras.optimizers.Nadam(lr=0.001, beta_1=0.9, beta_2=0.999)
+    momentum = keras.optimizers.SGD(lr=learning_rate_set, momentum=0.9)
+    nesterov = keras.optimizers.SGD(lr=learning_rate_set, momentum=0.9, nesterov=True)
+    adagrad = keras.optimizers.Adagrad(lr=learning_rate_set)
+    rmsprop = keras.optimizers.RMSprop(lr=learning_rate_set, rho=0.9)
+    adam = keras.optimizers.Adam(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
+    adamax = keras.optimizers.Adamax(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
+    nadam = keras.optimizers.Nadam(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
     best_optimizer = ''
     #############################################################################
     #### This could be turned into a dictionary but for now leave is as is for readability ##
@@ -473,7 +474,13 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print('    original datasize = %s, initial batchsize = %s' %(data_size, batch_size))
     print("    Early stopping : %s" %early_stopping)
     NUMBER_OF_EPOCHS = check_keras_options(keras_options, "epochs", 100)
-    learning_rate = 5e-1
+    if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
+        print('    chosen ExponentialDecay learning rate scheduler')
+        expo_steps = (NUMBER_OF_EPOCHS*data_size)//batch_size
+        learning_rate = keras.optimizers.schedules.ExponentialDecay(0.01, expo_steps, 0.1)
+    else:
+        learning_rate = check_keras_options(keras_options, "learning_rate", 5e-2)
+    print('initial learning rate = %s' %learning_rate)
     if len(var_df['nlp_vars']) > 0:
         steps = 10
     else:
@@ -487,8 +494,18 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     kernel_initializer = check_keras_options(keras_options, 'kernel_initializer', 'lecun_normal')
     activation='selu'
     print('    default initializer = %s, default activation = %s' %(kernel_initializer, activation))
-    #####   set some defaults for model parameters here ##
-    optimizer = check_keras_options(keras_options,'optimizer', Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999))
+    ############################################################################
+    #####   set some default optimizers here for model parameters here ##
+    if not keras_options['optimizer']:
+        default_optimizer = keras.optimizers.SGD(learning_rate)
+    elif keras_options["optimizer"] in ['RMS', 'RMSprop']:
+        default_optimizer = keras.optimizers.RMSprop(learning_rate)
+    elif keras_options['optimizer'] in ['Adam', 'adam', 'ADAM', 'NADAM', 'Nadam']:
+        default_optimizer = keras.optimizers.Adam(learning_rate)
+    else:
+        default_optimizer = keras.optimizers.Adagrad(learning_rate)
+    ############################################################################
+    optimizer = check_keras_options(keras_options,'optimizer', default_optimizer)
     #optimizer = SGD(lr=learning_rate, momentum = 0.9)
     print('    Using optimizer = %s' %str(optimizer).split(".")[-1][:8])
     use_bias = check_keras_options(keras_options, 'use_bias', True)
@@ -504,8 +521,13 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     val_loss = keras_options["loss"]
     val_metrics = keras_options["metrics"]
     ########################################################################
-    print('    loss fn = %s\n    num predicts = %s, output_activation = %s' %(
-                        val_loss, num_predicts, output_activation))
+    try:
+        print('    number of classes = %s, output_activation = %s' %(
+                            num_predicts, output_activation))
+        print('    loss function: %s' %str(val_loss).split(".")[-1].split(" ")[0])
+    except:
+        print('    loss fn = %s    number of classes = %s, output_activation = %s' %(
+                            val_loss, num_predicts, output_activation))
     ####  just use modeltype for printing that's all ###
     modeltype = cat_vocab_dict['modeltype']
 
@@ -515,9 +537,6 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
 
     print('    steps_per_epoch = %s, number epochs = %s' %(STEPS_PER_EPOCH, NUMBER_OF_EPOCHS))
     print('    val mode = %s, val monitor = %s, patience = %s' %(val_mode, val_monitor, patience))
-
-    onecycle_steps = math.ceil(STEPS_PER_EPOCH * NUMBER_OF_EPOCHS)
-    print('    recommended OneCycle steps = %d' %onecycle_steps)
 
     callbacks_dict, tb_logpath = get_callbacks(val_mode, val_monitor, patience,
                                     learning_rate, save_weights_only, onecycle_steps)
@@ -568,7 +587,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         tuner = "None"
     else:
         tuner = model_options["tuner"]
-    print('Training %s model using %s. This will take time...' %(keras_model_type, tuner))
+    print('    Training %s model using %s. This will take time...' %(keras_model_type, tuner))
 
     from secrets import randbelow
     rand_num = randbelow(10000)
@@ -581,8 +600,12 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     #######################################################################################
     ###    E A R L Y    S T O P P I N G    T O    P R E V E N T   O V E R F I T T I N G  ##
     #######################################################################################
-    chosen_callback = get_chosen_callback(callbacks_dict, keras_options)
-    callbacks_list_tuner = [chosen_callback, callbacks_dict['es']]
+    if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
+        callbacks_list_tuner = callbacks_dict['es']
+    else:
+        chosen_callback = get_chosen_callback(callbacks_dict, keras_options)
+        callbacks_list_tuner = [chosen_callback, callbacks_dict['es']]
+
     targets = cat_vocab_dict["target_variables"]
     ############################################################################
     ########     P E R FO R M     T U N I N G    H E R E  ######################
@@ -636,8 +659,11 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
             best_model, best_optimizer = build_model_storm(hpq, batch_size)
             best_batch = hpq.values['batch_size']
             hpq_optimizer = hpq.values['optimizer']
-            optimizer_lr = best_trial.metrics['final_lr']
-            print('\nBest optimizer = %s and best learning_rate = %s' %(hpq_optimizer, optimizer_lr))
+            if best_trial.metrics['final_lr'] < 0:
+                print('    best learning rate less than zero. Resetting it....')
+                optimizer_lr = 0.01
+            else:
+                optimizer_lr = best_trial.metrics['final_lr']
             print('Best hyperparameters: %s' %hpq.values)
         except:
             ### Sometimes the tuner cannot find a config that works!
@@ -651,9 +677,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
 
         ### Sometimes the learning rate is below zero - so reset it here!
         ### Set the learning rate for the best optimizer here ######
-        if optimizer_lr < 0:
-            print('    best learning rate less than zero. Resetting it....')
-            optimizer_lr = 0.01
+        print('\nSetting best optimizer %s its best learning_rate = %s' %(hpq_optimizer, optimizer_lr))
         K.set_value(best_optimizer.learning_rate, optimizer_lr)
 
         ##### This is the simplest way to convert a sequential model to functional model!
@@ -751,24 +775,31 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ############### F I R S T  T R A I N   F O R  1 0 0   E P O C H S ##################
     ### You have to set both callbacks in order to learn what the best learning rate is 
     ####################################################################################
-    np.random.seed(42)
-    tf.random.set_seed(42)
-
-    if early_stopping:
-        callbacks_list = [chosen_callback, callbacks_dict['es'], callbacks_dict['tb']]
+    if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
+        if early_stopping:
+            callbacks_list = [callbacks_dict['es'], callbacks_dict['tb']]
+        else:
+            callbacks_list = [callbacks_dict['tb']]
     else:
-        callbacks_list = [chosen_callback, callbacks_dict['tb']]
+        if early_stopping:
+            callbacks_list = [callbacks_dict['es'], callbacks_dict['tb'], callbacks_dict['pr']]
+        else:
+            callbacks_list = [callbacks_dict['tb'], callbacks_dict['pr']]
 
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
     for each_callback in callbacks_list:
         print('    Callback added: %s' %str(each_callback).split(".")[-1])
     
-    ####  Do this with LR scheduling but NO early stopping since we want the model fully trained #####
+    ############################    M O D E L     T R A I N I N G   ##################
+    np.random.seed(42)
+    tf.random.set_seed(42)
     history = best_model.fit(train_ds, validation_data=valid_ds, batch_size=best_batch,
             epochs=NUMBER_OF_EPOCHS, #steps_per_epoch=STEPS_PER_EPOCH, 
             callbacks=callbacks_list, class_weight=class_weights,
             #validation_steps=STEPS_PER_EPOCH, 
            shuffle=True)
+    print('    Model training completed. Following metrics available: %s' %history.history.keys())
+    print('Time taken to train model (in mins) = %0.0f' %((time.time()-start_time)/60))
 
     #################################################################################
     #######          R E S E T    K E R A S      S E S S I O N 
@@ -781,11 +812,12 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     tf.keras.backend.reset_uids()
     
     ###   Once the best learning rate is chosen the model is ready to be trained on full data
-    print('    Model training metrics available: %s' %history.history.keys())
     try:
         stopped_epoch = int(pd.DataFrame(history.history).shape[0] - patience) ## this is where it stopped
     except:
         stopped_epoch = 100
+    print('    Stopped epoch = %s' %stopped_epoch)
+
     ###  Plot the epochs and loss metrics here #####################
     try:
         if modeltype == 'Regression':

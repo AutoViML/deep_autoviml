@@ -171,12 +171,29 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     val_monitor = keras_options["monitor"]
     val_loss = keras_options["loss"]
     val_metrics = keras_options["metrics"]
-    if not keras_options['optimizer']:
-        ### if it is an empty string, use the default Adam optimizer
-        optimizer = Adam(lr=0.01, beta_1=0.9, beta_2=0.999)
-    else:
+    learning_rate = 5e-2
+    ############################################################################
+    try:
+        print('    number of outputs = %s, output_activation = %s' %(
+                            num_labels, output_activation))
+        print('    loss function: %s' %str(val_loss).split(".")[-1].split(" ")[0])
+    except:
+        print('    loss fn = %s    number of outputs = %s, output_activation = %s' %(
+                            val_loss, num_labels, output_activation))
+    try:
         optimizer = return_optimizer(keras_options['optimizer'])
-
+    except:
+        #####   set some default optimizers here for model parameters here ##
+        if not keras_options['optimizer']:
+            optimizer = keras.optimizers.SGD(learning_rate)
+        elif keras_options["optimizer"] in ['RMS', 'RMSprop']:
+            optimizer = keras.optimizers.RMSprop(learning_rate)
+        elif keras_options['optimizer'] in ['Adam', 'adam', 'ADAM', 'NADAM', 'Nadam']:
+            optimizer = keras.optimizers.Adam(learning_rate)
+        else:
+            optimizer = keras.optimizers.Adagrad(learning_rate)
+    print('initial learning rate = %s' %learning_rate)
+    print('initial optimizer = %s' %optimizer)
     ###################################################################################
     if data_dim <= 1e6:
         dense_layer1 = max(96,int(data_dim/30000))
@@ -207,7 +224,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
             all_inputs = copy.deepcopy(inputs)
     else:
         ### this means it's an auto model and you create one here 
-        print('    building a %s model...' %keras_model_type)
+        print('    creating %s model body...' %keras_model_type)
         num_layers = check_keras_options(keras_options, 'num_layers', 1)
         model_body = tf.keras.Sequential([])
         for l_ in range(num_layers):
