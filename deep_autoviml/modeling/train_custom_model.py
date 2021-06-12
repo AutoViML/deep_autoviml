@@ -588,6 +588,11 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ############################################################################
     ########     P E R FO R M     T U N I N G    H E R E  ######################
     ############################################################################
+    tune_mode = 'min'
+    if num_labels > 1 and modeltype != 'Regression':
+        tune_mode = 'max'
+    else:
+        tune_mode = val_mode
     if tuner.lower() == "storm":
         trials_saved_path = os.path.join(project_name,keras_model_type)
         if not os.path.exists(trials_saved_path):
@@ -596,7 +601,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         randomization_factor = 0.50
         tuner = MyTuner(project_dir=trials_saved_path,
                     build_fn=build_model_storm,
-                    objective_direction=val_mode,
+                    objective_direction=tune_mode,
                     init_random=5,
                     max_iters=max_trials,
                     randomize_axis_factor=randomization_factor,
@@ -694,7 +699,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
             return score
         ##### This where you run optuna ###################
         study_name = project_name+'_'+keras_model_type+'_study_'+str(rand_num)
-        if val_mode == 'max':
+        if tune_mode == 'max':
             study = optuna.create_study(study_name=study_name, direction="maximize", load_if_exists=False)
         else:
             study = optuna.create_study(study_name=study_name, direction="minimize", load_if_exists=False)
@@ -730,15 +735,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
                             num_labels, best_optimizer, val_loss, val_metrics, cols_len, targets)
         deep_model = get_compiled_model(inputs, deep_outputs, output_activation, num_predicts, 
                             num_labels, best_optimizer, val_loss, val_metrics, cols_len, targets)
-    #######################################################################################
-    #### here we can define the custom logic to assign a score to the model to monitor
-    if num_labels > 1:
-        ### You must choose one of the label outputs to monitor - we will choose the last one
-        val_monitor = val_monitor.split("_")[-1]
-        val_monitor = 'val_output_'+str(num_labels-1)+'_' + val_monitor
+        #######################################################################################
 
     ####################################################################################
-    #####   T E N S O R  B O A R D    C  A  N     B E   F O U N D    H E R E ######
+    #####   T R A IN  A N D   V A L I D A T I O N   F O U N D    H E R E          ######
     ####################################################################################
     
     #train_ds = train_ds.unbatch().batch(best_batch)
