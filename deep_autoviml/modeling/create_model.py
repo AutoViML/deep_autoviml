@@ -222,7 +222,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                         'cnn1', 'cnn','cnn2'] 
     ######   Just do a simple check for auto models here ####################
     if keras_model_type.lower() in fast_models+prebuilt_models+fast_models2:
-            all_inputs = copy.deepcopy(inputs)
+            all_inputs = inputs
     else:
         ### this means it's an auto model and you create one here 
         print('    creating %s model body...' %keras_model_type)

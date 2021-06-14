@@ -966,7 +966,6 @@ def get_chosen_callback(callbacks_dict, keras_options):
     else:
         lr_scheduler = callbacks_dict['lr_sched']
         keras_options['lr_scheduler'] = "lr_sched"
-    print('    chosen keras LR scheduler = %s' %keras_options['lr_scheduler'])
     return lr_scheduler
 ################################################################################################
 import math

@@ -529,6 +529,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
 
     callbacks_dict, tb_logpath = get_callbacks(val_mode, val_monitor, patience,
                                     learning_rate, save_weights_only, onecycle_steps)
+    chosen_callback = get_chosen_callback(callbacks_dict, keras_options)
+    print('    chosen keras LR scheduler = %s' %chosen_callback)
 
     ###### You can use Storm Tuner to set the batch size ############
     ############## Split train into train and validation datasets here ###############
@@ -592,7 +594,6 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
         callbacks_list_tuner = callbacks_dict['es']
     else:
-        chosen_callback = get_chosen_callback(callbacks_dict, keras_options)
         callbacks_list_tuner = [chosen_callback, callbacks_dict['es']]
 
     targets = cat_vocab_dict["target_variables"]
