@@ -477,7 +477,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_latlon_inputs.append(lat_lon_input)
                 lat_lon_encoded = encode_binning_numeric_feature_categorical(lat_lon_input, each_lat, train_ds, 
                                                 bins_lat=bins_lat,
-                                                bins_num=len(bins_lat)+1)
+                                                bins_num=len(bins_lat))
                 all_latlon_encoded.append(lat_lon_encoded)
                 lat_lon_paired_dict[each_lat] = lat_lon_encoded
                 all_input_names.append(each_lat)
@@ -503,7 +503,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_latlon_inputs.append(lat_lon_input)
                 lat_lon_encoded = encode_binning_numeric_feature_categorical(lat_lon_input, each_lon, train_ds, 
                                                 bins_lat=bins_lon,
-                                                bins_num=len(bins_lon)+1)
+                                                bins_num=len(bins_lon))
                 all_latlon_encoded.append(lat_lon_encoded)
                 lat_lon_paired_dict[each_lon] = lat_lon_encoded
                 all_input_names.append(each_lon)
@@ -532,9 +532,9 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
 
     #####  SEQUENCE OF THESE INPUTS AND OUTPUTS MUST MATCH ABOVE - we gather all outputs above into a single list
     all_inputs = all_date_inputs + all_int_inputs + all_int_cat_inputs + all_cat_inputs + all_num_inputs + all_latlon_inputs 
-    all_encoded = all_date_encoded+all_int_encoded+all_int_cat_encoded+all_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+lat_lon_paired_encoded
-    all_low_cat_encoded = all_date_encoded+all_int_bool_encoded+all_int_encoded+all_int_cat_encoded  ## these are integer outputs ####
-    all_numeric_encoded =  all_cat_encoded+all_high_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+all_latlon_encoded+lat_lon_paired_encoded
+    all_encoded = all_date_encoded+all_int_bool_encoded+all_int_encoded+all_int_cat_encoded+all_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+lat_lon_paired_encoded
+    all_low_cat_encoded = all_int_bool_encoded+all_int_encoded+all_int_cat_encoded  ## these are integer outputs ####
+    all_numeric_encoded =  all_date_encoded+all_cat_encoded+all_high_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+all_latlon_encoded+lat_lon_paired_encoded## these are all float ##
     ###### This is where we determine the size of different layers #########
     data_size = model_options['DS_LEN']
     if len(all_numeric_encoded) == 0:
@@ -545,14 +545,14 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
         meta_numeric_len = layers.concatenate(all_numeric_encoded).shape[1]
     data_dim = int(data_size*meta_numeric_len)
     if data_dim <= 1e6:
-        dense_layer1 = max(64,int(data_dim/30000))
-        dense_layer2 = max(32,int(dense_layer1*0.5))
-        dense_layer3 = max(16,int(dense_layer2*0.5))
+        dense_layer1 = max(16,int(data_dim/30000))
+        dense_layer2 = max(8,int(dense_layer1*0.5))
+        dense_layer3 = max(4,int(dense_layer2*0.5))
     elif data_dim > 1e6 and data_dim <= 1e8:
-        dense_layer1 = max(128,int(data_dim/50000))
-        dense_layer2 = max(64,int(dense_layer1*0.5))
-        dense_layer3 = max(32,int(dense_layer2*0.5))
-    elif data_dim > 1e8 or keras_model_type == 'big_deep':
+        dense_layer1 = max(24,int(data_dim/500000))
+        dense_layer2 = max(12,int(dense_layer1*0.5))
+        dense_layer3 = max(6,int(dense_layer2*0.5))
+    elif data_dim > 1e8 or keras_model_type.lower() in ['big_deep', 'big deep']:
         dense_layer1 = 300
         dense_layer2 = 200
         dense_layer3 = 100
@@ -567,7 +567,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     concat_kernel_initializer = "he_normal"
     concat_activation = 'relu'
     concat_layer_neurons = dense_layer1
-    ####Concatenate all categorical features( Categorical input )
+    ####Concatenate all categorical features( Categorical input ) #########
     if len(all_low_cat_encoded) == 0:
         skip_meta_categ1 = True
         meta_categ1 = None
@@ -718,14 +718,14 @@ def encode_binning_numeric_feature_categorical(feature, name, dataset, bins_lat,
     CategoryEncoding output dtype is float32 even if output is binary or count.
     """
     # Create a StringLookup layer which will turn strings into integer indices
-    index = Discretization(bins = bins_lat)
+    index = Discretization(bin_boundaries = bins_lat)
 
     # Prepare a Dataset that only yields our feature
     feature_ds = dataset.map(lambda x, y: x[name])
     feature_ds = feature_ds.map(lambda x: tf.expand_dims(x, -1))
 
-    # Learn the set of possible string values and assign them a fixed integer index
-    index.adapt(feature_ds)
+    # If the bin_boundaries are given, then no adapt is needed since it is already known.
+    #index.adapt(feature_ds)
 
     # Turn the string input into integer indices
     encoded_feature = index(feature)
@@ -889,6 +889,7 @@ def encode_feature_crosses_lat_lon_numeric(cat_pickup_lat, cat_pickup_lon, datas
     -----------
     embed_cross_pick_lon_lat: a keras.Tensor. You can use this tensor in keras models for training.
                The Tensor has a shape of (None, embedding_dim) - None indicates it is batched.
+    hasing creates integer outputs. So don't concatenate it with float outputs.
     """
     ###########   Categorical cross of two categorical features is done here    #########
     cross_pick_lon_lat = tf.keras.layers.experimental.preprocessing.CategoryCrossing()(
@@ -922,6 +923,7 @@ def encode_any_integer_to_hash_categorical(feature_input, name, dataset, bins_nu
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
             The Tensor has a shape of (None, bins_num) - None indicates data has been batched
+    hashing always gives you int64 encodings. So make sure you concatenate it with other integer encoders.
     """
     # Use the Hashing layer to hash the values to the range [0, 30]
     hasher = Hashing(num_bins=bins_num, salt=1337)

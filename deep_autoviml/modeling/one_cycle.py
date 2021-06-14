@@ -107,6 +107,13 @@ class OneCycleScheduler(Callback):
         try:
             if lr < 0:
                 lr = 0.1
+                self.phase = 0
+                self.step = 0
+
+                self.set_lr(self.lr_schedule().start)
+                self.set_momentum(self.mom_schedule().start)
+                tf.keras.backend.clear_session()
+
             tf.keras.backend.set_value(self.model.optimizer.lr, lr)
         except AttributeError:
             pass # ignore

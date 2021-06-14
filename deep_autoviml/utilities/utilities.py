@@ -994,6 +994,8 @@ class OneCycleScheduler2(keras.callbacks.Callback):
                                      self.start_rate, self.last_rate)
         self.iteration += 1
         if rate < 0:
-            rate = 0.05
+            rate = self.start_rate
+            self.iteration = 0
+            K.clear_session()
         K.set_value(self.model.optimizer.lr, rate)
 #####################################################################################################

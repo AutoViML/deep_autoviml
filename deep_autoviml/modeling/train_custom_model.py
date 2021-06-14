@@ -483,7 +483,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         learning_rate = keras.optimizers.schedules.ExponentialDecay(0.01, expo_steps, 0.1)
     else:
         learning_rate = check_keras_options(keras_options, "learning_rate", 5e-2)
-    print('initial learning rate = %s' %learning_rate)
+    #### The steps are actually not needed but remove them later.###
     if len(var_df['nlp_vars']) > 0:
         steps = 10
     else:
@@ -942,8 +942,13 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         if isinstance(target, str):
             plt.figure(figsize=(15,6))
             ax1 = plt.subplot(1, 2, 1)
-            ax1.scatter(x=y_test, y=y_test_preds,)
-            ax1.set_title('Actuals (x-axis) vs. Predictions (y-axis)')
+            residual = np.sqrt((y_test - y_test_preds)**2)
+            lowermin = min(y_test.min(), residual.min())
+            uppermax = max(y_test.max(), residual.max())
+            ax1.scatter(x=y_test, y=residual)
+            ax1.set_xlim(lowermin, uppermax)
+            ax1.set_ylim(lowermin, uppermax)
+            ax1.set_title('Actuals (x-axis) vs. RMSE of predictions (y-axis)')
             pdf = save_valid_predictions(y_test, y_test_preds.ravel(), project_name, num_labels)
             ax2 = plt.subplot(1, 2, 2)
             pdf.plot(ax=ax2)
