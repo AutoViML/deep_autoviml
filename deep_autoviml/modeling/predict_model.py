@@ -307,10 +307,7 @@ def predict(model_or_model_path, project_name, test_dataset,
         if modeltype != 'Regression':
             y_test_preds = y_probas.argmax(axis=1)
         else:
-            if y_test.dtype == 'int':
-                y_test_preds = y_probas.round().astype(int)
-            else:
-                y_test_preds = y_probas.ravel()
+            y_test_preds = y_probas.ravel()
     else:
         if modeltype != 'Regression':
             #### This is for multi-label binary or multi-class problems ##
@@ -326,8 +323,6 @@ def predict(model_or_model_path, project_name, test_dataset,
                     y_test_preds = y_probas[each_t].mean(axis=1)
                 else:
                     y_test_preds = np.c_[y_test_preds, y_probas[each_t].mean(axis=1)]
-                if y_test.dtype == 'int':
-                    y_test_preds = y_test_preds.round().astype(int)
 
     ##### Now you have to convert the output to original classes and labels ####
     

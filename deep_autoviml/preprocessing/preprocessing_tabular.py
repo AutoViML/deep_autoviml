@@ -155,6 +155,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     #########  Now that you have the variable classification dictionary, just separate them out! ##
     cats = var_df['categorical_vars']  ### these are low cardinality vars - you can one-hot encode them ##
     high_string_vars = var_df['discrete_string_vars']  ## discrete_string_vars are high cardinality vars ## embed them!
+    int_bools = var_df['int_bools']
     int_cats = var_df['int_cats']
     ints = var_df['int_vars']
     floats = var_df['continuous_vars']
@@ -185,15 +186,19 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     high_cats_copy = copy.deepcopy(high_string_vars)
     if len(high_cats_copy) > 0:
         for each_name in high_cats_copy:
-            max_tokens_zip[each_name] = cat_vocab_dict[each_name]['vocab']
+            max_tokens_zip[each_name] = cat_vocab_dict[each_name]['vocab'] ### just send vocab in
     copy_int_cats = copy.deepcopy(int_cats)
     if len(copy_int_cats) > 0:
         for each_int in copy_int_cats:
             max_tokens_zip[each_int] = int(1*(cat_vocab_dict[each_int]['size_of_vocab']))
-    copy_ints = copy.deepcopy(ints)
+    copy_int_bools = int_bools
+    if len(copy_int_bools) > 0:
+        for each_int in copy_int_bools:
+            max_tokens_zip[each_int] = cat_vocab_dict[each_int]['vocab'] ### just send vocab in
+    copy_ints = ints
     if len(copy_ints) > 0:
         for each_int in copy_ints:
-            max_tokens_zip[each_int] = int(1*(cat_vocab_dict[each_int]['size_of_vocab'])) #3 earlier
+            max_tokens_zip[each_int] = int(1*(cat_vocab_dict[each_int]['size_of_vocab'])) ### size of vocab here
     if verbose > 1:
         print('    Number of categories in:')
         for each_name in max_tokens_zip.keys():
@@ -211,6 +216,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     all_latlon_inputs = []
     ############## CAVEAT: The encoded outputs should follow the same sequence as inputs above!
     all_date_encoded = []
+    all_int_bool_encoded = []
     all_int_encoded = []
     all_int_cat_encoded = []
     all_cat_encoded = []
@@ -285,8 +291,29 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 print('    Error: Skipping %s since Keras Date month-day cross preprocessing erroring' %each_date)
 
     
-    ######  This is where we handle high cardinality >50 categories integers ##################
+    ######  This is where we handle Boolean Integer variables - we just combine them ##################
     
+    int_bools_copy = copy.deepcopy(int_bools)
+    if len(int_bools_copy) > 0:
+        for each_int in int_bools_copy:
+            try:
+                int_input = keras.Input(shape=(1,), name=each_int, dtype="int64")
+                # Use the numerical features as-is.
+                vocab = max_tokens_zip[each_int]
+                layer = tf.keras.layers.experimental.preprocessing.IntegerLookup(vocabulary=vocab, 
+                            mask_token=None, num_oov_indices=1, output_mode="int")
+                # Convert the string input values into a one hot encoding.
+                encoded = layer(int_input)
+                all_int_inputs.append(int_input)
+                all_int_bool_encoded.append(encoded)
+                all_input_names.append(each_int)
+                if verbose:
+                    print('    %s number of categories = %d and after integer encoding shape: %s' %(each_int, 
+                                            len(max_tokens_zip[each_int]), encoded.shape[1]))
+            except:
+                print('    Error: Skipping %s since Keras Boolean Integer preprocessing erroring' %each_int)
+    
+    ######  This is where we handle high cardinality >50 categories integers ##################
     ints_copy = copy.deepcopy(ints)
     if len(ints_copy) > 0:
         for each_int in ints_copy:
@@ -319,9 +346,9 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
         for each_int in ints_cat_copy:
             try:
                 int_input = keras.Input(shape=(1,), name=each_int, dtype="int64")
-                max_tokens = max_tokens_zip[each_int]
+                vocab = max_tokens_zip[each_int]
                 encoded = encode_integer_to_categorical_feature(int_input, each_int,
-                                                                        train_ds, max_tokens)
+                                                                        train_ds, vocab)
                 all_int_cat_inputs.append(int_input)
                 all_int_cat_encoded.append(encoded)
                 all_input_names.append(each_int)
@@ -506,8 +533,8 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     #####  SEQUENCE OF THESE INPUTS AND OUTPUTS MUST MATCH ABOVE - we gather all outputs above into a single list
     all_inputs = all_date_inputs + all_int_inputs + all_int_cat_inputs + all_cat_inputs + all_num_inputs + all_latlon_inputs 
     all_encoded = all_date_encoded+all_int_encoded+all_int_cat_encoded+all_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+lat_lon_paired_encoded
-    all_low_cat_encoded = all_date_encoded+all_int_encoded
-    all_numeric_encoded =  all_cat_encoded+all_int_cat_encoded+all_high_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+all_latlon_encoded+lat_lon_paired_encoded
+    all_low_cat_encoded = all_date_encoded+all_int_bool_encoded+all_int_encoded+all_int_cat_encoded  ## these are integer outputs ####
+    all_numeric_encoded =  all_cat_encoded+all_high_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+all_latlon_encoded+lat_lon_paired_encoded
     ###### This is where we determine the size of different layers #########
     data_size = model_options['DS_LEN']
     if len(all_numeric_encoded) == 0:
@@ -688,6 +715,7 @@ def encode_binning_numeric_feature_categorical(feature, name, dataset, bins_lat,
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
                The Tensor has a shape of (None, 1) - None indicates that it has not been 
+    CategoryEncoding output dtype is float32 even if output is binary or count.
     """
     # Create a StringLookup layer which will turn strings into integer indices
     index = Discretization(bins = bins_lat)
@@ -703,7 +731,7 @@ def encode_binning_numeric_feature_categorical(feature, name, dataset, bins_lat,
     encoded_feature = index(feature)
 
     # Create a CategoryEncoding for our integer indices
-    encoder = CategoryEncoding(max_tokens=bins_num+1, output_mode="binary")
+    encoder = CategoryEncoding(num_tokens=bins_num+1, output_mode="binary")
 
     # Prepare a dataset of indices
     feature_ds = feature_ds.map(index)
@@ -716,11 +744,11 @@ def encode_binning_numeric_feature_categorical(feature, name, dataset, bins_lat,
     return encoded_feature
 
 ###########################################################################################
-def encode_string_categorical_feature_categorical(feature, name, dataset, max_tokens=None):
+def encode_string_categorical_feature_categorical(feature_input, name, dataset, max_tokens=None):
     """
     Inputs:
     ----------
-    feature: must be a keras.Input variable, so make sure you create a variable first for the 
+    feature_input: must be a keras.Input variable, so make sure you create a variable first for the 
              column in your dataset that want to transform. Please make sure it has a
              shape of (None, 1).
     name: this is the name of the column in your dataset that you want to transform
@@ -748,27 +776,16 @@ def encode_string_categorical_feature_categorical(feature, name, dataset, max_to
     index.adapt(feature_ds)
 
     # Turn the string input into integer indices
-    encoded_feature = index(feature)
+    encoded_feature = index(feature_input)
 
-    # Create a CategoryEncoding for our integer indices
-    #encoder = CategoryEncoding(max_tokens=max_tokens, output_mode="binary")
-
-    # Prepare a dataset of indices
-    #feature_ds = feature_ds.map(index)
-
-    # Learn the space of possible indices
-    #encoder.adapt(feature_ds)
-
-    # Apply one-hot encoding to our indices
-    #encoded_feature = encoder(encoded_feature)
     return encoded_feature
 
 ###########################################################################################
-def encode_integer_to_categorical_feature(feature, name, dataset, max_tokens=None):
+def encode_integer_to_categorical_feature(feature_input, name, dataset, vocab):
     """
     Inputs:
     ----------
-    feature: must be a keras.Input variable, so make sure you create a variable first for the 
+    feature_input: must be a keras.Input variable, so make sure you create a variable first for the 
              column in your dataset that want to transform. Please make sure it has a
              shape of (None, 1).
     name: this is the name of the column in your dataset that you want to transform
@@ -787,8 +804,9 @@ def encode_integer_to_categorical_feature(feature, name, dataset, max_tokens=Non
     extra_oov = 3
     # Create a StringLookup layer which will turn strings into integer indices
     ### For now we will leave the max_values as None which means there is no limit.
-    index = IntegerLookup(max_tokens=None, num_oov_indices=extra_oov, 
-                        oov_value=-9999, output_mode='count')
+    index = IntegerLookup(vocabulary=vocab, mask_token=None, 
+                        num_oov_indices=extra_oov, 
+                        output_mode='int')
 
     # Prepare a Dataset that only yields our feature
     feature_ds = dataset.map(lambda x, y: x[name])
@@ -798,7 +816,7 @@ def encode_integer_to_categorical_feature(feature, name, dataset, max_tokens=Non
     index.adapt(feature_ds)
 
     # Turn the string input into integer indices
-    encoded_feature = index(feature)
+    encoded_feature = index(feature_input)
 
     return encoded_feature
 
@@ -831,6 +849,7 @@ def encode_cat_feature_crosses_numeric(encoded_input1, encoded_input2, dataset, 
     -----------
     cat_cross_cat1_cat2: a keras.Tensor. You can use this tensor in keras models for training.
                The Tensor has a shape of (None, 1) -  None indicates it is batched.
+    CategoryEncoding output dtype is float32 even if output is binary or count.
     """
     ###########   Categorical cross of two categorical features is done here    #########
     cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.CategoryCrossing()(
@@ -838,7 +857,7 @@ def encode_cat_feature_crosses_numeric(encoded_input1, encoded_input2, dataset, 
     hash_cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.Hashing(num_bins=bins_num)(
                                                 cross_cat1_cat2)
     cat_cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.CategoryEncoding(
-                                        max_tokens = bins_num)(hash_cross_cat1_cat2)
+                                        num_tokens = bins_num)(hash_cross_cat1_cat2)
 
     return cat_cross_cat1_cat2
 ###########################################################################################
@@ -988,6 +1007,7 @@ def encode_date_time_var_dayofweek_categorical(feature_input, name, dataset):
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
                The Tensor has a shape of (None, 1) - None indicates that it has not been 
+    CategoryEncoding output dtype is float32 even if output is binary or count.
     """    
     index = StringLookup()
 
@@ -1002,7 +1022,7 @@ def encode_date_time_var_dayofweek_categorical(feature_input, name, dataset):
     encoded_feature = index(feature_input)
 
     # Create a CategoryEncoding for our integer indices
-    encoder = CategoryEncoding(max_tokens=8, output_mode="binary")
+    encoder = CategoryEncoding(num_tokens=8, output_mode="binary")
 
     # Prepare a dataset of indices
     feature_ds = feature_ds.map(index)
@@ -1035,6 +1055,7 @@ def encode_date_time_var_monthofyear_categorical(feature_input, name, dataset):
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
                The Tensor has a shape of (None, 1) - None indicates that it has not been 
+    CategoryEncoding output dtype is float32 even if output is binary or count.
     """    
     index = StringLookup()
 
@@ -1049,7 +1070,7 @@ def encode_date_time_var_monthofyear_categorical(feature_input, name, dataset):
     encoded_feature = index(feature_input)
 
     # Create a CategoryEncoding for our integer indices
-    encoder = CategoryEncoding(max_tokens=13, output_mode="binary")
+    encoder = CategoryEncoding(num_tokens=13, output_mode="binary")
 
     # Prepare a dataset of indices
     feature_ds = feature_ds.map(index)
@@ -1082,6 +1103,7 @@ def encode_date_time_var_hourofday_categorical(feature_input, name, dataset):
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
                The Tensor has a shape of (None, 1) - None indicates that it has not been 
+    CategoryEncoding output dtype is float32 even if output is binary or count.
     """    
     index = StringLookup()
 
@@ -1096,7 +1118,7 @@ def encode_date_time_var_hourofday_categorical(feature_input, name, dataset):
     encoded_feature = index(feature_input)
 
     # Create a CategoryEncoding for our integer indices
-    encoder = CategoryEncoding(max_tokens=25, output_mode="binary")
+    encoder = CategoryEncoding(num_tokens=25, output_mode="binary")
 
     # Prepare a dataset of indices
     feature_ds = feature_ds.map(index)

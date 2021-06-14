@@ -527,8 +527,8 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
         else:
             floats.append(key)
             feats_max_min[key]["dtype"] = data_sample[key].dtype
-        if feats_max_min[key]['dtype'] in [np.int16, np.int32,
-                                np.int64,np.float16, np.float32, np.float64]:
+        if feats_max_min[key]['dtype'] in [np.int16, np.int32, np.int64,
+                                np.float16, np.float32, np.float64]:
             ##### This is for integer and float variables #######
             if key in lats+lons:
                 ### For lats and lons you need the vocab to create bins using pd.qcut ####
@@ -538,13 +538,18 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                 feats_max_min[key]["max"] = max(data_sample[key].values)
                 feats_max_min[key]["min"] = min(data_sample[key].values)
             else:
-                ### For the rest of the numeric variables, you don't need vocab ###
-                #feats_max_min[key]["vocab"] = data_sample[key].unique()
-                vocab = data_sample[key].unique()
-                feats_max_min[key]["vocab"] = []
-                feats_max_min[key]['size_of_vocab'] = len(vocab)
-                feats_max_min[key]["max"] = max(data_sample[key].values)
-                feats_max_min[key]["min"] = min(data_sample[key].values)
+                if feats_max_min[key]['dtype'] in [np.int16, np.int32, np.int64]:
+                    vocab = data_sample[key].unique()
+                    feats_max_min[key]["vocab"] = vocab
+                    feats_max_min[key]['size_of_vocab'] = len(vocab)
+                else:
+                    ### For the rest of the numeric variables, you don't need vocab ###
+                    #feats_max_min[key]["vocab"] = data_sample[key].unique()
+                    vocab = data_sample[key].unique()
+                    feats_max_min[key]["vocab"] = []
+                    feats_max_min[key]['size_of_vocab'] = len(vocab)
+            feats_max_min[key]["max"] = max(data_sample[key].values)
+            feats_max_min[key]["min"] = min(data_sample[key].values)
         elif feats_max_min[key]['dtype'] == 'string':
             if np.mean(data_sample[key].fillna("missing").map(len)) >= nlp_char_limit:
                 ### This is for NLP variables. You want to remove duplicates #####
@@ -590,10 +595,13 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     ##### Make some changes to integer variables to select those with less than certain category limits ##
     ints = [ x for x in all_ints if feats_max_min[x]['size_of_vocab'] > cat_limit and x not in floats]
 
-    int_cats = [ x for x in all_ints if feats_max_min[x]['size_of_vocab'] <= cat_limit and x not in floats]
+    int_bools = [ x for x in all_ints if feats_max_min[x]['size_of_vocab'] == 2 and x not in floats]
+
+    int_cats = [ x for x in all_ints if feats_max_min[x]['size_of_vocab'] <= cat_limit and x not in floats+int_bools]
     
     var_df1['int_vars'] = ints
     var_df1['int_cats'] = int_cats
+    var_df1['int_bools'] = int_bools
     var_df1["continuous_vars"] = floats
     #### It is better to have a baseline number for the size of the dataset here ########
     feats_max_min['DS_LEN'] = len(data_sample)
@@ -703,12 +711,15 @@ def find_latitude_columns(df, verbose=0):
             if not lati_keyword == '':
                 lat_keywords[lat_word] = lat_word.replace(lati_keyword,'')
     ###### This is where we find whether they are truly latitudes ############
-    print('Possible latitude columns in dataset: %s' %sel_columns)
+    print('    possible latitude columns in dataset: %s' %sel_columns)
     sel_columns_copy = copy.deepcopy(sel_columns)
     for sel_col in sel_columns_copy: 
         if not lat_keywords[sel_col]:
             sel_columns.remove(sel_col)
-    print('    after further analysis, selected latitude columns = %s' %sel_columns)
+    if len(sel_columns) == 0:
+        print('        after further analysis, no latitude columns found')
+    else:
+        print('        after further analysis, selected latitude columns = %s' %sel_columns)
      #### If there are any more columns left, then do further analysis #######
     if len(sel_columns) > 0:
         sel_cols_float = df[sel_columns].select_dtypes(include='float').columns.tolist()
@@ -846,12 +857,15 @@ def find_longitude_columns(df, verbose=0):
             if not long_keyword == '':
                 lon_keywords[lon_word] = lon_word.replace(long_keyword,'')
     #####  This is where we test whether they are indeed longitude columns ####
-    print('Possible latitude columns in dataset: %s' %sel_columns)
+    print('    possible longitude columns in dataset: %s' %sel_columns)
     sel_columns_copy = copy.deepcopy(sel_columns)
     for sel_col in sel_columns_copy: 
         if not lon_keywords[sel_col]:
             sel_columns.remove(sel_col)
-    print('    after further analysis, selected longitude columns = %s' %sel_columns)
+    if len(sel_columns) == 0:
+        print('        after further analysis, no longitude columns found')
+    else:
+        print('        after further analysis, selected longitude columns = %s' %sel_columns)
     ###### This is where we find whether they are truly longitudes ############
     if len(sel_columns) > 0:
         sel_cols_float = df[sel_columns].select_dtypes(include='float').columns.tolist()

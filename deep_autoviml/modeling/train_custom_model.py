@@ -382,25 +382,27 @@ def return_optimizer_trials(hp, hpq_optimizer):
     nadam = keras.optimizers.Nadam(lr=0.001, beta_1=0.9, beta_2=0.999)
     best_optimizer = ''
     #############################################################################
-    if hpq_optimizer == 'Adam':
+    if hpq_optimizer.lower() in ['adam']:
         best_optimizer = tf.keras.optimizers.Adam(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
             epsilon=hp.Param('epsilon', [1e-6, 1e-8, 1e-10, 1e-12, 1e-14], ordered=True))
-    elif hpq_optimizer == 'SGD':
+    elif hpq_optimizer.lower() in ['sgd']:
         best_optimizer = keras.optimizers.SGD(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
                              momentum=0.9)
-    elif hpq_optimizer == 'Nadam':
+    elif hpq_optimizer.lower() in ['nadam']:
         best_optimizer = keras.optimizers.Nadam(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
                          beta_1=0.9, beta_2=0.999)
-    elif hpq_optimizer == 'AdaMax':
+    elif hpq_optimizer.lower() in ['adamax']:
         best_optimizer = keras.optimizers.Adamax(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
                          beta_1=0.9, beta_2=0.999)
-    elif hpq_optimizer == 'Adagrad':
+    elif hpq_optimizer.lower() in 'adagrad':
         best_optimizer = keras.optimizers.Adagrad(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]))
-    elif hpq_optimizer == 'RMSprop':
+    elif hpq_optimizer.lower() in ['rmsprop']:
         best_optimizer = keras.optimizers.RMSprop(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
                          rho=0.9)
-    else:
+    elif hpq_optimizer.lower() in ['nesterov']:
         best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
+    else:
+        best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9)
     return best_optimizer
 #####################################################################################
 def return_optimizer(hpq_optimizer):
@@ -469,6 +471,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     patience = keras_options["patience"]
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
     data_dim = int(data_size*meta_outputs.shape[1])
+    optimizer = keras_options['optimizer']
     early_stopping = check_keras_options(keras_options, "early_stopping", False)
     print('After preprocessing using keras layers, features dimensions is now %s' %meta_outputs.shape[1])
     print('    original datasize = %s, initial batchsize = %s' %(data_size, batch_size))
@@ -484,30 +487,16 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     if len(var_df['nlp_vars']) > 0:
         steps = 10
     else:
-        steps = max(50, data_size//(batch_size*25))
+        steps = max(10, (data_size//(batch_size*2)))
         steps = min(300, steps)
     print('    recommended steps per epoch = %d' %steps)
     STEPS_PER_EPOCH = check_keras_options(keras_options, "steps_per_epoch", 
                         steps)
-    #keras.optimizers.schedules.ExponentialDecay(0.01,STEPS_PER_EPOCH, 0.95)
     #### These can be standard for every keras option that you use layers ######
     kernel_initializer = check_keras_options(keras_options, 'kernel_initializer', 'lecun_normal')
     activation='selu'
     print('    default initializer = %s, default activation = %s' %(kernel_initializer, activation))
     ############################################################################
-    #####   set some default optimizers here for model parameters here ##
-    if not keras_options['optimizer']:
-        default_optimizer = keras.optimizers.SGD(learning_rate)
-    elif keras_options["optimizer"] in ['RMS', 'RMSprop']:
-        default_optimizer = keras.optimizers.RMSprop(learning_rate)
-    elif keras_options['optimizer'] in ['Adam', 'adam', 'ADAM', 'NADAM', 'Nadam']:
-        default_optimizer = keras.optimizers.Adam(learning_rate)
-    else:
-        default_optimizer = keras.optimizers.Adagrad(learning_rate)
-    ############################################################################
-    optimizer = check_keras_options(keras_options,'optimizer', default_optimizer)
-    #optimizer = SGD(lr=learning_rate, momentum = 0.9)
-    print('    Using optimizer = %s' %str(optimizer).split(".")[-1][:8])
     use_bias = check_keras_options(keras_options, 'use_bias', True)
     lr_scheduler = check_keras_options(keras_options, 'lr_scheduler', "")
     onecycle_steps = max(10, np.ceil(data_size/(2*batch_size))*NUMBER_OF_EPOCHS)
@@ -782,9 +771,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
             callbacks_list = [callbacks_dict['tb']]
     else:
         if early_stopping:
-            callbacks_list = [callbacks_dict['es'], callbacks_dict['tb'], callbacks_dict['pr']]
+            callbacks_list = [callbacks_dict['es'], callbacks_dict['tb'], callbacks_dict['rlr']]
         else:
-            callbacks_list = [callbacks_dict['tb'], callbacks_dict['pr']]
+            callbacks_list = [callbacks_dict['tb'], callbacks_dict['rlr']]
 
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
     for each_callback in callbacks_list:

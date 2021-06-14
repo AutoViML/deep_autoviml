@@ -192,8 +192,9 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
             optimizer = keras.optimizers.Adam(learning_rate)
         else:
             optimizer = keras.optimizers.Adagrad(learning_rate)
-    print('initial learning rate = %s' %learning_rate)
-    print('initial optimizer = %s' %optimizer)
+    keras_options['optimizer'] = optimizer
+    print('    initial learning rate = %s' %learning_rate)
+    print('    initial optimizer = %s' %str(optimizer).split(".")[-1].split(" ")[0])
     ###################################################################################
     if data_dim <= 1e6:
         dense_layer1 = max(96,int(data_dim/30000))
@@ -214,13 +215,13 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                                 dense_layer1,dense_layer2,dense_layer3))
     fast_models = ['deep_and_wide','deep_wide','wide_deep', 
                                 'wide_and_deep','deep wide', 'wide deep', 'fast', 'fast1']
-    
+    fast_models2 = ['deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
     #### The Deep and Wide Model is a bit more complicated. So it needs some changes in inputs! ######
     prebuilt_models = ['basic', 'simple', 'default','simple_dnn','sample model',
                         'deep', 'big_deep', 'big deep', 'giant_deep', 'giant deep',
                         'cnn1', 'cnn','cnn2'] 
     ######   Just do a simple check for auto models here ####################
-    if keras_model_type.lower() in fast_models+prebuilt_models:
+    if keras_model_type.lower() in fast_models+prebuilt_models+fast_models2:
             all_inputs = copy.deepcopy(inputs)
     else:
         ### this means it's an auto model and you create one here 
@@ -288,7 +289,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                 #final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
                 #model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
                 print('    Created deep and wide %s model, ...' %keras_model_type)
-            elif keras_model_type.lower() in ['deep_and_cross', 'deep_cross', 'deep cross', 'fast2']:
+            elif keras_model_type.lower() in fast_models2:
                 dropout_rate = 0.1
                 #hidden_units = [32, 32]
                 hidden_units = [dense_layer1, dense_layer2]

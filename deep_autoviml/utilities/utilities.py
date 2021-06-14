@@ -423,7 +423,7 @@ def print_regression_model_stats(actuals, predicted, targets='', plot_name=''):
             try:
                 predicted_x = predicted[:,i]
             except:
-                predicted_x = predicted[:]
+                predicted_x = predicted.ravel()
             print('Regression Metrics for Target=%s' %cols[i])
             mae, mae_asp, rmse_asp = print_regression_metrics(actuals_x, predicted_x)
     else:
@@ -662,7 +662,11 @@ def plot_regression_scatters(df, df2, num_vars, kind='scatter', plot_name=''):
                     else:
                         ax1 = ax[k][l]
                         row_color = next(colors)
-                        ax1.hist((x-y), density=True,color = row_color)
+                        try:
+                            assert y.shape[1]
+                            ax1.hist((x-y.ravel()), density=True,color = row_color)
+                        except:
+                            ax1.hist((x-y), density=True,color = row_color)
                         ax1.axvline(color='k')
                         ax1.set_title('Residuals Plot for Target = %s' %num_vars[k])
             except:
@@ -904,6 +908,7 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
     #####    LEARNING RATE SCHEDULING : Setup Learning Rate Multiple Ways #########
     ####################################################################################
     """
+    keras.backend.clear_session()
     logdir = "deep_autoviml"
     callbacks_dict = {}
     tensorboard_logpath = os.path.join(logdir,"mylogs")
@@ -917,10 +922,10 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
                     patience=lr_patience, min_lr=1e-6, mode='auto', min_delta=0.00001, cooldown=0, verbose=1)
 
     ###### This is one variation of onecycle #####
-    onecycle = OneCycleScheduler(steps=steps, lr_max=1e-2, lr_min=1e-5)
+    onecycle = OneCycleScheduler(steps=steps, lr_max=0.1)
 
     ###### This is another variation of onecycle #####
-    onecycle2 = OneCycleScheduler2(iterations=steps, max_rate=1e-2, start_rate=1e-5)
+    onecycle2 = OneCycleScheduler2(iterations=steps, max_rate=0.05)
 
     lr_sched = keras.callbacks.LearningRateScheduler(schedules)
 
@@ -988,5 +993,7 @@ class OneCycleScheduler2(keras.callbacks.Callback):
             rate = self._interpolate(2 * self.half_iteration, self.iterations,
                                      self.start_rate, self.last_rate)
         self.iteration += 1
+        if rate < 0:
+            rate = 0.05
         K.set_value(self.model.optimizer.lr, rate)
 #####################################################################################################

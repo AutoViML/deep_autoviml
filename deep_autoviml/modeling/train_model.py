@@ -115,6 +115,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     num_labels = model_options["num_labels"]
     modeltype = model_options["modeltype"]
     patience = check_keras_options(keras_options, "patience", 10)
+    optimizer = keras_options['optimizer']
     class_weights = check_keras_options(keras_options, "class_weight", {})
     print('    class_weights: %s' %class_weights)
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
@@ -126,7 +127,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
         learning_rate = keras.optimizers.schedules.ExponentialDecay(0.01, expo_steps, 0.1)
     else:
         learning_rate = check_keras_options(keras_options, "learning_rate", 5e-1)
-    steps = max(10, 1*(data_size//batch_size))
+    steps = max(10, (data_size//(2*batch_size)))
     print('    recommended steps per epoch = %d' %steps)
     onecycle_steps = math.ceil(data_size / batch_size) * NUMBER_OF_EPOCHS
     print('    recommended OneCycle steps = %d' %onecycle_steps)
@@ -137,8 +138,6 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     activation='selu'
     print('    default initializer = %s, default activation = %s' %(kernel_initializer, activation))
     default_optimizer = keras.optimizers.SGD(learning_rate)
-    optimizer = check_keras_options(keras_options,'optimizer', default_optimizer)
-    print('    Using default optimizer = %s' %str(optimizer).split(".")[-1][:8])
     use_bias = check_keras_options(keras_options, 'use_bias', True)
     val_monitor = keras_options['monitor']
     val_mode = keras_options['mode']
@@ -157,6 +156,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
         else:
             callbacks_list = [callbacks_dict['pr']]
     else:
+        chosen_callback = get_chosen_callback(callbacks_dict, keras_options)
         if keras_options['early_stopping']:
             callbacks_list = [chosen_callback,  callbacks_dict['tb'], callbacks_dict['es']]
         else:
@@ -180,7 +180,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     ##################################################################################
     shuffle_size = int(data_size)
     #shuffle_size = 100000
-    print(' Shuffle size = %d' %shuffle_size)
+    print('    shuffle size = %d' %shuffle_size)
     train_ds = train_ds.prefetch(batch_size).shuffle(shuffle_size, 
                             reshuffle_each_iteration=False, seed=42)#.repeat()
     valid_ds = valid_ds.prefetch(batch_size)#.repeat()
