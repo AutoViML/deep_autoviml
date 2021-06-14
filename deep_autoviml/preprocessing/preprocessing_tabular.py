@@ -190,7 +190,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     copy_int_cats = copy.deepcopy(int_cats)
     if len(copy_int_cats) > 0:
         for each_int in copy_int_cats:
-            max_tokens_zip[each_int] = int(1*(cat_vocab_dict[each_int]['size_of_vocab']))
+            max_tokens_zip[each_int] = cat_vocab_dict[each_int]['vocab'] ### just send vocab in
     copy_int_bools = int_bools
     if len(copy_int_bools) > 0:
         for each_int in copy_int_bools:

@@ -157,7 +157,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
             callbacks_list = [callbacks_dict['pr']]
     else:
         chosen_callback = get_chosen_callback(callbacks_dict, keras_options)
-        print('    chosen keras LR scheduler = %s' %chosen_callback)
+        print('    chosen keras LR scheduler = %s' %keras_options['lr_scheduler'])
         if keras_options['early_stopping']:
             callbacks_list = [chosen_callback,  callbacks_dict['tb'], callbacks_dict['es']]
         else:
