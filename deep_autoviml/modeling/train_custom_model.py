@@ -145,7 +145,7 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     #tf.keras.backend.reset_uids()
 
     n_layers = trial.suggest_int("n_layers", 1, 6)
-    num_hidden = trial.suggest_categorical("n_units", [16, 32, 48, 64, 96])
+    num_hidden = trial.suggest_categorical("n_units", [32, 48, 64, 96, 128])
     weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
     use_bias = trial.suggest_categorical("use_bias", [True, False])
     batch_norm = trial.suggest_categorical("batch_norm", [True, False])
@@ -154,13 +154,15 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     activation_fn = trial.suggest_categorical("activation", ['relu', 'tanh', 'elu', 'selu'])
     kernel_initializer = trial.suggest_categorical("kernel_initializer",
                                  ['glorot_uniform','he_normal','lecun_normal','he_uniform'])
-
+    kernel_size = num_hidden
     model = tf.keras.Sequential()
 
     for i in range(n_layers):
+        kernel_size =  int(kernel_size*0.80)
+
         model.add(
             tf.keras.layers.Dense(
-                num_hidden,
+                kernel_size,
                 name="opt_dense_"+str(i), use_bias=use_bias,
                 kernel_initializer=kernel_initializer,
                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
@@ -174,7 +176,7 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
         if add_noise:
             model.add(GaussianNoise(trial.suggest_float("adam_learning_rate", 1e-5, 1e-1, log=True)))
 
-        model.add(Dropout(dropout))
+        model.add(Dropout(dropout, name="opt_drop_"+str(i)))
 
     #### Now we add the final layers to the model #########
     kwargs = {}
@@ -772,9 +774,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
             callbacks_list = [callbacks_dict['tb']]
     else:
         if early_stopping:
-            callbacks_list = [callbacks_dict['es'], callbacks_dict['tb'], callbacks_dict['rlr']]
+            callbacks_list = [callbacks_dict['es'], callbacks_dict['tb'], callbacks_dict['pr']]
         else:
-            callbacks_list = [callbacks_dict['tb'], callbacks_dict['rlr']]
+            callbacks_list = [callbacks_dict['tb'], callbacks_dict['pr']]
 
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
     for each_callback in callbacks_list:

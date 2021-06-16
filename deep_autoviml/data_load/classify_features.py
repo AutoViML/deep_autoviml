@@ -731,7 +731,7 @@ def find_latitude_columns(df, verbose=0):
                     continue
                 if df[sel_column].min() >= -90 and df[sel_column].max() <= 90:
                     if verbose:
-                        print('    %s found as latitude column' %sel_column)
+                        print('        %s found as latitude column' %sel_column)
                     if sel_column not in sel_columns:
                         sel_columns.append(sel_column)
                         lati_keyword = find_latitude_keyword(sel_column, columns, sel_columns)
@@ -744,7 +744,7 @@ def find_latitude_columns(df, verbose=0):
             for sel_column in sel_cols_string:
                 if len(df[df[sel_column].str.endswith(('N','S'))]) > 0:
                     if verbose:
-                        print('    %s found as latitude column' %sel_column)
+                        print('        %s found as latitude column' %sel_column)
                     if sel_column not in sel_columns:
                         sel_columns.append(sel_column)
                         lati_keyword = find_latitude_keyword(sel_column, columns, sel_columns)
@@ -877,7 +877,7 @@ def find_longitude_columns(df, verbose=0):
                     continue
                 if df[sel_column].min() >= -180 and df[sel_column].max() <= 180:
                     if verbose:
-                        print('    %s found as longitude column' %sel_column)
+                        print('        %s found as longitude column' %sel_column)
                     if sel_column not in sel_columns:
                         sel_columns.append(sel_column)
                         long_keyword = find_longitude_keyword(sel_column, columns, sel_columns)
@@ -890,7 +890,7 @@ def find_longitude_columns(df, verbose=0):
             for sel_column in sel_cols_string:
                 if len(df[df[sel_column].str.endswith(('N','S'))]) > 0:
                     if verbose:
-                        print('    %s found as longitude column' %sel_column)
+                        print('        %s found as longitude column' %sel_column)
                     if sel_column not in sel_columns:
                         sel_columns.append(sel_column)
                         long_keyword = find_longitude_keyword(sel_column, columns, sel_columns)

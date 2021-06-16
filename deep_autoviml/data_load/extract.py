@@ -829,6 +829,10 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     else:
         train_small, ds, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_frame(train_data_or_file, target,
                                                                 keras_options, model_options, verbose)
+    ##### Just do a simple classification of the train_small data here ####################
+    #####  This might be useful for users to know whether to use feature-crosses or not ###
+    stri, numi = fast_classify_features(train_small)
+    #######################################################################################
     cat_vocab_dict['DS_LEN'] = DS_LEN
     if verbose >= 1 and train_small.shape[1] <= 30:
         print_one_row_from_tf_dataset(ds)
@@ -910,3 +914,51 @@ def is_test(x, y):
 def is_train(x, y):
     return not is_test(x, y)
 ##################################################################################
+from collections import defaultdict
+import copy
+def fast_classify_features(df):
+    """
+    This is a very fast way to get a handle on what a dataset looks like. Just send in df and get a print.
+    Nothing is returned. You just get a printed number of how many types of features you have in dataframe.
+    """
+    num_list = df.select_dtypes(include='number').columns.tolist()
+    str_list = left_subtract(df.columns.tolist(), num_list)
+    all_list = [str_list, num_list]
+    str_dict = defaultdict(dict)
+    num_dict = defaultdict(dict)
+    for inum, dicti in enumerate([str_dict, num_dict]):
+        bincols = []
+        catcols = []
+        highcols = []
+        numcols = []
+        for col in all_list[inum]:
+            leng = len(df[col].value_counts())
+            if leng <= 2:
+                bincols.append(col)
+            elif leng > 2 and leng <= 15:
+                catcols.append(col)
+            elif leng >15 and leng <300:
+                highcols.append(col)
+            else:
+                numcols.append(col)
+        dicti['bincols'] = bincols
+        dicti['catcols'] = catcols
+        dicti['highcols'] = highcols
+        dicti['numcols'] = numcols
+        if inum == 0:
+            str_dict = copy.deepcopy(dicti)
+            print('Distribution of string columns in datatset:')
+            print('    number of binary = %d, cats = %d, high cats = %d, very high cats = %d' %(
+                len(bincols), len(catcols), len(highcols), len(numcols)))
+        else:
+            print('Distribution of numeric columns in datatset:')
+            num_dict = copy.deepcopy(dicti)
+            print('    number of binary = %d, cats = %d, high cats = %d, floats = %d' %(
+                len(bincols), len(catcols), len(highcols), len(numcols)))
+    ###   Check if worth doing cat_feature_cross_flag on this dataset ###
+    if len(str_dict['bincols']+str_dict['catcols']) <= 10:
+        print('    consider doing categorical feature crosses on this dataset.')
+    if len(num_dict['bincols']+num_dict['catcols']) < 10:
+        print('        also consider doing numeric feature crosses on this dataset.')
+    return str_dict, num_dict
+###################################################################################################

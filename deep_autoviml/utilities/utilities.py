@@ -431,6 +431,7 @@ def print_regression_model_stats(actuals, predicted, targets='', plot_name=''):
     return mae, mae_asp, rmse_asp
 ################################################################################
 def print_regression_metrics(actuals, predicted):
+    predicted = np.nan_to_num(predicted)
     mae = mean_absolute_error(actuals, predicted)
     mae_asp = (mean_absolute_error(actuals, predicted)/actuals.std())*100
     rmse_asp = (np.sqrt(mean_squared_error(actuals,predicted))/actuals.std())*100
@@ -452,6 +453,7 @@ def print_static_rmse(actual, predicted, start_from=0,verbose=0):
     This ratio should be below 1 for a model to be considered useful.
     The comparison starts from the row indicated in the "start_from" variable.
     """
+    predicted = np.nan_to_num(predicted)
     rmse = np.sqrt(mean_squared_error(actual[start_from:],predicted[start_from:]))
     std_dev = actual[start_from:].std()
     if verbose >= 1:
@@ -947,7 +949,7 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
     callbacks_dict['tb'] = tb
     callbacks_dict['pr'] = pr
     callbacks_dict['rlr'] = rlr
-    callbacks_dict['lr_decay_cb'] = lr_decay_cb
+    callbacks_dict['decay'] = lr_decay_cb
 
     return callbacks_dict, tensorboard_logpath
 ####################################################################################
@@ -962,7 +964,7 @@ def get_chosen_callback(callbacks_dict, keras_options):
     elif keras_options['lr_scheduler'] == 'rlr':
         lr_scheduler = callbacks_dict['rlr']
     elif keras_options['lr_scheduler'] == 'decay':
-        lr_scheduler = callbacks_dict['lr_decay_cb']
+        lr_scheduler = callbacks_dict['decay']
     else:
         lr_scheduler = callbacks_dict['lr_sched']
         keras_options['lr_scheduler'] = "lr_sched"
