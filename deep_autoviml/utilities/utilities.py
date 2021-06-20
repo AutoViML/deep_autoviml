@@ -166,15 +166,14 @@ def print_one_row_from_tf_label(test_label):
             dict_row = list(test_label.as_numpy_iterator())[0]
         else:
             dict_row = test_label
-        print("Printing samples from labels data:")
         preds = list(dict_row.element_spec[0].keys())
         labels = list(dict_row.element_spec[0].keys())
         if dict_row.element_spec[0][preds[0]].shape[0] is None or isinstance(
                 dict_row.element_spec[0][preds[0]].shape[0], int):
             for feats, labs in dict_row.take(1):
-                print(labs)
+                print("    samples from labels: %s" %(labs.numpy().tolist()[:10]))
     except:
-        print(list(test_label.as_numpy_iterator())[0])
+        print("    samples from labels: %s" %(list(test_label.as_numpy_iterator())[0][:10]))
 ###########################################################################################
 from sklearn.base import TransformerMixin
 from collections import defaultdict
@@ -514,7 +513,7 @@ def print_classification_metrics(y_test, y_probs, proba_flag=True):
     ##### check if it is multi-class #####
     if len(np.unique(y_test)) > 2:
         multi_class_flag = True
-    
+    ###########  This is where we print the metrics ###################
     if not multi_class_flag  and not multi_label_flag:
         # Calculate comparison metrics for Binary classification results.
         accuracy = metrics.accuracy_score(y_test, y_preds)
@@ -914,7 +913,7 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
     logdir = "deep_autoviml"
     callbacks_dict = {}
     tensorboard_logpath = os.path.join(logdir,"mylogs")
-    print('    Tensorboard log directory can be found at: %s' %tensorboard_logpath)
+    print('Tensorboard log directory can be found at: %s' %tensorboard_logpath)
 
     cp = keras.callbacks.ModelCheckpoint("deep_autoviml", save_best_only=True,
                                          save_weights_only=save_weights_only, save_format='tf')
@@ -937,18 +936,25 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
     es = keras.callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
                         verbose=1, mode=val_mode, baseline=None, restore_best_weights=True)
     
-    tb = keras.callbacks.TensorBoard(tensorboard_logpath)
+    tb = keras.callbacks.TensorBoard(log_dir=tensorboard_logpath,
+                         histogram_freq=0,
+                         write_graph=True,
+                         write_images=True,
+                         update_freq='epoch',
+                         profile_batch=2,
+                         embeddings_freq=1
+                         )
 
     pr = PrintLR()
 
     callbacks_dict['onecycle'] = onecycle
     callbacks_dict['onecycle2'] = onecycle2
-    callbacks_dict['cp'] = cp
-    callbacks_dict['lr_sched'] = lr_sched
-    callbacks_dict['es'] = es
-    callbacks_dict['tb'] = tb
-    callbacks_dict['pr'] = pr
-    callbacks_dict['rlr'] = rlr
+    callbacks_dict['check_point'] = cp
+    callbacks_dict['scheduler'] = lr_sched
+    callbacks_dict['early_stop'] = es
+    callbacks_dict['tensor_board'] = tb
+    callbacks_dict['print'] = pr
+    callbacks_dict['reducer'] = rlr
     callbacks_dict['decay'] = lr_decay_cb
 
     return callbacks_dict, tensorboard_logpath
@@ -961,13 +967,14 @@ def get_chosen_callback(callbacks_dict, keras_options):
         lr_scheduler = callbacks_dict['onecycle2']
     elif keras_options['lr_scheduler'] == 'onecycle':
         lr_scheduler = callbacks_dict['onecycle']
-    elif keras_options['lr_scheduler'] == 'rlr':
-        lr_scheduler = callbacks_dict['rlr']
+    elif keras_options['lr_scheduler'] == 'reducer':
+        lr_scheduler = callbacks_dict['reducer']
     elif keras_options['lr_scheduler'] == 'decay':
         lr_scheduler = callbacks_dict['decay']
+    elif keras_options['lr_scheduler'] == "scheduler":
+        lr_scheduler = callbacks_dict['scheduler']
     else:
-        lr_scheduler = callbacks_dict['lr_sched']
-        keras_options['lr_scheduler'] = "lr_sched"
+        lr_scheduler = callbacks_dict['onecycle2']
     return lr_scheduler
 ################################################################################################
 import math

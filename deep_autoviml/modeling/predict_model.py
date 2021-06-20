@@ -131,10 +131,12 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
         model_options['DS_LEN'] = 10000  ### Just set some default #######
         var_df, cat_vocab_dict = classify_features_using_pandas(test_small, target=target_name, 
                                     model_options=model_options, verbose=verbose)
+        ##########    Just transfer all the values from var_df to cat_vocab_dict  ##########
+        for each_key in var_df:
+            cat_vocab_dict[each_key] = var_df[each_key]
+        ####################################################################################
     else:
         model_options['DS_LEN'] = cat_vocab_dict['DS_LEN'] ### you need this to classify features
-        var_df, _ = classify_features_using_pandas(test_small, target=target_name, 
-                            model_options=model_options, verbose=verbose)
     ############  Now load the file or dataframe into tf.data.DataSet here #################
     preds = list(test_small)
     #batch_size = 64   ## artificially set a size ###
@@ -169,7 +171,7 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
             data_batches = data_batches.map(lambda x: split_combined_ds_into_two(x, usecols, preds))
     else:
         if test_small.isnull().sum().sum() > 0:
-            test_small = fill_missing_values_for_TF2(test_small, var_df)
+            test_small = fill_missing_values_for_TF2(test_small, cat_vocab_dict)
         
         drop_cols = cat_vocab_dict['columns_deleted']
         if len(drop_cols) > 0:

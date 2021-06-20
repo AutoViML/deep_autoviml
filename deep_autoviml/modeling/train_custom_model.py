@@ -532,19 +532,22 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     callbacks_dict, tb_logpath = get_callbacks(val_mode, val_monitor, patience,
                                     learning_rate, save_weights_only, onecycle_steps)
     chosen_callback = get_chosen_callback(callbacks_dict, keras_options)
-    print('    chosen keras LR scheduler = %s' %keras_options['lr_scheduler'])
+    if not keras_options["lr_scheduler"]:
+        print('    chosen keras LR scheduler = default')
+    else:
+        print('    chosen keras LR scheduler = %s' %keras_options['lr_scheduler'])
 
     ###### You can use Storm Tuner to set the batch size ############
     ############## Split train into train and validation datasets here ###############
     recover = lambda x,y: y
-    print('\nSplitting train into two: train and validation data')
+    print('\nSplitting train into 80+20 percent: train and validation data')
     valid_ds1 = full_ds.enumerate().filter(is_valid).map(recover)
     train_ds = full_ds.enumerate().filter(is_train).map(recover)
     heldout_ds1 = valid_ds1
     ##################################################################################
     valid_ds = heldout_ds1.enumerate().filter(is_test).map(recover)
     heldout_ds = heldout_ds1.enumerate().filter(is_test).map(recover)
-    print('    Splitting validation into two: valid and heldout data')
+    print('    Splitting validation 20 into 10+10 percent: valid and heldout data')
     ##################################################################################
     ###   V E R Y    I M P O R T A N T  S T E P   B E F O R E   M O D E L   F I T  ###    
     ##################################################################################
@@ -587,16 +590,13 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     tf.compat.v1.reset_default_graph()
     K.clear_session()
     
-    if verbose:
-        print_one_row_from_tf_label(heldout_ds)
-
     #######################################################################################
     ###    E A R L Y    S T O P P I N G    T O    P R E V E N T   O V E R F I T T I N G  ##
     #######################################################################################
     if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
-        callbacks_list_tuner = callbacks_dict['es']
+        callbacks_list_tuner = callbacks_dict['early_stop']
     else:
-        callbacks_list_tuner = [chosen_callback, callbacks_dict['es']]
+        callbacks_list_tuner = [chosen_callback, callbacks_dict['early_stop']]
 
     targets = cat_vocab_dict["target_variables"]
     ############################################################################
@@ -758,25 +758,27 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     
     #train_ds = train_ds.unbatch().batch(best_batch)
     train_ds = train_ds.shuffle(shuffle_size, 
-                reshuffle_each_iteration=False, seed=42).prefetch(best_batch)#.repeat()
+                reshuffle_each_iteration=False, seed=42).prefetch(best_batch).repeat()
 
     #valid_ds = valid_ds.unbatch().batch(best_batch)
-    valid_ds = valid_ds.prefetch(best_batch)#.repeat(5)
+    valid_ds = valid_ds.prefetch(best_batch).repeat()
 
     ####################################################################################
     ############### F I R S T  T R A I N   F O R  1 0 0   E P O C H S ##################
     ### You have to set both callbacks in order to learn what the best learning rate is 
     ####################################################################################
     if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
+        #### Exponential decay will take care of automatic reduction of Learning Rate
         if early_stopping:
-            callbacks_list = [callbacks_dict['es'], callbacks_dict['tb']]
+            callbacks_list = [callbacks_dict['early_stop'], callbacks_dict['tensor_board']]
         else:
-            callbacks_list = [callbacks_dict['tb']]
+            callbacks_list = [callbacks_dict['tensor_board']]
     else:
+        #### here you have to explicitly include Learning Rate reducer 
         if early_stopping:
-            callbacks_list = [callbacks_dict['es'], callbacks_dict['tb'], callbacks_dict['pr']]
+            callbacks_list = [callbacks_dict['early_stop'], callbacks_dict['tensor_board'], chosen_callback]
         else:
-            callbacks_list = [callbacks_dict['tb'], callbacks_dict['pr']]
+            callbacks_list = [callbacks_dict['tensor_board'], chosen_callback]
 
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
     for each_callback in callbacks_list:
@@ -786,9 +788,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     np.random.seed(42)
     tf.random.set_seed(42)
     history = best_model.fit(train_ds, validation_data=valid_ds, batch_size=best_batch,
-            epochs=NUMBER_OF_EPOCHS, #steps_per_epoch=STEPS_PER_EPOCH, 
+            epochs=NUMBER_OF_EPOCHS, steps_per_epoch=STEPS_PER_EPOCH, 
             callbacks=callbacks_list, class_weight=class_weights,
-            #validation_steps=STEPS_PER_EPOCH, 
+            validation_steps=STEPS_PER_EPOCH, 
            shuffle=True)
     print('    Model training completed. Following metrics available: %s' %history.history.keys())
     print('Time taken to train model (in mins) = %0.0f' %((time.time()-start_time)/60))
@@ -938,20 +940,14 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
                 print_classification_metrics(y_test, y_test_preds, False)
                 print(classification_report(y_test, y_test_preds ))
     ###############           P R I N T I N G   C O M P L E T E D      #################
-
-
     ### plot the regression results here #########
     if modeltype == 'Regression':
         if isinstance(target, str):
             plt.figure(figsize=(15,6))
             ax1 = plt.subplot(1, 2, 1)
-            residual = np.sqrt((y_test - y_test_preds)**2)
-            lowermin = min(y_test.min(), residual.min())
-            uppermax = max(y_test.max(), residual.max())
-            ax1.scatter(x=y_test, y=residual)
-            ax1.set_xlim(lowermin, uppermax)
-            ax1.set_ylim(lowermin, uppermax)
-            ax1.set_title('Actuals (x-axis) vs. RMSE of predictions (y-axis)')
+            residual = pd.Series((y_test - y_test_preds))
+            residual.plot(ax=ax1, color='b')
+            ax1.set_title('Residuals by each row in held-out set')
             pdf = save_valid_predictions(y_test, y_test_preds.ravel(), project_name, num_labels)
             ax2 = plt.subplot(1, 2, 2)
             pdf.plot(ax=ax2)
@@ -978,7 +974,6 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
             reshuffle_each_iteration=False, seed=42).prefetch(best_batch)#.repeat()
 
     #################   B E S T    D E E P   M O D E L       ##########################
-
     ##### You need to set the best learning rate from the best_model #################
     best_rate = best_model.optimizer.lr.numpy()
     if best_rate < 0:
@@ -991,7 +986,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     print("    set learning rate using best model:", deep_model.optimizer.learning_rate.numpy())
     ####   Dont set the epochs too low - let them be back to where they were stopped  ####
     print('    max epochs for training = %d' %stopped_epoch)
-    callbacks_list = [ callbacks_dict['rlr'] ]
+
+    ##### You save deep_model finally here using checkpoints ##############
+    callbacks_list = [ callbacks_dict['check_point'] ]
     deep_model.fit(full_ds, epochs=stopped_epoch, #steps_per_epoch=STEPS_PER_EPOCH, 
                 batch_size=best_batch, class_weight = class_weights,
                 callbacks=callbacks_list,  shuffle=True, verbose=0)
@@ -1006,15 +1003,22 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         print('Project name must be a string and helps create a folder to store model.')
         project_name = "deep_autoviml"
     save_model_path = os.path.join(project_name,keras_model_type)
+    save_model_path = get_save_folder(save_model_path)
     cat_vocab_dict['project_name'] = project_name
 
     if save_model_flag:
         print('\nSaving model in %s now...this will take time...' %save_model_path)
         if not os.path.exists(save_model_path):
             os.makedirs(save_model_path)
-        deep_model.save(save_model_path)
+        if model_options["save_model_format"]:
+            deep_model.save(save_model_path, save_format=model_options["save_model_format"])
+            print('     deep model saved in %s directory in %s format' %(
+                            save_model_path, model_options["save_model_format"]))
+        else:
+            deep_model.save(save_model_path)
+            print('     deep model saved in %s directory in .pb format' %save_model_path)
         cat_vocab_dict['saved_model_path'] = save_model_path
-        print('     deep model saved in %s directory' %save_model_path)
+        cat_vocab_dict['save_model_format'] = model_options["save_model_format"]
     else:
         print('\nModel not being saved since save_model_flag set to False...')
 
@@ -1031,10 +1035,11 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     tf.keras.backend.reset_uids()
 
     #### make sure you save the cat_vocab_dict to use later during predictions
+    save_artifacts_path = os.path.join(save_model_path, "artifacts")
     try:
-        pickle_path = os.path.join(project_name,"cat_vocab_dict")+".pickle"
-        if not os.path.exists(project_name):
-            os.makedirs(project_name)
+        if not os.path.exists(save_artifacts_path):
+            os.makedirs(save_artifacts_path)
+        pickle_path = os.path.join(save_artifacts_path,"cat_vocab_dict")+".pickle"
         print('\nSaving vocab dictionary using pickle in %s...will take time...' %pickle_path)
         with open(pickle_path, "wb") as fileopen:
             fileopen.write(pickle.dumps(cat_vocab_dict))
@@ -1043,9 +1048,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         print('Unable to save cat_vocab_dict - please pickle it yourself.')
     ####### make sure you save the variable definitions file ###########
     try:
-        pickle_path = os.path.join(project_name,"var_df")+".pickle"
-        if not os.path.exists(project_name):
-            os.makedirs(project_name)
+        if not os.path.exists(save_artifacts_path):
+            os.makedirs(save_artifacts_path)
+        pickle_path = os.path.join(save_artifacts_path,"var_df")+".pickle"
         print('\nSaving variable definitions file using pickle in %s...will take time...' %pickle_path)
         with open(pickle_path, "wb") as fileopen:
             fileopen.write(pickle.dumps(var_df))
@@ -1073,3 +1078,7 @@ def check_for_nan_in_array(array_in):
     array_nan = np.isnan(array_sum)
     return array_nan
 ########################################################################################
+def get_save_folder(save_dir):
+    run_id = time.strftime("model_%Y_%m_%d-%H_%M_%S")
+    return os.path.join(save_dir, run_id)
+######################################################################################

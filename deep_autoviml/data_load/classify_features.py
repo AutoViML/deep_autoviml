@@ -168,7 +168,7 @@ def classify_features(dfte, depVar, model_options={}, verbose=0):
     elif verbose==1 and len(preds) > max_cols_analyzed:
         print('   Total columns > %d, too numerous to list.' %max_cols_analyzed)
     features_dict = dict([('IDcols',IDcols),('cols_delete',cols_delete),('categorical_vars',categorical_vars), (
-                        'lats',lats),('lons',lons),('matched_pairs',matched_pairs), ('int_vars',int_vars),
+                        'lat_vars',lats),('lon_vars',lons),('matched_pairs',matched_pairs), ('int_vars',int_vars),
                         ('continuous_vars',continuous_vars),('discrete_string_vars',discrete_string_vars),
                         ('nlp_vars',nlp_vars), ('date_vars',date_vars)])
     return features_dict
@@ -497,8 +497,8 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     dates = var_df1['date_vars']
     cats = var_df1['categorical_vars']
     discrete_strings = var_df1['discrete_string_vars']
-    lats = var_df1['lats']
-    lons = var_df1['lons']
+    lats = var_df1['lat_vars']
+    lons = var_df1['lon_vars']
     ignore_variables = var_df1['cols_delete']
     all_ints = var_df1['int_vars']
     if isinstance(target, list):
@@ -521,9 +521,8 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
             feats_max_min[key]["dtype"] = "string"
         elif str(data_sample[key].dtype).split("[")[0] in ['datetime64','datetime32','datetime16']:
             feats_max_min[key]["dtype"] = "string"
-        elif data_sample[key].dtype in [np.int16, np.int32,
-                                np.int64]:
-            feats_max_min[key]["dtype"] = "int32"
+        elif data_sample[key].dtype in [np.int16, np.int32, np.int64]:
+            feats_max_min[key]["dtype"] = data_sample[key].dtype
         else:
             floats.append(key)
             feats_max_min[key]["dtype"] = data_sample[key].dtype

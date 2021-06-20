@@ -178,6 +178,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             "cat_feat_cross_flag": if you want to cross categorical features such as A*B, B*C...
             "sep" : default = "," comma but you can override it. Separator used in read_csv.
             "idcols": default: empty list. Specify which variables you want to exclude from model.
+            "save_model_format": default is "" (empty string) which means tensorflow default .pb format: 
+                    Specify "h5" if you want to save it in ".h5" format.
             "modeltype": default = '': if you leave it blank we will automatically determine it.
                     If you want to override, your options are: 'Regression', 'Classification', 
                     'Multi_Classification'.
@@ -270,6 +272,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     model_options_defaults = defaultdict(str)
     model_options_defaults["idcols"] = []
     model_options_defaults["modeltype"] = ''
+    model_options_defaults["save_model_format"] = "" 
     model_options_defaults["sep"] = ","
     model_options_defaults["cat_feat_cross_flag"] = False
     model_options_defaults["model_use_case"] = ''
@@ -298,7 +301,10 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         print('Max Trials is 10 for faster processing. Please increase max_trials if you want more performance...')
         model_options["max_trials"] = 10
     else:
-        print('Max Trials : %s. Please lower max_trials if you want to run faster...' %model_options["max_trials"])
+        if model_options["max_trials"] <= 20:
+            print('Max Trials : %s. Please increase max_trials if you want to better accuracy...' %model_options["max_trials"])
+        else:
+            print('Max Trials : %s. Please lower max_trials if you want to run faster...' %model_options["max_trials"])
 
     print("""
 #################################################################################

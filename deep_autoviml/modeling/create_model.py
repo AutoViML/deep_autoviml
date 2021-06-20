@@ -211,7 +211,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     dense_layer1 = min(300,dense_layer1)
     dense_layer2 = min(200,dense_layer2)
     dense_layer3 = min(100,dense_layer3)
-    print('Recommended hidden layers (with units in each Dense Layer)  = (%d, %d, %d)\n' %(
+    print('    Recommended hidden layers (with units in each Dense Layer)  = (%d, %d, %d)\n' %(
                                 dense_layer1,dense_layer2,dense_layer3))
     fast_models = ['deep_and_wide','deep_wide','wide_deep', 
                                 'wide_and_deep','deep wide', 'wide deep', 'fast', 'fast1']

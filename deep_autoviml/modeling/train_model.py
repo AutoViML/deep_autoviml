@@ -152,30 +152,33 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
 
     if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
         if early_stopping:
-            callbacks_list = [callbacks_dict['es'], callbacks_dict['pr']]
+            callbacks_list = [callbacks_dict['early_stop'], callbacks_dict['print']]
         else:
-            callbacks_list = [callbacks_dict['pr']]
+            callbacks_list = [callbacks_dict['print']]
     else:
         chosen_callback = get_chosen_callback(callbacks_dict, keras_options)
-        print('    chosen keras LR scheduler = %s' %keras_options['lr_scheduler'])
-        if keras_options['early_stopping']:
-            callbacks_list = [chosen_callback,  callbacks_dict['tb'], callbacks_dict['es']]
+        if not keras_options['lr_scheduler']:
+            print('    chosen keras LR scheduler = default')
         else:
-            callbacks_list = [chosen_callback, callbacks_dict['tb'], callbacks_dict['pr']]
+            print('    chosen keras LR scheduler = %s' %keras_options['lr_scheduler'])
+        if keras_options['early_stopping']:
+            callbacks_list = [chosen_callback,  callbacks_dict['tensor_board'], callbacks_dict['early_stop']]
+        else:
+            callbacks_list = [chosen_callback, callbacks_dict['tensor_board'], callbacks_dict['print']]
 
     print('    val mode = %s, val monitor = %s, patience = %s' %(val_mode, val_monitor, patience))
     print('    number of epochs = %d, steps per epoch = %d' %(NUMBER_OF_EPOCHS, STEPS_PER_EPOCH))
     ############## Split train into train and validation datasets here ###############
     ##################################################################################
     recover = lambda x,y: y
-    print('    Splitting train into two: train and validation data')
+    print('\nSplitting train into 80+20 percent: train and validation data')
     valid_ds1 = full_ds.enumerate().filter(is_valid).map(recover)
     train_ds = full_ds.enumerate().filter(is_train).map(recover)
     heldout_ds1 = valid_ds1
     ##################################################################################
     valid_ds = heldout_ds1.enumerate().filter(is_test).map(recover)
     heldout_ds = heldout_ds1.enumerate().filter(is_test).map(recover)
-    print('    Splitting validation into two: valid and heldout data')
+    print('    Splitting validation 20 into 10+10 percent: valid and heldout data')
     ##################################################################################
     ###   V E R Y    I M P O R T A N T  S T E P   B E F O R E   M O D E L   F I T  ###    
     ##################################################################################
@@ -222,23 +225,31 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
         print('Project name must be a string and helps create a folder to store model.')
         project_name = "deep_autoviml"
     save_model_path = os.path.join(project_name,keras_model_type)
+    save_model_path = get_save_folder(save_model_path)
     cat_vocab_dict['project_name'] = project_name
 
     if save_model_flag:
         print('\nSaving model in %s now...this will take time...' %save_model_path)
         if not os.path.exists(save_model_path):
             os.makedirs(save_model_path)
-        deep_model.save(save_model_path)
+        if model_options["save_model_format"]:
+            deep_model.save(save_model_path, save_format=model_options["save_model_format"])
+            print('     deep model saved in %s directory in %s format' %(
+                            save_model_path, model_options["save_model_format"]))
+        else:
+            deep_model.save(save_model_path)
+            print('     deep model saved in %s directory in .pb format' %save_model_path)
         cat_vocab_dict['saved_model_path'] = save_model_path
-        print('     deep model saved in %s directory' %save_model_path)
+        cat_vocab_dict['save_model_format'] = model_options["save_model_format"]
     else:
         print('\nModel not being saved since save_model_flag set to False...')
 
     #### make sure you save the cat_vocab_dict to use later during predictions
+    save_artifacts_path = os.path.join(save_model_path, "artifacts")
     try:
-        pickle_path = os.path.join(project_name,"cat_vocab_dict")+".pickle"
-        if not os.path.exists(project_name):
-            os.makedirs(project_name)
+        if not os.path.exists(save_artifacts_path):
+            os.makedirs(save_artifacts_path)
+        pickle_path = os.path.join(save_artifacts_path,"cat_vocab_dict")+".pickle"
         print('\nSaving vocab dictionary using pickle in %s...will take time...' %pickle_path)
         with open(pickle_path, "wb") as fileopen:
             fileopen.write(pickle.dumps(cat_vocab_dict))
@@ -247,9 +258,9 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
         print('Unable to save cat_vocab_dict - please pickle it yourself.')
     ####### make sure you save the variable definitions file ###########
     try:
-        pickle_path = os.path.join(project_name,"var_df")+".pickle"
-        if not os.path.exists(project_name):
-            os.makedirs(project_name)
+        if not os.path.exists(save_artifacts_path):
+            os.makedirs(save_artifacts_path)
+        pickle_path = os.path.join(save_artifacts_path,"var_df")+".pickle"
         print('\nSaving variable definitions file using pickle in %s...will take time...' %pickle_path)
         with open(pickle_path, "wb") as fileopen:
             fileopen.write(pickle.dumps(var_df))
@@ -393,8 +404,9 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
         if isinstance(target, str):
             plt.figure(figsize=(15,6))
             ax1 = plt.subplot(1, 2, 1)
-            ax1.scatter(x=y_test, y=y_test_preds,)
-            ax1.set_title('Actuals (x-axis) vs. Predictions (y-axis)')
+            residual = pd.Series((y_test - y_test_preds))
+            residual.plot(ax=ax1, color='b')
+            ax1.set_title('Residuals by each row in held-out set')
             pdf = save_valid_predictions(y_test, y_test_preds.ravel(), project_name, num_labels)
             ax2 = plt.subplot(1, 2, 2)
             pdf.plot(ax=ax2)
@@ -422,4 +434,8 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     print('    completed. Time taken (in mins) = %0.0f' %((time.time()-start_time)/100))
 
     return deep_model, cat_vocab_dict
+######################################################################################
+def get_save_folder(save_dir):
+    run_id = time.strftime("model_%Y_%m_%d-%H_%M_%S")
+    return os.path.join(save_dir, run_id)
 ######################################################################################

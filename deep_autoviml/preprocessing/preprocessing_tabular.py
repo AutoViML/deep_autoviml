@@ -162,8 +162,8 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     nlps = var_df['nlp_vars']
     idcols = var_df['IDcols']
     dates = var_df['date_vars']
-    lats = var_df['lats']
-    lons = var_df['lons']
+    lats = var_df['lat_vars']
+    lons = var_df['lon_vars']
     matched_lat_lons = var_df['matched_pairs']
 
     #### These are the most important variables from this program: all inputs and outputs
@@ -181,19 +181,19 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     cats_copy = copy.deepcopy(cats)
     if len(cats_copy) > 0:
         for each_name in cats_copy:
-            max_tokens_zip[each_name] = cat_vocab_dict[each_name]['vocab'] ### just send vocab in
+            max_tokens_zip[each_name] = cat_vocab_dict[each_name]['vocab'].tolist() ### just send vocab in
     high_cats_copy = copy.deepcopy(high_string_vars)
     if len(high_cats_copy) > 0:
         for each_name in high_cats_copy:
-            max_tokens_zip[each_name] = cat_vocab_dict[each_name]['vocab'] ### just send vocab in
+            max_tokens_zip[each_name] = cat_vocab_dict[each_name]['vocab'].tolist() ### just send vocab in
     copy_int_cats = copy.deepcopy(int_cats)
     if len(copy_int_cats) > 0:
         for each_int in copy_int_cats:
-            max_tokens_zip[each_int] = cat_vocab_dict[each_int]['vocab'] ### just send vocab in
+            max_tokens_zip[each_int] = cat_vocab_dict[each_int]['vocab'].tolist() ### just send vocab in
     copy_int_bools = int_bools
     if len(copy_int_bools) > 0:
         for each_int in copy_int_bools:
-            max_tokens_zip[each_int] = cat_vocab_dict[each_int]['vocab'] ### just send vocab in
+            max_tokens_zip[each_int] = cat_vocab_dict[each_int]['vocab'].tolist() ### just send vocab in
     copy_ints = ints
     if len(copy_ints) > 0:
         for each_int in copy_ints:
@@ -340,6 +340,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
 
 
     ######  This is where we handle low cardinality <=50 categories integers ##################
+    
     ints_cat_copy = copy.deepcopy(int_cats)
     if len(ints_cat_copy) > 0:
         for each_int in ints_cat_copy:
@@ -354,7 +355,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 all_input_names.append(each_int)
                 if verbose:
                     print('    %s number of categories = %d: after integer categorical encoding shape: %s' %(
-                                        each_int, max_tokens, encoded.shape[1]))
+                                        each_int, len(vocab), encoded.shape[1]))
                     if encoded.shape[1] > high_cats_alert:
                         print('        Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
@@ -394,7 +395,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 continue    ### skip if these variables are already in another list
             try:
                 #### The next line is not a typo: this input should be left without shape. Be Careful!
-                cat_input = keras.Input(shape=(), name=each_cat, dtype="string")
+                cat_input = keras.Input(shape=(1,), name=each_cat, dtype="string")
                 vocabulary = max_tokens_zip[each_cat]
                 encoded = encode_any_feature_to_embed_categorical(cat_input, each_cat,
                                                                      train_ds, vocabulary)
@@ -427,8 +428,15 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
             print('    Performing %s feature crossing using %d variables: \n    %s' %(cat_feat_cross_flag, len(cross_cats), cross_cats))
     ##### Now you perform crosses for each kind of crosses requested #####
     if cat_feat_cross_flag and len(cross_cats) > 20:
-        print('    Too many categorical features (>20). hence feature crosses not performed since it would explode feature creation.')
-    elif cat_feat_cross_flag and len(cross_cats) > 1 and len(cross_cats) <= 20:
+        print('    Too many categorical features (>20). hence taking first 20 features for crossing.')
+        ls = cross_cats[:20]
+        keys = list(cat_input_dict.keys())
+        for each in keys:
+            if each not in ls:
+                cat_input_dict.pop(each)
+        cross_cats = copy.deepcopy(ls)
+    ##################################################################################
+    if cat_feat_cross_flag and len(cross_cats) > 1:
         try:
             #### This is a deep and cross network for cat and int-cat + int-bool feature crosses #############
             each_cat_coded = encode_inputs(cat_input_dict, cats, max_tokens_zip, 
@@ -437,7 +445,13 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
             for _ in hidden_units:
                 units = cross.shape[-1]
                 x = layers.Dense(units)(cross)
-                cross = each_cat_coded * x + cross
+                if cross.dtype == x.dtype:
+                    cross = each_cat_coded * x + cross
+                else:
+                    each_cat_coded = tf.cast(each_cat_coded, tf.float32) 
+                    cross = tf.cast(cross, tf.float32) 
+                    cross = each_cat_coded * x + cross
+
             cross = layers.BatchNormalization()(cross)
 
             deep = each_cat_coded
@@ -833,7 +847,7 @@ def encode_integer_to_categorical_feature(feature_input, name, dataset, vocab):
     # Create a StringLookup layer which will turn strings into integer indices
     ### For now we will leave the max_values as None which means there is no limit.
     index = IntegerLookup(vocabulary=vocab, mask_token=None, 
-                        num_oov_indices=extra_oov, 
+                        num_oov_indices=extra_oov, oov_token=-9999,
                         output_mode='int')
 
     # Prepare a Dataset that only yields our feature
@@ -1241,7 +1255,6 @@ def encode_inputs(inputs, CATEGORICAL_FEATURE_NAMES, CATEGORICAL_FEATURES_WITH_V
             # Use the numerical features as-is.
             encoded_feature = inputs[feature_name]
         encoded_features.append(encoded_feature)
-
     all_features = layers.concatenate(encoded_features)
     return all_features
 ##########################################################################################
@@ -1253,11 +1266,11 @@ def create_model_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES):
     for feature_name in FEATURE_NAMES:
         if feature_name in NUMERIC_FEATURE_NAMES:
             inputs[feature_name] = layers.Input(
-                name=feature_name, shape=(), dtype=tf.float32
+                name=feature_name, shape=(1,), dtype=tf.float32
             )
         else:
             inputs[feature_name] = layers.Input(
-                name=feature_name, shape=(), dtype=tf.string
+                name=feature_name, shape=(1,), dtype=tf.string
             )
     return inputs
 #################################################################################
@@ -1266,11 +1279,11 @@ def create_feature_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES):
     for feature_name in FEATURE_NAMES:
         if feature_name in NUMERIC_FEATURE_NAMES:
             inputs[feature_name] = layers.Input(
-                name=feature_name, shape=(), dtype=tf.int32
+                name=feature_name, shape=(1,), dtype=tf.int32
             )
         else:
             inputs[feature_name] = layers.Input(
-                name=feature_name, shape=(), dtype=tf.string
+                name=feature_name, shape=(1,), dtype=tf.string
             )
     return inputs
 ################################################################################

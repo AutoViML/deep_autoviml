@@ -257,7 +257,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         ### load a small sample of data into a pandas dataframe ##
         train_small = pd.read_csv(train_datafile, sep=sep, nrows=maxrows, compression=compression,
                                 header=header, encoding=csv_encoding) 
-        ### this reads the entire file
+    ### this reads the entire file
     ##### Now detect modeltype if it is not given ###############
     try:
         modeltype = model_options["modeltype"]
@@ -288,6 +288,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     
     label_encode_flag = False
     ##########  Find small details about the data to help create the right model ###
+
     if modeltype == 'Classification' or modeltype == 'Multi_Classification':
         if isinstance(target, str):
             #### This is for Single-Label problems ########
@@ -318,7 +319,12 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     ### classify variables using the small dataframe ##
     print('    Classifying variables using data sample in pandas...')
     var_df1, cat_vocab_dict = classify_features_using_pandas(train_small, target, model_options, verbose=verbose)
-    
+
+    ##########    Just transfer all the values from var_df to cat_vocab_dict  ##################################
+    for each_key in var_df1:
+        cat_vocab_dict[each_key] = var_df1[each_key]
+    ############################################################################################################
+
     model_options['modeltype'] = modeltype
     model_options['model_label'] = model_label
     cat_vocab_dict['modeltype'] = modeltype
@@ -336,10 +342,6 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                 keys=target_vocab, values=tf.constant(list(range(len(target_vocab))),
                                                dtype=tf.int64)),
             default_value=int(len(target_vocab)+1))
-
-        trans_output, cat_vocab_dict = transform_train_target(train_small, target, modeltype, 
-                                    model_label, cat_vocab_dict)
-        train_small[target] = trans_output.values
     
     #### Set column defaults while reading dataset from CSV files - that way, missing values avoided!
     ### The following are valid CSV dtypes for missing values: float32, float64, int32, int64, or string
@@ -354,6 +356,11 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     float_cols = train_small.select_dtypes(include='float').columns.tolist()
     column_defaults = [-99.0 if x in float_cols else -99 if x in integer_cols else "missing" 
                                 for x in list(train_small)]
+    ####### Make sure you don't move this next stage. It should be after column defaults! ###
+    if label_encode_flag:
+        trans_output, cat_vocab_dict = transform_train_target(train_small, target, modeltype, 
+                                    model_label, cat_vocab_dict)
+        train_small[target] = trans_output.values
 
     #### CAUTION: (num_epochs=None) will automatically repeat the data forever! Be Careful with it!
     ### setting num_epochs to 1 is always good practice since it ensures that your dataset is readable later
@@ -456,7 +463,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     return train_small, data_batches, var_df1, cat_vocab_dict, keras_options, model_options
 ############################################################################################
 def to_ids(features, labels, table):
-    labels = tf.cast(labels, tf.int64)
+    #labels = tf.cast(labels, tf.int64) ## this should not have been used ##
     labels = table.lookup(labels)
     return (features, labels)
 #############################################################################################
@@ -498,14 +505,15 @@ def fill_missing_values_for_TF2(train_small, var_df):
     train_small = copy.deepcopy(train_small)
     cols_delete = var_df['cols_delete']
     cat_cols = var_df['categorical_vars'] + var_df['discrete_string_vars']
+    int_bools = var_df['int_bools']
     int_cats = var_df['int_cats']
     ints = var_df['int_vars']
-    int_cols = int_cats + ints
+    int_cols = int_cats + ints + int_bools
     float_cols = var_df['continuous_vars']
     nlp_cols = var_df['nlp_vars']
     date_vars = var_df['date_vars']
-    lats = var_df['lats']
-    lons = var_df['lons']
+    lats = var_df['lat_vars']
+    lons = var_df['lon_vars']
     ffill_cols = lats + lons + date_vars + cols_delete
 
     if len(cat_cols) > 0:
@@ -592,13 +600,15 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     ###   Cat_Vocab_Dict contains all info about vocabulary in each variable and their size
     print('    Classifying variables using data sample in pandas...')
     var_df, cat_vocab_dict = classify_features_using_pandas(train_small, target, model_options, verbose=verbose)
-
+    ##########    Just transfer all the values from var_df to cat_vocab_dict  ##################################
+    for each_key in var_df:
+        cat_vocab_dict[each_key] = var_df[each_key]
+    ############################################################################################################
     model_options['modeltype'] = modeltype
     model_options['model_label'] = model_label
     cat_vocab_dict['target_variables'] = usecols
     cat_vocab_dict['modeltype'] = modeltype
     model_options['batch_size'] = batch_size
-
     ##########  Find small details about the data to help create the right model ###
     target_transformed = False
     if modeltype != 'Regression':
@@ -647,7 +657,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     cat_vocab_dict["target_transformed"] = target_transformed
 
     ####   fill missing values using this function ##############
-    train_small = fill_missing_values_for_TF2(train_small, var_df)
+    train_small = fill_missing_values_for_TF2(train_small, cat_vocab_dict)
     
     ##### Do the deletion of cols after filling with missing values since otherwise fill errors!
     drop_cols = var_df['cols_delete']
