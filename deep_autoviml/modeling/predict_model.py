@@ -75,7 +75,6 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 #########################################################################################
 import os
 import pickle
-import pdb
 import time
 ############################################################################################
 def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict="",

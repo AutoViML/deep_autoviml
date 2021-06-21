@@ -542,10 +542,10 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     feats_max_min[key]["vocab"] = vocab
                     feats_max_min[key]['size_of_vocab'] = len(vocab)
                 else:
-                    ### For the rest of the numeric variables, you don't need vocab ###
-                    #feats_max_min[key]["vocab"] = data_sample[key].unique()
+                    ### For the rest of the numeric variables, you just need mean and variance ###
                     vocab = data_sample[key].unique()
-                    feats_max_min[key]["vocab"] = []
+                    feats_max_min[key]["vocab_min_var"] = [data_sample[key].mean(), data_sample[key].var()]
+                    feats_max_min[key]["vocab"] = vocab
                     feats_max_min[key]['size_of_vocab'] = len(vocab)
             feats_max_min[key]["max"] = max(data_sample[key].values)
             feats_max_min[key]["min"] = min(data_sample[key].values)

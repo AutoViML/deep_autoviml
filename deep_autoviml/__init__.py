@@ -38,9 +38,10 @@ print("""
 %s deep_auto_viml. version=%s
 from deep_autoviml import deep_autoviml as deepauto
 -------------------
-model, cat_vocab_dict = deepauto.fit(train, target, keras_model_type="auto",
-		project_name="deep_autoviml", keras_options={}, model_options={}, 
-		save_model_flag=True, use_my_model='', model_use_case='', verbose=0)
+model, cat_vocab_dict = deepauto.fit(train, target, keras_model_type="fast",
+		project_name="deep_autoviml", keras_options=keras_options,  
+		model_options=model_options, save_model_flag=True, use_my_model='',
+		model_use_case='', verbose=0)
 
 predictions = deepauto.predict(model, project_name, test_dataset=test,
                                  keras_model_type=keras_model_type, 

@@ -216,8 +216,7 @@ def build_model_storm(hp, *args):
     ######  we need to use the batch_size in a few small sizes ####
     if len(args) == 2:
         batch_limit, batch_nums = args[0], args[1]
-        batch_size = hp.Param('batch_size', sorted(np.linspace(16,
-                batch_limit, batch_nums).astype(int), reverse=True),
+        batch_size = hp.Param('batch_size', [32, 48, 64, 96, 128, 256],
                  ordered=True)
     elif len(args) == 1:
         batch_size = args[0]
@@ -240,7 +239,7 @@ def build_model_storm(hp, *args):
 
     # example of per-block parameter
     model_body.add(Dense(hp.Param('kernel_size_' + str(0), 
-                            [16, 32, 48, 64, 96], ordered=True),
+                            [32, 48, 64, 96, 128], ordered=True),
                             use_bias=use_bias,
                             kernel_initializer = kernel_initializer,
                             name="storm_dense_0",
@@ -537,7 +536,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     else:
         print('    chosen keras LR scheduler = %s' %keras_options['lr_scheduler'])
 
-    ###### You can use Storm Tuner to set the batch size ############
+    ## You cannot use Unbatch to remove batch since we need it finding size below ####
+    #full_ds = full_ds.unbatch()
     ############## Split train into train and validation datasets here ###############
     recover = lambda x,y: y
     print('\nSplitting train into 80+20 percent: train and validation data')
@@ -576,9 +576,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
             output_activation = 'softplus'
             print('Setting output activation layer as softplus since there are no negative values')            
     #print(' Shuffle size = %d' %shuffle_size)
-    #train_ds = train_ds.prefetch(batch_size).shuffle(shuffle_size, 
-    #                        reshuffle_each_iteration=False, seed=42).repeat()
-    #valid_ds = valid_ds.prefetch(batch_size).repeat()
+    train_ds = train_ds.prefetch(tf.data.AUTOTUNE).shuffle(
+                            shuffle_size, reshuffle_each_iteration=False, seed=42)#.repeat()
+    valid_ds = valid_ds.prefetch(tf.data.AUTOTUNE)#.repeat()
     if not isinstance(use_my_model, str):  ### That means no tuner in this case ####
         tuner = "None"
     else:
@@ -756,12 +756,12 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     #####   T R A IN  A N D   V A L I D A T I O N   F O U N D    H E R E          ######
     ####################################################################################
     
-    #train_ds = train_ds.unbatch().batch(best_batch)
+    train_ds = train_ds.unbatch().batch(best_batch, drop_remainder=True)
     train_ds = train_ds.shuffle(shuffle_size, 
-                reshuffle_each_iteration=False, seed=42).prefetch(best_batch).repeat()
+                reshuffle_each_iteration=False, seed=42).prefetch(tf.data.AUTOTUNE)#.repeat()
 
-    #valid_ds = valid_ds.unbatch().batch(best_batch)
-    valid_ds = valid_ds.prefetch(best_batch).repeat()
+    valid_ds = valid_ds.unbatch().batch(best_batch, drop_remainder=True)
+    valid_ds = valid_ds.prefetch(tf.data.AUTOTUNE)#.repeat()
 
     ####################################################################################
     ############### F I R S T  T R A I N   F O R  1 0 0   E P O C H S ##################
@@ -787,10 +787,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ############################    M O D E L     T R A I N I N G   ##################
     np.random.seed(42)
     tf.random.set_seed(42)
-    history = best_model.fit(train_ds, validation_data=valid_ds, batch_size=best_batch,
-            epochs=NUMBER_OF_EPOCHS, steps_per_epoch=STEPS_PER_EPOCH, 
+    history = best_model.fit(train_ds, validation_data=valid_ds, #batch_size=best_batch,
+            epochs=NUMBER_OF_EPOCHS, #steps_per_epoch=STEPS_PER_EPOCH, 
             callbacks=callbacks_list, class_weight=class_weights,
-            validation_steps=STEPS_PER_EPOCH, 
+            #validation_steps=STEPS_PER_EPOCH, 
            shuffle=True)
     print('    Model training completed. Following metrics available: %s' %history.history.keys())
     print('Time taken to train model (in mins) = %0.0f' %((time.time()-start_time)/60))
@@ -833,7 +833,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ls = []
     print('Held out data actuals shape: %s' %(y_test.shape,))
     if verbose >= 1:
-        print_one_row_from_tf_label(heldout_ds)
+        try:
+            print_one_row_from_tf_label(heldout_ds)
+        except:
+            print('could not print samples from heldout ds labels')
     ###########################################################################
     y_probas = best_model.predict(heldout_ds)
     
@@ -968,7 +971,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     ###   S E C O N D   T R A I N   O N  F U L L   T R A I N   D A T A   S E T     ###    
     ##################################################################################
     ############       train the model on full train data set now      ###############
-    print('\nTraining full train dataset. This will take time...')
+    print('\nFinally, training on full train dataset. This will take time...')
     full_ds = full_ds.unbatch().batch(best_batch)
     full_ds = full_ds.shuffle(shuffle_size, 
             reshuffle_each_iteration=False, seed=42).prefetch(best_batch)#.repeat()
@@ -989,8 +992,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
 
     ##### You save deep_model finally here using checkpoints ##############
     callbacks_list = [ callbacks_dict['check_point'] ]
-    deep_model.fit(full_ds, epochs=stopped_epoch, #steps_per_epoch=STEPS_PER_EPOCH, 
-                batch_size=best_batch, class_weight = class_weights,
+    deep_model.fit(full_ds, epochs=stopped_epoch, #steps_per_epoch=STEPS_PER_EPOCH, batch_size=best_batch, 
+                class_weight = class_weights,
                 callbacks=callbacks_list,  shuffle=True, verbose=0)
     ##################################################################################
     #######        S A V E the model here using save_model_name      #################

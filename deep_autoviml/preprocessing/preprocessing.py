@@ -159,7 +159,8 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
         ### find their dtypes - remember to use element_spec[0] for train data sets!
         ds_types = dict([(col_name, train_ds.element_spec[0][col_name].dtype) for col_name in final_training_order ])
         col_type_tuples = [(name,ds_types[name]) for name in final_training_order]
-        print('Inferred column names, layers and types (double-check for duplicates and correctness!): \n%s' %col_type_tuples)
+        if verbose >= 2:
+            print('Inferred column names, layers and types (double-check for duplicates and correctness!): \n%s' %col_type_tuples)
     ##### You need to send in the ouput from embedding layer to this sequence of layers ####
     fast_models = ['fast', 'fast1','fast2','deep_and_cross','deep and cross',
                         'deep cross','deep_and_wide','deep and wide','deep wide']

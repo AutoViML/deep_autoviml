@@ -28,7 +28,9 @@ from collections import defaultdict
 ############################################################################################
 # data pipelines and feature engg here
 from deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
-from deep_autoviml.preprocessing.preprocessing_tabular import encode_inputs, create_model_inputs
+from deep_autoviml.preprocessing.preprocessing_tabular import encode_fast_inputs, create_fast_inputs
+from deep_autoviml.preprocessing.preprocessing_tabular import encode_all_inputs, create_all_inputs
+from deep_autoviml.preprocessing.preprocessing_tabular import encode_num_inputs
 from deep_autoviml.modeling.train_custom_model import return_optimizer
 
 # Utils
@@ -149,16 +151,25 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     ints = var_df['int_vars']
     floats = var_df['continuous_vars']
     nlps = var_df['nlp_vars']
-
+    lats = var_df['lat_vars']
+    lons = var_df['lon_vars']
+    floats = left_subtract(floats, lats+lons)
+    
     FEATURE_NAMES = cats + high_string_vars + int_cats + ints + floats
-    NUMERIC_FEATURE_NAMES = int_cats + ints + floats
+    NUMERIC_FEATURE_NAMES = int_cats + ints
+    FLOATS = floats
     CATEGORICAL_FEATURE_NAMES = cats + high_string_vars
     
     vocab_dict = defaultdict(list)
-    cats_copy = copy.deepcopy(CATEGORICAL_FEATURE_NAMES)
+    cats_copy = copy.deepcopy(CATEGORICAL_FEATURE_NAMES+NUMERIC_FEATURE_NAMES)
     if len(cats_copy) > 0:
         for each_name in cats_copy:
             vocab_dict[each_name] = cat_vocab_dict[each_name]['vocab']
+
+    floats_copy = copy.deepcopy(FLOATS)
+    if len(floats_copy) > 0:
+        for each_float in floats_copy:
+            vocab_dict[each_float] = cat_vocab_dict[each_float]['vocab_min_var']
 
     ######################   set some defaults for model parameters here ##############
     keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, 
@@ -213,15 +224,16 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     dense_layer3 = min(100,dense_layer3)
     print('    Recommended hidden layers (with units in each Dense Layer)  = (%d, %d, %d)\n' %(
                                 dense_layer1,dense_layer2,dense_layer3))
-    fast_models = ['deep_and_wide','deep_wide','wide_deep', 
-                                'wide_and_deep','deep wide', 'wide deep', 'fast', 'fast1']
+    fast_models = ['fast']
+    fast_models1 = ['deep_and_wide','deep_wide','wide_deep', 
+                                'wide_and_deep','deep wide', 'wide deep', 'fast1']
     fast_models2 = ['deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
     #### The Deep and Wide Model is a bit more complicated. So it needs some changes in inputs! ######
     prebuilt_models = ['basic', 'simple', 'default','simple_dnn','sample model',
                         'deep', 'big_deep', 'big deep', 'giant_deep', 'giant deep',
                         'cnn1', 'cnn','cnn2'] 
     ######   Just do a simple check for auto models here ####################
-    if keras_model_type.lower() in fast_models+prebuilt_models+fast_models2:
+    if keras_model_type.lower() in fast_models+fast_models1+prebuilt_models+fast_models2:
             all_inputs = inputs
     else:
         ### this means it's an auto model and you create one here 
@@ -261,40 +273,65 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                 #### This final outputs is the one that is taken into final dense layer and compiled
                 print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
             if keras_model_type.lower() in fast_models:
-                ########## In case none of the options are specified, then set up a simple model!
+                ########## This is a simple fast model #########################
                 dropout_rate = 0.1
-                #hidden_units = [32, 32]
-                hidden_units = [dense_layer1, dense_layer2]
-                all_inputs = create_model_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES)
-                wide = encode_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, vocab_dict,
+                hidden_units = [32, 32]
+                all_inputs = create_fast_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
+                features = encode_fast_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
+                                use_embedding=False)
+                for units in hidden_units:
+                    features = layers.Dense(units)(features)
+                    features = layers.BatchNormalization()(features)
+                    features = layers.ReLU()(features)
+                    features = layers.Dropout(dropout_rate)(features)
+                model_body = features
+                #model_body = layers.Dense(int(0.25*dense_layer1))(merged)
+                print('    Created simple %s model, ...' %keras_model_type)
+            elif keras_model_type.lower() in fast_models1:
+                ###############################################################################################
+                # In a Wide & Deep model, the wide part of the model is a linear model, while the deep
+                # part of the model is a multi-layer feed-forward network. We use the sparse representation
+                # of the input features in the wide part of the model and the dense representation of the 
+                # input features for the deep part of the model.
+                # VERY IMPORTANT TO NOTE that every input features contributes to both parts of the model with 
+                # different representations.
+                ###############################################################################################
+                dropout_rate = 0.1
+                hidden_units = [32, 32]
+                all_inputs = create_all_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
+                wide = encode_all_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
                                 use_embedding=False)
                 wide = layers.BatchNormalization()(wide)
-                deep = encode_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, vocab_dict,
+                deep = encode_all_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
                                 use_embedding=True)
                 for units in hidden_units:
                     deep = layers.Dense(units)(deep)
                     deep = layers.BatchNormalization()(deep)
                     deep = layers.ReLU()(deep)
                     deep = layers.Dropout(dropout_rate)(deep)
+                #### If there are NLP vars in dataset, you must combine them ##
                 if len(nlps) > 0:
                     all_inputs = list(all_inputs.values()) ### convert input layers to a list
                     all_inputs += inputs
                     merged = layers.concatenate([meta_outputs, wide, deep])
                 else:
                     merged = layers.concatenate([wide, deep])
-                merged = layers.Dense(dense_layer1)(merged)
-                merged = layers.Dense(int(0.5*dense_layer1))(merged)
-                model_body = layers.Dense(int(0.25*dense_layer1))(merged)
+                model_body = merged
                 ##### This is where you create the last layer to deliver predictions ####
                 #final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
                 #model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
                 print('    Created deep and wide %s model, ...' %keras_model_type)
             elif keras_model_type.lower() in fast_models2:
+                ###############################################################################################
+                # In a Deep & Cross model, the deep part of this model is the same as the deep part 
+                # created in the previous model. The key idea of the cross part is to apply explicit 
+                # feature crossing in an efficient way, where the degree of cross features grows with layer depth.
+                ###############################################################################################
                 dropout_rate = 0.1
-                #hidden_units = [32, 32]
-                hidden_units = [dense_layer1, dense_layer2]
-                all_inputs = create_model_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES)
-                x0 = encode_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, vocab_dict,
+                hidden_units = [32, 32]
+                #hidden_units = [dense_layer3]
+                all_inputs = create_all_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
+                x0 = encode_all_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
                                 use_embedding=True)
                 cross = x0
                 for _ in hidden_units:
@@ -302,16 +339,21 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                     x = layers.Dense(units)(cross)
                     cross = x0 * x + cross
                 cross = layers.BatchNormalization()(cross)
+
                 deep = x0
                 for units in hidden_units:
                     deep = layers.Dense(units)(deep)
                     deep = layers.BatchNormalization()(deep)
                     deep = layers.ReLU()(deep)
                     deep = layers.Dropout(dropout_rate)(deep)
-                merged = layers.concatenate([cross, deep])
-                merged = layers.Dense(dense_layer1)(merged)
-                merged = layers.Dense(int(0.5*dense_layer1))(merged)
-                model_body = layers.Dense(int(0.25*dense_layer1))(merged)
+                #### If there are NLP vars in dataset, you must combine them ##
+                if len(nlps) > 0:
+                    all_inputs = list(all_inputs.values()) ### convert input layers to a list
+                    all_inputs += inputs
+                    merged = layers.concatenate([meta_outputs, cross, deep])
+                else:
+                    merged = layers.concatenate([cross, deep])
+                model_body = merged
                 ##### This is where you create the last layer to deliver predictions ####
                 #final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
                 #model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)

@@ -145,8 +145,8 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
 
     if keras_options['lr_scheduler'] in ['',"onecycle", "onecycle2"]:
         #### you need to double the amount of patience for onecycle scheduler ##
-        print('    Increasing the amount of patience for onecycle scheduler')
-        patience = patience * 1.2
+        print('    Recommended: Increase patience for "onecycle" scheduler')
+        patience = patience * 1.0
     callbacks_dict, tb_logpath = get_callbacks(val_mode, val_monitor, patience, learning_rate, 
                             save_weights_only, onecycle_steps)
 
@@ -291,7 +291,10 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     scores = []
     ls = []
     if verbose >= 1:
-        print_one_row_from_tf_label(heldout_ds)
+        try:
+            print_one_row_from_tf_label(heldout_ds)
+        except:
+            print('could not print samples from heldout ds labels')
     ###########################################################################
     y_probas = deep_model.predict(heldout_ds)
     
@@ -426,8 +429,9 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     ##################################################################################
     ###   V E R Y    I M P O R T A N T  S T E P   B E F O R E   M O D E L   F I T  ###    
     ##################################################################################
-    print('\nTraining full train dataset for %d epochs. This will take time...' %stopped_epoch)
+    print('\nTraining on full train dataset for %d epochs. This will take time...' %stopped_epoch)
     full_ds = full_ds.shuffle(shuffle_size).prefetch(batch_size) #.repeat()
+    #heldout_ds = heldout_ds.shuffle(shuffle_size).prefetch(batch_size)
     deep_model.fit(full_ds, epochs=stopped_epoch, #steps_per_epoch=STEPS_PER_EPOCH,
                  class_weight=class_weights, verbose=0)
 

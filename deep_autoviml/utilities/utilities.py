@@ -167,13 +167,19 @@ def print_one_row_from_tf_label(test_label):
         else:
             dict_row = test_label
         preds = list(dict_row.element_spec[0].keys())
-        labels = list(dict_row.element_spec[0].keys())
+        if dict_row.element_spec[1].name is None:
+            labels = ['target']
+        else:
+            labels = list(dict_row.element_spec[1].keys())
         if dict_row.element_spec[0][preds[0]].shape[0] is None or isinstance(
                 dict_row.element_spec[0][preds[0]].shape[0], int):
             for feats, labs in dict_row.take(1):
                 print("    samples from labels: %s" %(labs.numpy().tolist()[:10]))
     except:
-        print("    samples from labels: %s" %(list(test_label.as_numpy_iterator())[0][:10]))
+        print("    samples from each label in multi_label output: ")
+        for feats, labs in dict_row.take(1):
+            for each_label in labels:
+                print(labs[each_label])
 ###########################################################################################
 from sklearn.base import TransformerMixin
 from collections import defaultdict
@@ -429,6 +435,7 @@ def print_regression_model_stats(actuals, predicted, targets='', plot_name=''):
         mae, mae_asp, rmse_asp = print_regression_metrics(actuals, predicted)
     return mae, mae_asp, rmse_asp
 ################################################################################
+from sklearn.metrics import r2_score
 def print_regression_metrics(actuals, predicted):
     predicted = np.nan_to_num(predicted)
     mae = mean_absolute_error(actuals, predicted)
@@ -442,23 +449,24 @@ def print_regression_metrics(actuals, predicted):
     print('    RMSE = %0.4f' %rmse)
     print('    MAE as %% std dev of Actuals = %0.1f%%' %(mae/abs(actuals).std()*100))
     # Normalized RMSE print('RMSE = {:,.Of}'.format(rmse))
-    print('    Normalized RMSE (%% of MinMax of Actuals) = %0.0f%%' %(100*rmse/abs(actuals.max()-actuals.min())))
+    print('    R-Squared (%% ) = %0.0f%%' %(100*r2_score(actuals,predicted)))
     print('    Normalized RMSE (%% of Std Dev of Actuals) = %0.0f%%' %(100*rmse/actuals.std()))
     return mae, mae_asp, rmse_asp
 ################################################################################
-def print_static_rmse(actual, predicted, start_from=0,verbose=0):
+def print_static_rmse(actuals, predicted, start_from=0,verbose=0):
     """
     this calculates the ratio of the rmse error to the standard deviation of the actuals.
     This ratio should be below 1 for a model to be considered useful.
     The comparison starts from the row indicated in the "start_from" variable.
     """
     predicted = np.nan_to_num(predicted)
-    rmse = np.sqrt(mean_squared_error(actual[start_from:],predicted[start_from:]))
-    std_dev = actual[start_from:].std()
+    rmse = np.sqrt(mean_squared_error(actuals[start_from:],predicted[start_from:]))
+    std_dev = actuals[start_from:].std()
     if verbose >= 1:
         print('    RMSE = %0.2f' %rmse)
         print('    Std Deviation of Actuals = %0.2f' %(std_dev))
         print('    Normalized RMSE = %0.1f%%' %(rmse*100/std_dev))
+        print('    R-Squared (%% ) = %0.0f%%' %(100*r2_score(actuals,predicted)))
     return rmse, rmse/std_dev
 ################################################################################
 from sklearn.metrics import mean_squared_error,mean_absolute_error
@@ -479,7 +487,6 @@ def print_mape(y, y_hat):
 from sklearn import metrics
 import matplotlib.pyplot as plt
 import copy
-import pdb
 def print_classification_header(num_classes, num_labels, target_name):
     ######## This is where you start printing metrics ###############
     if isinstance(num_classes, list) :
@@ -974,7 +981,24 @@ def get_chosen_callback(callbacks_dict, keras_options):
     elif keras_options['lr_scheduler'] == "scheduler":
         lr_scheduler = callbacks_dict['scheduler']
     else:
+        lr_scheduler = callbacks_dict['scheduler']
+    return lr_scheduler
+################################################################################################
+def get_chosen_callback2(callbacks_dict, keras_options):
+    ##### Setup Learning Rate decay.
+    #### Onecycle is another fast way to find the best learning in large datasets ######
+    ##########  This is where we look for various schedulers
+    if keras_options['lr_scheduler'] == "onecycle2":
         lr_scheduler = callbacks_dict['onecycle2']
+    elif keras_options['lr_scheduler'] == 'onecycle':
+        lr_scheduler = callbacks_dict['onecycle']
+    elif keras_options['lr_scheduler'] == 'rlr':
+        lr_scheduler = callbacks_dict['rlr']
+    elif keras_options['lr_scheduler'] == 'decay':
+        lr_scheduler = callbacks_dict['lr_decay_cb']
+    else:
+        lr_scheduler = callbacks_dict['lr_sched']
+        keras_options['lr_scheduler'] = "lr_sched"
     return lr_scheduler
 ################################################################################################
 import math

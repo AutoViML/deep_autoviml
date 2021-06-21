@@ -471,6 +471,12 @@ def lenopenreadlines(filename):
     with open(filename) as f:
         return len(f.readlines())
 #########################################################################################
+def closest(lst, K):
+    """
+    Find a number in list lst that is closest to the value K.
+    """
+    return lst[min(range(len(lst)), key = lambda i: abs(lst[i]-K))]
+##########################################################################################
 def find_batch_size(DS_LEN):
     ### Since you cannot deal with a very large dataset in pandas, let's look into how big the file is
     maxrows = 10000
@@ -486,6 +492,8 @@ def find_batch_size(DS_LEN):
         batch_ratio = 0.0001
     batch_len = int(batch_ratio*DS_LEN)
     #print('    Batch size selected as %d' %batch_len)
+    lst = [32, 48, 64, 96, 128, 256]
+    batch_len = closest(lst, batch_len)
     return batch_len
 #########################################################################################
 def fill_missing_values_for_TF2(train_small, var_df):
@@ -931,12 +939,13 @@ def fast_classify_features(df):
     This is a very fast way to get a handle on what a dataset looks like. Just send in df and get a print.
     Nothing is returned. You just get a printed number of how many types of features you have in dataframe.
     """
-    num_list = df.select_dtypes(include='number').columns.tolist()
-    str_list = left_subtract(df.columns.tolist(), num_list)
+    num_list = df.select_dtypes(include='integer').columns.tolist()
+    float_list = df.select_dtypes(include='float').columns.tolist()
+    str_list = left_subtract(df.columns.tolist(), num_list+float_list)
     all_list = [str_list, num_list]
     str_dict = defaultdict(dict)
-    num_dict = defaultdict(dict)
-    for inum, dicti in enumerate([str_dict, num_dict]):
+    int_dict = defaultdict(dict)
+    for inum, dicti in enumerate([str_dict, int_dict]):
         bincols = []
         catcols = []
         highcols = []
@@ -947,28 +956,35 @@ def fast_classify_features(df):
                 bincols.append(col)
             elif leng > 2 and leng <= 15:
                 catcols.append(col)
-            elif leng >15 and leng <300:
+            elif leng >15 and leng <100:
                 highcols.append(col)
             else:
                 numcols.append(col)
         dicti['bincols'] = bincols
         dicti['catcols'] = catcols
-        dicti['highcols'] = highcols
-        dicti['numcols'] = numcols
+        dicti['highcats'] = highcols
+        dicti['veryhighcats'] = numcols
         if inum == 0:
             str_dict = copy.deepcopy(dicti)
             print('Distribution of string columns in datatset:')
             print('    number of binary = %d, cats = %d, high cats = %d, very high cats = %d' %(
                 len(bincols), len(catcols), len(highcols), len(numcols)))
         else:
-            print('Distribution of numeric columns in datatset:')
-            num_dict = copy.deepcopy(dicti)
-            print('    number of binary = %d, cats = %d, high cats = %d, floats = %d' %(
+            print('Distribution of integer columns in datatset:')
+            int_dict = copy.deepcopy(dicti)
+            print('    number of binary = %d, cats = %d, high cats = %d, very high cats = %d' %(
                 len(bincols), len(catcols), len(highcols), len(numcols)))
     ###   Check if worth doing cat_feature_cross_flag on this dataset ###
+    int_dict['floats'] = float_list
+    print('Distribution of floats: floats = %d' %len(float_list))
+    print('Data Transformation Advisory:')
     if len(str_dict['bincols']+str_dict['catcols']) <= 10:
-        print('    consider doing categorical feature crosses on this dataset.')
-    if len(num_dict['bincols']+num_dict['catcols']) < 10:
-        print('        also consider doing numeric feature crosses on this dataset.')
-    return str_dict, num_dict
+        print('    perform categorical feature crosses')
+    if len(int_dict['bincols']+int_dict['catcols']) < 10:
+        print('    perform integer feature crosses')
+    if len(int_dict['veryhighcats']) > 0:
+        print('    transform %s from integer to float' %int_dict['veryhighcats'])
+    return str_dict, int_dict
+###################################################################################################
+
 ###################################################################################################
