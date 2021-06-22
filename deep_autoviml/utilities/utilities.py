@@ -830,7 +830,7 @@ def get_uncompiled_model(inputs, result, output_activation,
     #model_preprocessing = Model(inputs, meta_outputs)
     #preprocessed_inputs = model_preprocessing(inputs)
     #result = model_body(preprocessed_inputs)
-    ##### now you
+    ##### now you can add the final layer here #########
     multi_label_predictions = defaultdict(list)
     if num_labels <= 1:
         outputs = layers.Dense(num_predicts, activation=output_activation,

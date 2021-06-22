@@ -228,12 +228,13 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     fast_models1 = ['deep_and_wide','deep_wide','wide_deep', 
                                 'wide_and_deep','deep wide', 'wide deep', 'fast1']
     fast_models2 = ['deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
+    nlp_models = ['bert', 'use', 'text']
     #### The Deep and Wide Model is a bit more complicated. So it needs some changes in inputs! ######
     prebuilt_models = ['basic', 'simple', 'default','simple_dnn','sample model',
                         'deep', 'big_deep', 'big deep', 'giant_deep', 'giant deep',
                         'cnn1', 'cnn','cnn2'] 
     ######   Just do a simple check for auto models here ####################
-    if keras_model_type.lower() in fast_models+fast_models1+prebuilt_models+fast_models2:
+    if keras_model_type.lower() in fast_models+fast_models1+prebuilt_models+fast_models2+nlp_models:
             all_inputs = inputs
     else:
         ### this means it's an auto model and you create one here 
@@ -359,6 +360,16 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                 #model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
                 print('    Created deep and cross %s model, ...' %keras_model_type)
                 ################################################################################
+            elif keras_model_type.lower() in nlp_models:
+                print('    creating %s model body...' %keras_model_type)
+                num_layers = check_keras_options(keras_options, 'num_layers', 1)
+                model_body = tf.keras.Sequential([])
+                for l_ in range(num_layers):
+                    model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
+                                              activity_regularizer=tf.keras.regularizers.l2(0.01)))
+                print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
+                model_body = add_inputs_outputs_to_model_body(model_body, all_inputs, meta_outputs)
+                #### This final outputs is the one that is taken into final dense layer and compiled
         else:
             try:
                 new_module = __import__(use_my_model)

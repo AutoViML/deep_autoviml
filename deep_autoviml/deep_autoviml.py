@@ -125,10 +125,12 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     Inputs:
     train_data_or_file: can be file or pandas dataframe: you need to give path to filename.
     target: string or list. You can give one variable (string) or multiple variables (list)
-    keras_model_type: default = "auto". If you are not satisfied with the automatic model we build, 
-                        you can choose other options like 'Deep', 'Big Deep', 'Giant Deep', 
-                         'CNN1', 'CNN2', "BERT", etc. If you are using a BERT model, you must set
-                         the keras_model_type to "BERT". Otherwise, you will get an error.
+    keras_model_type: default = "fast". That will build a keras model and pipeline very fast.
+                    Then you can try other options like 'fast1', 'fast2' and finally 'auto'.
+                    You can also try 'CNN1', 'CNN2'. 
+                    If you are using it on NLP dataset, then set this to 'BERT' or 'USE'.
+                    'USE' stands for Universal Sentence Encoder. That's also a good model.
+                    Then it will automatically download a base BERT model and use it.
     project_name: default = "deep_autoviml". This is used to name the folder to save model.
     save_model_flag: default = False: it determines wher you want to save your trained model 
                     to local drive. If True, it will save it locally in project_name folder.
@@ -352,7 +354,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         ''')
     ######### this is where you get the model body either by yourself or sent as input ##
     fast_models = ['deep_and_wide','deep_wide','wide_deep', 'wide_and_deep','deep wide', 
-            'wide deep', 'fast', 'fast1', 'deep_and_cross', 'deep cross', 'deep and cross'] 
+            'wide deep', 'fast','fast1', 'fast2', 'deep_and_cross', 'deep cross', 'deep and cross'] 
     ##### This takes care of providing multi-output predictions! ######
     inputs = nlp_inputs+meta_inputs
     model_body, keras_options =  create_model(use_my_model, inputs, meta_outputs, 
