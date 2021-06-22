@@ -97,6 +97,12 @@ def custom_standardization(input_data):
         stripped_html, "[%s]" % re.escape(string.punctuation), ""
     )
 ##############################################################################################
+def closest(lst, K):
+    """
+    Find a number in list lst that is closest to the value K.
+    """
+    return lst[min(range(len(lst)), key = lambda i: abs(lst[i]-K))]
+##############################################################################################
 def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_model_type, verbose=0):
     """
     This produces a preprocessing layer for an incoming NLP column using TextVectorization from keras.
@@ -110,6 +116,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
     nlp_col_names = []
     nlp_columns = var_df['nlp_vars']
     nlp_columns =  list(set(nlp_columns))
+    lst = [24, 32, 48, 64, 96, 128, 256]
     #### max_tokens_zip calculate the max number of unique words in a vocabulary ####
     max_tokens_zip = defaultdict(int)
     #### seq_tokens_zip calculates the max sequence length in a vocabulary ####
@@ -127,8 +134,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
             seq_lengths.append(seq_tokens_zip[each_name])
             print('    sequence length = %s' %seq_tokens_zip[each_name])
             vocab_size = cat_vocab_dict[each_name]['size_of_vocab']
-            best_embedding_size = max(10, vocab_size//400)
-            best_embedding_size = min(512, best_embedding_size)
+            best_embedding_size = closest(lst, vocab_size//400)
             print('    recommended embedding_size = %s' %best_embedding_size)
             input_embedding_size = check_model_options(model_options, "embedding_size", best_embedding_size)
             if input_embedding_size != best_embedding_size:
