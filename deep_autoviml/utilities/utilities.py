@@ -518,7 +518,7 @@ def print_classification_metrics(y_test, y_probs, proba_flag=True):
     else:
         y_preds = copy.deepcopy(y_probs)
     ##### check if it is multi-class #####
-    if len(np.unique(y_test)) > 2:
+    if len(np.unique(y_test)) > 2 or max(np.unique(y_test)) >= 2:
         multi_class_flag = True
     ###########  This is where we print the metrics ###################
     if not multi_class_flag  and not multi_label_flag:

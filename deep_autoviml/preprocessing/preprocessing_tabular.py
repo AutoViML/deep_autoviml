@@ -155,6 +155,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     #########  Now that you have the variable classification dictionary, just separate them out! ##
     cats = var_df['categorical_vars']  ### these are low cardinality vars - you can one-hot encode them ##
     high_string_vars = var_df['discrete_string_vars']  ## discrete_string_vars are high cardinality vars ## embed them!
+    bools = var_df['bools']
     int_bools = var_df['int_bools']
     int_cats = var_df['int_cats']
     ints = var_df['int_vars']
@@ -177,8 +178,8 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     ### just use this to set the limit for max tokens for different variables ###
     ### we are setting the number of max_tokens to be 2X the number of tokens found in train
     max_tokens_zip = defaultdict(int)
-    
-    cats_copy = copy.deepcopy(cats)
+    ##### Just combine Boolean and cat variables here to set the vocab ####
+    cats_copy = copy.deepcopy(cats+bools)
     if len(cats_copy) > 0:
         for each_name in cats_copy:
             max_tokens_zip[each_name] = cat_vocab_dict[each_name]['vocab'] ### just send vocab in
@@ -212,6 +213,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
 
     ####### CAVEAT : All the inputs and outputs should follow this same sequence below! ######
     all_date_inputs = []
+    all_bool_inputs = []
     all_int_inputs = []
     all_int_cat_inputs = []
     all_cat_inputs = []
@@ -219,6 +221,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     all_latlon_inputs = []
     ############## CAVEAT: The encoded outputs should follow the same sequence as inputs above!
     all_date_encoded = []
+    all_bool_encoded = []
     all_int_bool_encoded = []
     all_int_encoded = []
     all_int_cat_encoded = []
@@ -231,6 +234,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     cat_encoded_dict = dict([])
     cat_input_dict = dict([])
     date_input_dict = dict([])
+    bool_input_dict = dict([])
     ###############################
     high_cats_alert = 50 ### set this number to alery you when a variable has high dimensions. Should it?
     hidden_units = [32, 32]  ## this is the number needed for feature crossing
@@ -298,8 +302,24 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 print('    Error: Skipping %s since Keras Date month-day cross preprocessing erroring' %each_date)
 
     
+    #####  If boolean variables exist, you must do this here ######
+    if len(bools) > 0:
+        bools_copy = copy.deepcopy(bools)
+        try:
+            for each_bool in bools_copy:
+                #### You just create the date-time input only once and reuse the same input again and again
+                bool_input = keras.Input(shape=(1,), name=each_bool, dtype="string")
+                bool_input_dict[each_bool] = bool_input
+            encoded = encode_bool_inputs(bool_input_dict)
+            all_bool_encoded.append(encoded)
+            all_bool_inputs.append(bool_input)
+            all_input_names.append(each_bool)
+            if verbose:
+                print('    %s : after boolean encoding, is now float with  shape: %s' %(each_bool, encoded.shape[1]))
+        except:
+            print('    Error: Skipping %s since Keras Bolean preprocessing is erroring' %each_bool)
+
     ######  This is where we handle Boolean Integer variables - we just combine them ##################
-    
     int_bools_copy = copy.deepcopy(int_bools)
     if len(int_bools_copy) > 0:
         for each_int in int_bools_copy:
@@ -534,12 +554,12 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                         print('        Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping (%s, %s) since Keras lat-lon paired preprocessing erroring' %(lat_in_pair, lon_in_pair))
-
+    
     #####  SEQUENCE OF THESE INPUTS AND OUTPUTS MUST MATCH ABOVE - we gather all outputs above into a single list
-    all_inputs = all_date_inputs + all_int_inputs + all_int_cat_inputs + all_cat_inputs + all_num_inputs + all_latlon_inputs 
-    all_encoded = all_date_encoded+all_int_bool_encoded+all_int_encoded+all_int_cat_encoded+all_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+lat_lon_paired_encoded
+    all_inputs = all_bool_inputs + all_date_inputs + all_int_inputs + all_int_cat_inputs + all_cat_inputs + all_num_inputs + all_latlon_inputs 
+    all_encoded = all_bool_encoded + all_date_encoded+all_int_bool_encoded+all_int_encoded+all_int_cat_encoded+all_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+lat_lon_paired_encoded
     all_low_cat_encoded = all_int_bool_encoded+all_int_encoded+all_int_cat_encoded  ## these are integer outputs ####
-    all_numeric_encoded =  all_date_encoded+all_cat_encoded+all_high_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+all_latlon_encoded+lat_lon_paired_encoded## these are all float ##
+    all_numeric_encoded = all_bool_encoded + all_date_encoded+all_cat_encoded+all_high_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+all_latlon_encoded+lat_lon_paired_encoded## these are all float ##
     ###### This is where we determine the size of different layers #########
     data_size = model_options['DS_LEN']
     if len(all_numeric_encoded) == 0:
@@ -610,16 +630,16 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
         meta_numeric = None
     elif len(all_numeric_encoded) == 1:
         meta_input_numeric = all_numeric_encoded[0]
-        meta_numeric = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_numeric)
-        meta_numeric = layers.BatchNormalization()(meta_numeric)
+        #meta_numeric = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_numeric)
+        meta_numeric = layers.BatchNormalization()(meta_input_numeric)
         meta_numeric = layers.Activation(concat_activation)(meta_numeric)
     else:
         #### You must concatenate these encoded outputs before sending them out!
         #DEEP - This Dense layer connects to input layer - Numeric Data
         #meta_numeric = layers.BatchNormalization()(meta_input_numeric)
         meta_input_numeric = layers.concatenate(all_numeric_encoded)
-        meta_numeric = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_numeric)
-        meta_numeric = layers.BatchNormalization()(meta_numeric)
+        #meta_numeric = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_numeric)
+        meta_numeric = layers.BatchNormalization()(meta_input_numeric)
         meta_numeric = layers.Activation(concat_activation)(meta_numeric)
 
 
@@ -1403,3 +1423,32 @@ def perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_token
         print('    Error: Skipping feature crossing since Keras preprocessing step is erroring')
     return feat_cross_encoded
 ########################################################################################
+class OutputLayer(tf.keras.layers.Layer):
+    def __init__(self):
+        super(OutputLayer, self).__init__()
+
+    def call(self, inputs, **kwargs):
+        outputs = tf.keras.backend.cast(inputs, "string")
+        return outputs
+##########################################################################################
+def encode_bool_inputs(inputs):
+    encoded_features = []
+    for feature_name in inputs:
+        # Convert the string input values into a one hot encoding.
+        lookup = StringLookup(
+            vocabulary=['True', 'False'],
+            mask_token=None,
+            num_oov_indices=1,
+            max_tokens=None,
+            output_mode="binary" 
+        )
+        encoded_feature = inputs[feature_name]
+        encoded_feature = lookup(encoded_feature)
+        encoded_features.append(encoded_feature)
+    ##### This is where are float encoded features are combined ###
+    if len(inputs) == 1:
+        all_features = encoded_feature
+    else:
+        all_features = layers.concatenate(encoded_features)
+    return all_features
+############################################################################################

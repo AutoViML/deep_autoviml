@@ -147,6 +147,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     ##############  S E T T I N G    U P  DEEP_WIDE, DEEP_CROSS, FAST MODELS    ########################
     cats = var_df['categorical_vars']  ### these are low cardinality vars - you can one-hot encode them ##
     high_string_vars = var_df['discrete_string_vars']  ## discrete_string_vars are high cardinality vars ## embed them!
+    bools = var_df['bools']
     int_cats = var_df['int_cats']
     ints = var_df['int_vars']
     floats = var_df['continuous_vars']
@@ -155,10 +156,10 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     lons = var_df['lon_vars']
     floats = left_subtract(floats, lats+lons)
     
-    FEATURE_NAMES = cats + high_string_vars + int_cats + ints + floats
+    FEATURE_NAMES = bools + cats + high_string_vars + int_cats + ints + floats
     NUMERIC_FEATURE_NAMES = int_cats + ints
     FLOATS = floats
-    CATEGORICAL_FEATURE_NAMES = cats + high_string_vars
+    CATEGORICAL_FEATURE_NAMES = bools + cats + high_string_vars
     
     vocab_dict = defaultdict(list)
     cats_copy = copy.deepcopy(CATEGORICAL_FEATURE_NAMES+NUMERIC_FEATURE_NAMES)

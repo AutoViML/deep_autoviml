@@ -588,7 +588,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
         target = ["_".join(x.split(" ")) for x in target ]
         model_label = 'Multi_Label'
     print('    Modified file names to fit no-space in column names rule in Tensorflow!')
-
+    #### if target is changed you must send that modified target back to other processes ######
     ### usecols is basically target in a list format. Very handy to know when target is a list.
         
     try:
@@ -851,19 +851,25 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     #####  This might be useful for users to know whether to use feature-crosses or not ###
     stri, numi = fast_classify_features(train_small)
     #######################################################################################
+    #### if Target is modified in the above processes such as removing spaces, etc. you must re-init here
+    usecols = cat_vocab_dict['target_variables']
     cat_vocab_dict['DS_LEN'] = DS_LEN
     if verbose >= 1 and train_small.shape[1] <= 30:
         print_one_row_from_tf_dataset(ds)
     ####  Set Class Weights for Imbalanced Data Sets here ##########
     modeltype = model_options["modeltype"]
     #### You need to do this transform only for files. Otherwise, it is done already for dataframes.
-    if isinstance(target, str):
+    if len(usecols) == 1:
+        target = usecols[0]
+        ### This is a single label problem ########
         y_train = train_small[target]
         if modeltype != 'Regression' and not cat_vocab_dict['target_transformed']:
             cat_vocab_dict["original_classes"] = np.unique(train_small[target])
     else:
-        y_train = train_small[target[0]]
-        target_copy = copy.deepcopy(target)
+        ### This is a Multi-label label problem ########
+        target = usecols[0]
+        y_train = train_small[usecols[0]]
+        target_copy = copy.deepcopy(usecols)
         if modeltype != 'Regression' and not cat_vocab_dict['target_transformed']:
             for each_t in target_copy:
                 cat_vocab_dict[each_t+"_original_classes"] = np.unique(train_small[each_t])

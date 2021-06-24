@@ -488,6 +488,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     feats_max_min = nested_dictionary()
     print_features = False
     nlps = []
+    bools = []
     ### if a variable has more than this many chars, it will be treated like a NLP variable
     nlp_char_limit = check_model_options(model_options, "nlp_char_limit", 30)
     ### if a variable has more than this limit, it will not be treated like a cat variable #
@@ -517,8 +518,13 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     ###### Now we do the creation of cat_vocab_dict though it is called feats_max_min here #####
     floats = []
     for key in preds:
-        if data_sample[key].dtype == 'object' or str(data_sample[key].dtype) == 'category':
+        if data_sample[key].dtype in ['object'] or str(data_sample[key].dtype) == 'category':
             feats_max_min[key]["dtype"] = "string"
+        elif data_sample[key].dtype in ['bool']:
+            feats_max_min[key]["dtype"] = "bool"
+            bools.append(key)
+            if key in cats:
+                cats.remove(key)
         elif str(data_sample[key].dtype).split("[")[0] in ['datetime64','datetime32','datetime16']:
             feats_max_min[key]["dtype"] = "string"
         elif data_sample[key].dtype in [np.int16, np.int32, np.int64]:
@@ -549,7 +555,13 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     feats_max_min[key]['size_of_vocab'] = len(vocab)
             feats_max_min[key]["max"] = max(data_sample[key].values)
             feats_max_min[key]["min"] = min(data_sample[key].values)
-        elif feats_max_min[key]['dtype'] == 'string':
+        elif feats_max_min[key]['dtype'] in ['bool']:
+            vocab = data_sample[key].unique().astype(str)
+            ### Don't change the next line even though it appears wrong. I have tested and it works!
+            vocab = ['missing' if type(x) == float else x for x in vocab]
+            feats_max_min[key]["vocab"] = vocab
+            feats_max_min[key]['size_of_vocab'] = len(vocab)
+        elif feats_max_min[key]['dtype'] in ['string']:
             if np.mean(data_sample[key].fillna("missing").map(len)) >= nlp_char_limit:
                 ### This is for NLP variables. You want to remove duplicates #####
                 if key in dates:
@@ -577,10 +589,12 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                 feats_max_min[key]['size_of_vocab'] = len(vocab)
                 #feats_max_min[key]['size_of_vocab'] = len(feats_max_min[key]["vocab"])
         else:
-            ####  Now we select features if they are present in the data set ###
+            ####  Now we treat bool and other variable types ###
             #feats_max_min[key]["vocab"] = data_sample[key].unique()
             vocab = data_sample[key].unique()
-            feats_max_min[key]["vocab"] = []
+            #### just leave this as is - it works for other data types
+            vocab = ['missing' if type(x) == str  else x for x in vocab]
+            feats_max_min[key]["vocab"] = vocab
             feats_max_min[key]['size_of_vocab'] = len(vocab)
             #feats_max_min[key]['size_of_vocab'] = len(feats_max_min[key]["vocab"])
         if print_features and verbose > 1:
@@ -602,6 +616,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     var_df1['int_cats'] = int_cats
     var_df1['int_bools'] = int_bools
     var_df1["continuous_vars"] = floats
+    var_df1['bools'] = bools
     #### It is better to have a baseline number for the size of the dataset here ########
     feats_max_min['DS_LEN'] = len(data_sample)
     return var_df1, feats_max_min

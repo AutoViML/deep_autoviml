@@ -227,7 +227,6 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     save_model_path = os.path.join(project_name,keras_model_type)
     save_model_path = get_save_folder(save_model_path)
     cat_vocab_dict['project_name'] = project_name
-
     if save_model_flag:
         print('\nSaving model in %s now...this will take time...' %save_model_path)
         if not os.path.exists(save_model_path):
