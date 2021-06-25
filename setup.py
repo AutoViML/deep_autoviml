@@ -20,7 +20,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="deep_autoviml",
-    version="0.0.45",
+    version="0.0.46",
     author="Ram Seshadri",
     # author_email="author@example.com",
     description="Automatically Build Deep Learning Models and Pipelines fast!",

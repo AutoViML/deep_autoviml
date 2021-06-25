@@ -183,12 +183,12 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
         
         if test_small.isnull().sum().sum() > 0:
             test_small = fill_missing_values_for_TF2(test_small, cat_vocab_dict)
-        pdb.set_trace()        
+             
         drop_cols = cat_vocab_dict['columns_deleted']
         if len(drop_cols) > 0:
             print('    Dropping %s columns from dataset...' %drop_cols)
             test_small.drop(drop_cols, axis=1, inplace=True)            
-        pdb.set_trace()
+        
         if isinstance(target, str):
             if target != '':
                 labels = test_small[target]
