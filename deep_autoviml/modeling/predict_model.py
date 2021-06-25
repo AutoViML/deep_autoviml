@@ -89,12 +89,15 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
     print('Loaded test data size: %d' %filesize)
     #### All column names in Tensorflow should have no spaces ! So you must convert them here!
     sel_preds = ["_".join(x.split(" ")) for x in list(test_small) ]
-    if isinstance(target, str):
-        target = "_".join(target.split(" "))
-    else:
-        target = ["_".join(x.split(" ")) for x in target ]
-    print('    Modified column names to fit no-spaces-in-column-names rule in Tensorflow!')
+    sel_preds = ["_".join(x.split("(")) for x in sel_preds ]
+    sel_preds = ["_".join(x.split(")")) for x in sel_preds ]
+    sel_preds = ["_".join(x.split("/")) for x in sel_preds ]
+    sel_preds = ["_".join(x.split("\\")) for x in sel_preds ]
+    sel_preds = [x.lower() for x in sel_preds ]
+
     test_small.columns = sel_preds
+
+    print('Alert! Modified column names to satisfy rules for column names in Tensorflow...')
 
     #### This means it is not a test dataset - hence it has target columns - load it too!
     if isinstance(target, str):
@@ -105,9 +108,12 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
             usecols = [target]
             target_name = copy.deepcopy(target)
     elif isinstance(target, list):
-        #### then it is a multi-label problem
-        target_name = target
-        usecols = target
+        if target == []:
+            target = ''
+        else:
+            #### then it is a multi-label problem
+            target_name = target
+            usecols = target
     else:
         print('Error: Target %s type not understood' %type(target))
         return
@@ -124,6 +130,11 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
             print('Unable to load pickle file. Continuing...')
             no_cat_vocab_dict = True
     ####################################################
+    if isinstance(target, str):
+        if target == '':
+            target = cat_vocab_dict['target_variables']
+            if len(target) == 1:
+                target = target[0]
     ### classify variables using the small dataframe ##
     model_options = {}
     if no_cat_vocab_dict:
@@ -169,14 +180,15 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
         if len(usecols) > 1:
             data_batches = data_batches.map(lambda x: split_combined_ds_into_two(x, usecols, preds))
     else:
+        
         if test_small.isnull().sum().sum() > 0:
             test_small = fill_missing_values_for_TF2(test_small, cat_vocab_dict)
-        
+        pdb.set_trace()        
         drop_cols = cat_vocab_dict['columns_deleted']
         if len(drop_cols) > 0:
             print('    Dropping %s columns from dataset...' %drop_cols)
             test_small.drop(drop_cols, axis=1, inplace=True)            
-
+        pdb.set_trace()
         if isinstance(target, str):
             if target != '':
                 labels = test_small[target]

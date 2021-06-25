@@ -300,7 +300,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 model_options[key] = model_options_copy[key]
 
     if keras_model_type.lower() in ['fast', 'fast1', 'fast2']:
-        print('Max Trials is 10 for faster processing. Please increase max_trials if you want more performance...')
+        print('Max Trials is 10 for faster processing. Please increase max_trials if you want more accuracy...')
         model_options["max_trials"] = 10
     else:
         if model_options["max_trials"] <= 20:

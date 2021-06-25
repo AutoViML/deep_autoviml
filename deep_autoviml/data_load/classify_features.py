@@ -109,6 +109,7 @@ def classify_features(dfte, depVar, model_options={}, verbose=0):
         orig_preds = [x for x in list(dfte) if x not in [depVar]]
     #################    CLASSIFY  COLUMNS   HERE    ######################
     var_df = classify_columns(dfte[orig_preds], model_options, verbose)
+
     #####       Classify Columns   ################
     IDcols = var_df['id_vars']
     nlp_vars = var_df['nlp_vars']
@@ -422,6 +423,7 @@ def classify_columns(df_preds, model_options={}, verbose=0):
     sum_all_cols['cat_vars'] = cat_vars
     sum_all_cols['discrete_string_vars'] = discrete_string_vars
     #########  The variables can now be printed ##############
+
     if verbose == 1:
         print("    Number of Numeric Columns = ", len(continuous_vars))
         print("    Number of Integer-Categorical Columns = ", len(int_vars))
@@ -495,6 +497,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     cat_limit = check_model_options(model_options, "variable_cat_limit", 30)
     ### Classify features using the previously define function #############
     var_df1 = classify_features(data_sample, target, model_options, verbose=verbose)
+    
     dates = var_df1['date_vars']
     cats = var_df1['categorical_vars']
     discrete_strings = var_df1['discrete_string_vars']
@@ -504,9 +507,10 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     all_ints = var_df1['int_vars']
     if isinstance(target, list):
         preds = [x for x in  list(data_sample) if x not in target+ignore_variables]
+        feats_max_min['predictors_in_train'] = [x for x in  list(data_sample) if x not in target]
     else:
         preds = [x for x in  list(data_sample) if x not in [target]+ignore_variables]
-
+        feats_max_min['predictors_in_train'] = [x for x in  list(data_sample) if x not in [target]]
     #### Take(1) always displays only one batch only if num_epochs is set to 1 or a number. Otherwise No print! ########
     #### If you execute the below code without take, then it will go into an infinite loop if num_epochs was set to None.
     if verbose >= 1 and target:

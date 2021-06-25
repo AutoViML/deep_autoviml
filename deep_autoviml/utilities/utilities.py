@@ -521,68 +521,72 @@ def print_classification_metrics(y_test, y_probs, proba_flag=True):
     if len(np.unique(y_test)) > 2 or max(np.unique(y_test)) >= 2:
         multi_class_flag = True
     ###########  This is where we print the metrics ###################
-    if not multi_class_flag  and not multi_label_flag:
-        # Calculate comparison metrics for Binary classification results.
-        accuracy = metrics.accuracy_score(y_test, y_preds)
-        balanced_accuracy = metrics.balanced_accuracy_score(y_test, y_preds)
-        precision = metrics.precision_score(y_test, y_preds)
-        f1_score = metrics.f1_score(y_test, y_preds)
-        recall = metrics.recall_score(y_test, y_preds)
-        if type(np.mean((y_test==y_preds))) == pd.Series:
-            print('    Accuracy          = %0.1f%%' %(np.mean(accuracy)*100))
-        else:
-            print('    Accuracy          = %0.1f%%' %(accuracy*100))
-        print('    Balanced Accuracy = %0.1f%%' %(balanced_accuracy*100))
-        print('    Precision         = %0.1f%%' %(precision*100))
-        if proba_flag:
-            average_precision = np.mean(metrics.precision_score(y_test, y_preds, average=None))
-        else:
-            average_precision = metrics.precision_score(y_test, y_preds, average='macro')
-        print('    Average Precision = %0.1f%%' %(average_precision*100))
-        print('    Recall            = %0.1f%%' %(recall*100))
-        print('    F1 Score          = %0.1f%%' %(f1_score*100))
-        if proba_flag:
-            fpr, tpr, threshold = metrics.roc_curve(y_test, y_probs[:,1])
-            roc_auc = metrics.auc(fpr, tpr)
-            print('    ROC AUC           = %0.1f%%' %(roc_auc*100))
-        else:
-            roc_auc = 0
-        print('#####################################################')
-        return [accuracy, balanced_accuracy, precision, average_precision, f1_score, recall, roc_auc]
-    else:
-        # Calculate comparison metrics for Multi-Class classification results.
-        accuracy = np.mean((y_test==y_preds))
-        if multi_label_flag:
-            balanced_accuracy = np.mean(metrics.recall_score(y_test, y_preds, average=None))
-            precision = metrics.precision_score(y_test, y_preds, average=None)
-            average_precision = metrics.precision_score(y_test, y_preds, average='macro')
-            f1_score = metrics.f1_score(y_test, y_preds, average=None)
-            recall = metrics.recall_score(y_test, y_preds, average=None)
-        else:
+    try:
+        if not multi_class_flag  and not multi_label_flag:
+            # Calculate comparison metrics for Binary classification results.
+            accuracy = metrics.accuracy_score(y_test, y_preds)
             balanced_accuracy = metrics.balanced_accuracy_score(y_test, y_preds)
-            precision = metrics.precision_score(y_test, y_preds, average = None)
-            average_precision = metrics.precision_score(y_test, y_preds,average='macro')
-            f1_score = metrics.f1_score(y_test, y_preds, average = None)
-            recall = metrics.recall_score(y_test, y_preds, average = None)
-        if type(np.mean((y_test==y_preds))) == pd.Series:
-            print('    Accuracy          = %0.1f%%' %(np.mean(accuracy)*100))
+            precision = metrics.precision_score(y_test, y_preds)
+            f1_score = metrics.f1_score(y_test, y_preds)
+            recall = metrics.recall_score(y_test, y_preds)
+            if type(np.mean((y_test==y_preds))) == pd.Series:
+                print('    Accuracy          = %0.1f%%' %(np.mean(accuracy)*100))
+            else:
+                print('    Accuracy          = %0.1f%%' %(accuracy*100))
+            print('    Balanced Accuracy = %0.1f%%' %(balanced_accuracy*100))
+            print('    Precision         = %0.1f%%' %(precision*100))
+            if proba_flag:
+                average_precision = np.mean(metrics.precision_score(y_test, y_preds, average=None))
+            else:
+                average_precision = metrics.precision_score(y_test, y_preds, average='macro')
+            print('    Average Precision = %0.1f%%' %(average_precision*100))
+            print('    Recall            = %0.1f%%' %(recall*100))
+            print('    F1 Score          = %0.1f%%' %(f1_score*100))
+            if proba_flag:
+                roc_auc = metrics.roc_auc_score(y_test, y_probs[:,1])
+                #fpr, tpr, threshold = metrics.roc_curve(y_test, y_probs[:,1])
+                #roc_auc = metrics.auc(fpr, tpr)
+                print('    ROC AUC           = %0.1f%%' %(roc_auc*100))
+            else:
+                roc_auc = 0
+            print('#####################################################')
+            return [accuracy, balanced_accuracy, precision, average_precision, f1_score, recall, roc_auc]
         else:
-            print('    Accuracy          = %0.1f%%' %(accuracy*100))
-        print('    Balanced Accuracy (average recall) = %0.1f%%' %(balanced_accuracy*100))
-        print('    Average Precision (macro) = %0.1f%%' %(average_precision*100))
-        ### these are basically one for each class #####
-        print('    Precisions by class:')
-        for precisions in precision:
-            print('    %0.1f%%  ' %(precisions*100),end="")
-        print('\n    Recall Scores by class:')
-        for recalls in recall:
-            print('    %0.1f%%  ' %(recalls*100), end="")
-        print('\n    F1 Scores by class:')
-        for f1_scores in f1_score:
-            print('    %0.1f%%  ' %(f1_scores*100),end="")
-        # Return list of metrics to be added to a Dataframe to compare models.
-        print('\n#####################################################')
-        return [accuracy, balanced_accuracy, precision, average_precision, f1_score, recall, 0]
+            # Calculate comparison metrics for Multi-Class classification results.
+            accuracy = np.mean((y_test==y_preds))
+            if multi_label_flag:
+                balanced_accuracy = np.mean(metrics.recall_score(y_test, y_preds, average=None))
+                precision = metrics.precision_score(y_test, y_preds, average=None)
+                average_precision = metrics.precision_score(y_test, y_preds, average='macro')
+                f1_score = metrics.f1_score(y_test, y_preds, average=None)
+                recall = metrics.recall_score(y_test, y_preds, average=None)
+            else:
+                balanced_accuracy = metrics.balanced_accuracy_score(y_test, y_preds)
+                precision = metrics.precision_score(y_test, y_preds, average = None)
+                average_precision = metrics.precision_score(y_test, y_preds,average='macro')
+                f1_score = metrics.f1_score(y_test, y_preds, average = None)
+                recall = metrics.recall_score(y_test, y_preds, average = None)
+            if type(np.mean((y_test==y_preds))) == pd.Series:
+                print('    Accuracy          = %0.1f%%' %(np.mean(accuracy)*100))
+            else:
+                print('    Accuracy          = %0.1f%%' %(accuracy*100))
+            print('    Balanced Accuracy (average recall) = %0.1f%%' %(balanced_accuracy*100))
+            print('    Average Precision (macro) = %0.1f%%' %(average_precision*100))
+            ### these are basically one for each class #####
+            print('    Precisions by class:')
+            for precisions in precision:
+                print('    %0.1f%%  ' %(precisions*100),end="")
+            print('\n    Recall Scores by class:')
+            for recalls in recall:
+                print('    %0.1f%%  ' %(recalls*100), end="")
+            print('\n    F1 Scores by class:')
+            for f1_scores in f1_score:
+                print('    %0.1f%%  ' %(f1_scores*100),end="")
+            # Return list of metrics to be added to a Dataframe to compare models.
+    except:
+        print('    print classification metrics erroring. Continuing...')
+    print('\n#####################################################')
+    return [accuracy, balanced_accuracy, precision, average_precision, f1_score, recall, 0]
 ##################################################################################################
 def find_rare_class(classes, verbose=0):
     ######### Print the % count of each class in a Target variable  #####

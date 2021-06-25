@@ -277,7 +277,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
             if keras_model_type.lower() in fast_models:
                 ########## This is a simple fast model #########################
                 dropout_rate = 0.1
-                hidden_units = [32, 32]
+                hidden_units = [dense_layer3, dense_layer3]
                 all_inputs = create_fast_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
                 features = encode_fast_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
                                 use_embedding=False)
@@ -299,7 +299,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                 # different representations.
                 ###############################################################################################
                 dropout_rate = 0.1
-                hidden_units = [32, 32]
+                hidden_units = [dense_layer2, dense_layer3]
                 all_inputs = create_all_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
                 wide = encode_all_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
                                 use_embedding=False)
@@ -330,7 +330,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                 # feature crossing in an efficient way, where the degree of cross features grows with layer depth.
                 ###############################################################################################
                 dropout_rate = 0.1
-                hidden_units = [32, 32]
+                hidden_units = [dense_layer2, dense_layer3]
                 #hidden_units = [dense_layer3]
                 all_inputs = create_all_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
                 x0 = encode_all_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,

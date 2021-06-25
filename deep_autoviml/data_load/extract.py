@@ -189,7 +189,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     except:
         ### Choose a default option in case it is not given
         DS_LEN = 10000
-    shuffle_flag = False
+    shuffle_flag = True
     #### Set some default values in case model options is not set ##
     try:
         sep = model_options["sep"]
@@ -246,14 +246,14 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         maxrows = max(10000, int(0.25*DS_LEN))
     ### first load a small sample of the dataframe and the entire target if it needs transform
     if DS_LEN > 2*maxrows:
-        print('Since number of rows > maxrows, loading a random sample of %d rows into pandas for EDA' %maxrows)
+        print('    Since number of rows > maxrows, loading a random sample of %d rows into pandas for EDA' %maxrows)
         ### we randomly sample every 2nd row until we get 10000
         skip_function = lambda x: (x != 0) and x % 5 and x < 2*maxrows
         ### load a small sample of data into a pandas dataframe ##
         train_small = pd.read_csv(train_datafile, sep=sep, skiprows=skip_function, header=header,
                         encoding=csv_encoding, nrows=maxrows, compression=compression)
     else:
-        print('Since number of rows in file <= %d maxrows, loading entire file into pandas for EDA' %maxrows)
+        print('    Since number of rows in file <= %d maxrows, loading entire file into pandas for EDA' %maxrows)
         ### load a small sample of data into a pandas dataframe ##
         train_small = pd.read_csv(train_datafile, sep=sep, nrows=maxrows, compression=compression,
                                 header=header, encoding=csv_encoding) 
@@ -264,19 +264,38 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     except:
         modeltype, model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
     #### All column names in Tensorflow should have no spaces ! So you must convert them here!
+    sel_preds = ["_".join(x.split(" ")) for x in list(train_small) ]
+
     if header is None:
         sel_preds = ["col_"+str(x) for x in range(train_small.shape[1])]
     else:
-        sel_preds = ["_".join(x.split(" ")) for x in list(train_small) ]
+        sel_preds = ["_".join(x.split("(")) for x in sel_preds ]
+        sel_preds = ["_".join(x.split(")")) for x in sel_preds ]
+        sel_preds = ["_".join(x.split("/")) for x in sel_preds ]
+        sel_preds = ["_".join(x.split("\\")) for x in sel_preds ]
+        sel_preds = [x.lower() for x in sel_preds ]
+
     if isinstance(target, str):
         target = "_".join(target.split(" "))
+        target = "_".join(target.split("("))
+        target = "_".join(target.split(")"))
+        target = "_".join(target.split("/"))
+        target = "_".join(target.split("\\"))
+        target = target.lower()
         model_label = 'Single_Label'
     else:
         target = ["_".join(x.split(" ")) for x in target ]
+        target = ["_".join(x.split("(")) for x in target ]
+        target = ["_".join(x.split(")")) for x in target ]
+        target = ["_".join(x.split("/")) for x in target ]
+        target = ["_".join(x.split("\\")) for x in target ]
+        target = [x.lower() for x in target ]
         model_label = 'Multi_Label'
 
-    print('    Modified column names to fit no-spaces-in-column-names Rule in Tensorflow!')
     train_small.columns = sel_preds
+
+    print('Alert! Modified column names to satisfy rules for column names in Tensorflow...')
+
     ### modeltype and usecols are very important to know before doing any processing #####    
     #### usecols is a very handy tool to handle a target which can be single label or multi-label!
     if modeltype == '':
@@ -454,7 +473,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     
     drop_cols = var_df1['cols_delete']
     preds = [x for x in list(train_small) if x not in usecols+drop_cols]
-    print('\nNumber of predictors to be used = %s in next step: keras preprocessing...' %len(preds))
+    print('\nNumber of predictors to be used = %s in predict step: keras preprocessing...' %len(preds))
     cat_vocab_dict['columns_deleted'] = drop_cols
     if len(drop_cols) > 0: ### drop cols that have been identified for deletion ###
         print('Dropping %s columns marked for deletion...' %drop_cols)
@@ -511,8 +530,9 @@ def fill_missing_values_for_TF2(train_small, var_df):
     ########################################################################################
     """
     train_small = copy.deepcopy(train_small)
+    bools = var_df['bools']
     cols_delete = var_df['cols_delete']
-    cat_cols = var_df['categorical_vars'] + var_df['discrete_string_vars']
+    cat_cols = var_df['categorical_vars'] + var_df['discrete_string_vars'] + bools
     int_bools = var_df['int_bools']
     int_cats = var_df['int_cats']
     ints = var_df['int_vars']
@@ -522,8 +542,8 @@ def fill_missing_values_for_TF2(train_small, var_df):
     date_vars = var_df['date_vars']
     lats = var_df['lat_vars']
     lons = var_df['lon_vars']
-    ffill_cols = lats + lons + date_vars + cols_delete
-
+    ffill_cols = lats + lons + date_vars
+    
     if len(cat_cols) > 0:
         if train_small[cat_cols].isnull().sum().sum() > 0:
             for col in cat_cols:
@@ -548,6 +568,8 @@ def fill_missing_values_for_TF2(train_small, var_df):
             for col in float_cols:
                 colcount = 0.0
                 train_small[col].fillna(colcount,inplace=True)
+
+    ffill_cols = train_small.columns[train_small.isnull().sum()>0]
 
     if len(ffill_cols) > 0:
         ffill_cols_copy = copy.deepcopy(ffill_cols)
@@ -580,17 +602,37 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
         batch_size = find_batch_size(DS_LEN)
     #########  Modify or Convert column names to fit tensorflow rules of no space in names!
     sel_preds = ["_".join(x.split(" ")) for x in list(train_small) ]
-    train_small.columns = sel_preds
+    #### This can also be a problem with other special characters ###    
+    sel_preds = ["_".join(x.split("(")) for x in sel_preds ]
+    sel_preds = ["_".join(x.split(")")) for x in sel_preds ]
+    sel_preds = ["_".join(x.split("/")) for x in sel_preds ]
+    sel_preds = ["_".join(x.split("\\")) for x in sel_preds ]
+    sel_preds = [x.lower() for x in sel_preds ]
+    
     if isinstance(target, str):
         target = "_".join(target.split(" "))
+        target = "_".join(target.split("("))
+        target = "_".join(target.split(")"))
+        target = "_".join(target.split("/"))
+        target = "_".join(target.split("\\"))
+        target = target.lower()
         model_label = 'Single_Label'
     else:
         target = ["_".join(x.split(" ")) for x in target ]
+        target = ["_".join(x.split("(")) for x in target ]
+        target = ["_".join(x.split(")")) for x in target ]
+        target = ["_".join(x.split("/")) for x in target ]
+        target = ["_".join(x.split("\\")) for x in target ]
+        target = [x.lower() for x in target ]
         model_label = 'Multi_Label'
-    print('    Modified file names to fit no-space in column names rule in Tensorflow!')
+
+    train_small.columns = sel_preds
+
+    print('Alert! Modified column names to satisfy rules for column names in Tensorflow...')
+
     #### if target is changed you must send that modified target back to other processes ######
     ### usecols is basically target in a list format. Very handy to know when target is a list.
-        
+    
     try:
         modeltype = model_options["modeltype"]
         if model_options["modeltype"] == '':
@@ -824,7 +866,7 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
                   either option will work. This function will detect that automatically and load them.
     target: target name as a string or a 
     """
-    shuffle_flag = False
+    shuffle_flag = True
     cat_vocab_dict = defaultdict(list)
     maxrows = 10000 ### the number of maximum rows read by pandas to sample data ##
     ### Since you cannot deal with a very large dataset in pandas, let's look into how big the file is

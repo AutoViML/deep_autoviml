@@ -1010,18 +1010,21 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     cat_vocab_dict['project_name'] = project_name
 
     if save_model_flag:
-        print('\nSaving model in %s now...this will take time...' %save_model_path)
-        if not os.path.exists(save_model_path):
-            os.makedirs(save_model_path)
-        if model_options["save_model_format"]:
-            deep_model.save(save_model_path, save_format=model_options["save_model_format"])
-            print('     deep model saved in %s directory in %s format' %(
-                            save_model_path, model_options["save_model_format"]))
-        else:
-            deep_model.save(save_model_path)
-            print('     deep model saved in %s directory in .pb format' %save_model_path)
-        cat_vocab_dict['saved_model_path'] = save_model_path
-        cat_vocab_dict['save_model_format'] = model_options["save_model_format"]
+        try:
+            print('\nSaving model in %s now...this will take time...' %save_model_path)
+            if not os.path.exists(save_model_path):
+                os.makedirs(save_model_path)
+            if model_options["save_model_format"]:
+                deep_model.save(save_model_path, save_format=model_options["save_model_format"])
+                print('     deep model saved in %s directory in %s format' %(
+                                save_model_path, model_options["save_model_format"]))
+            else:
+                deep_model.save(save_model_path)
+                print('     deep model saved in %s directory in .pb format' %save_model_path)
+            cat_vocab_dict['saved_model_path'] = save_model_path
+            cat_vocab_dict['save_model_format'] = model_options["save_model_format"]
+        except:
+            print('Erroring. Model not saved.')
     else:
         print('\nModel not being saved since save_model_flag set to False...')
 

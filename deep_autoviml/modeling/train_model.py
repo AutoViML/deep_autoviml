@@ -227,19 +227,23 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     save_model_path = os.path.join(project_name,keras_model_type)
     save_model_path = get_save_folder(save_model_path)
     cat_vocab_dict['project_name'] = project_name
+
     if save_model_flag:
-        print('\nSaving model in %s now...this will take time...' %save_model_path)
-        if not os.path.exists(save_model_path):
-            os.makedirs(save_model_path)
-        if model_options["save_model_format"]:
-            deep_model.save(save_model_path, save_format=model_options["save_model_format"])
-            print('     deep model saved in %s directory in %s format' %(
-                            save_model_path, model_options["save_model_format"]))
-        else:
-            deep_model.save(save_model_path)
-            print('     deep model saved in %s directory in .pb format' %save_model_path)
-        cat_vocab_dict['saved_model_path'] = save_model_path
-        cat_vocab_dict['save_model_format'] = model_options["save_model_format"]
+        try:
+            print('\nSaving model in %s now...this will take time...' %save_model_path)
+            if not os.path.exists(save_model_path):
+                os.makedirs(save_model_path)
+            if model_options["save_model_format"]:
+                deep_model.save(save_model_path, save_format=model_options["save_model_format"])
+                print('     deep model saved in %s directory in %s format' %(
+                                save_model_path, model_options["save_model_format"]))
+            else:
+                deep_model.save(save_model_path)
+                print('     deep model saved in %s directory in .pb format' %save_model_path)
+            cat_vocab_dict['saved_model_path'] = save_model_path
+            cat_vocab_dict['save_model_format'] = model_options["save_model_format"]
+        except:
+            print('Erroring: Model not saved')
     else:
         print('\nModel not being saved since save_model_flag set to False...')
 
@@ -403,28 +407,30 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
                 print(classification_report(y_test, y_test_preds ))
     ### plot the regression results here #########
     if modeltype == 'Regression':
-        if isinstance(target, str):
-            plt.figure(figsize=(15,6))
-            ax1 = plt.subplot(1, 2, 1)
-            residual = pd.Series((y_test - y_test_preds))
-            residual.plot(ax=ax1, color='b')
-            ax1.set_title('Residuals by each row in held-out set')
-            pdf = save_valid_predictions(y_test, y_test_preds.ravel(), project_name, num_labels)
-            ax2 = plt.subplot(1, 2, 2)
-            pdf.plot(ax=ax2)
-        else:
-            pdf = save_valid_predictions(y_test, y_test_preds, project_name, num_labels)
-            plt.figure(figsize=(15,6))
-            for i in range(num_labels):
-                ax1 = plt.subplot(1, num_labels, i+1)
-                ax1.scatter(x=y_test[:,i], y=y_test_preds[:,i])
-                ax1.set_title(f"Actuals_{i} (x-axis) vs. Predictions_{i} (y-axis)")
-            plt.figure(figsize=(15, 6)) 
-            for j in range(num_labels):
-                pair_cols = ['actuals_'+str(j), 'predictions_'+str(j)]
-                ax2 = plt.subplot(1, num_labels, j+1)
-                pdf[pair_cols].plot(ax=ax2)
-
+        try:
+            if isinstance(target, str):
+                plt.figure(figsize=(15,6))
+                ax1 = plt.subplot(1, 2, 1)
+                residual = pd.Series((y_test - y_test_preds))
+                residual.plot(ax=ax1, color='b')
+                ax1.set_title('Residuals by each row in held-out set')
+                pdf = save_valid_predictions(y_test, y_test_preds.ravel(), project_name, num_labels)
+                ax2 = plt.subplot(1, 2, 2)
+                pdf.plot(ax=ax2)
+            else:
+                pdf = save_valid_predictions(y_test, y_test_preds, project_name, num_labels)
+                plt.figure(figsize=(15,6))
+                for i in range(num_labels):
+                    ax1 = plt.subplot(1, num_labels, i+1)
+                    ax1.scatter(x=y_test[:,i], y=y_test_preds[:,i])
+                    ax1.set_title(f"Actuals_{i} (x-axis) vs. Predictions_{i} (y-axis)")
+                plt.figure(figsize=(15, 6)) 
+                for j in range(num_labels):
+                    pair_cols = ['actuals_'+str(j), 'predictions_'+str(j)]
+                    ax2 = plt.subplot(1, num_labels, j+1)
+                    pdf[pair_cols].plot(ax=ax2)
+        except:
+            print('Regression plots erroring. Continuing...')
     ##################################################################################
     ###   V E R Y    I M P O R T A N T  S T E P   B E F O R E   M O D E L   F I T  ###    
     ##################################################################################
