@@ -179,7 +179,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     ### we are setting the number of max_tokens to be 2X the number of tokens found in train
     max_tokens_zip = defaultdict(int)
     ##### Just combine Boolean and cat variables here to set the vocab ####
-    cats_copy = copy.deepcopy(cats+bools)
+    cats_copy = copy.deepcopy(cats)
     if len(cats_copy) > 0:
         for each_name in cats_copy:
             max_tokens_zip[each_name] = cat_vocab_dict[each_name]['vocab'] ### just send vocab in
@@ -195,7 +195,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     if len(copy_int_bools) > 0:
         for each_int in copy_int_bools:
             max_tokens_zip[each_int] = cat_vocab_dict[each_int]['vocab'].tolist() ### just send vocab in
-    copy_floats = copy.deepcopy(floats)
+    copy_floats = copy.deepcopy(floats+bools)
     if len(copy_floats) > 0:
         for each_float in copy_floats:
             max_tokens_zip[each_float] = cat_vocab_dict[each_float]['vocab_min_var'] ### just send vocab as its a list
@@ -303,14 +303,15 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
 
     
     #####  If boolean variables exist, you must do this here ######
+
     if len(bools) > 0:
         bools_copy = copy.deepcopy(bools)
         try:
             for each_bool in bools_copy:
-                #### You just create the date-time input only once and reuse the same input again and again
-                bool_input = keras.Input(shape=(1,), name=each_bool, dtype="string")
+                #### You just create the boolean input  as float since we are converting it ###
+                bool_input = keras.Input(shape=(1,), name=each_bool, dtype="float32")
                 bool_input_dict[each_bool] = bool_input
-            encoded = encode_bool_inputs(bool_input_dict)
+                encoded = bool_input
             all_bool_encoded.append(encoded)
             all_bool_inputs.append(bool_input)
             all_input_names.append(each_bool)

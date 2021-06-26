@@ -189,7 +189,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     except:
         ### Choose a default option in case it is not given
         DS_LEN = 10000
-    shuffle_flag = True
+    shuffle_flag = False
     #### Set some default values in case model options is not set ##
     try:
         sep = model_options["sep"]
@@ -461,7 +461,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                                        compression_type=compression_type,
                                        shuffle=shuffle_flag,
                                        num_parallel_reads=tf.data.experimental.AUTOTUNE)
-        ############### Additional Checkes needed - do it here  ######
+        ############### Additional Checkes needed - do it here  #######
         if num_labels > 1:
             ############### Do this step only for Multi_Label problems ######        
             data_batches = data_batches.map(lambda x: split_combined_ds_into_two(x, usecols, preds))
@@ -470,7 +470,19 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
             data_batches = data_batches.map(lambda x, y: to_ids(x, y, table))
             print('    target label encoding completed.')
     print('    train data loaded successfully.')
-    
+    BOOLS = cat_vocab_dict['bools']
+    #################################################################################
+    ##### F E A T U R E    E N G I N E E R I N G   H E R E              #############
+    #################################################################################
+    def process_boolean(features, target):
+        for feature_name in features:
+            if feature_name in BOOLS:
+                # Cast boolean feature values to string.
+                features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
+        return features, target
+    #################################################################################
+    data_batches = data_batches.map(process_boolean)    
+    print('Boolean column successfully processed')
     drop_cols = var_df1['cols_delete']
     preds = [x for x in list(train_small) if x not in usecols+drop_cols]
     print('\nNumber of predictors to be used = %s in predict step: keras preprocessing...' %len(preds))
@@ -591,6 +603,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     ####   first filling dataframe with pandas fillna() function!
     #############################################################################
     """
+    train_small = copy.deepcopy(train_small)
     DS_LEN = model_options['DS_LEN']
     #### do this for dataframes ##################
     try:
@@ -738,6 +751,19 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
             ds = tf.data.Dataset.from_tensor_slices((dict(features), dict(labels)))
     else:
         ds = tf.data.Dataset.from_tensor_slices(dict(train_small))
+    #################################################################################
+    ##### F E A T U R E    E N G I N E E R I N G   H E R E              #############
+    #################################################################################
+    BOOLS = cat_vocab_dict['bools']
+    def process_boolean(features, target):
+        for feature_name in features:
+            if feature_name in BOOLS:
+                # Cast boolean feature values to string.
+                features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
+        return features, target
+    #################################################################################
+    ds = ds.map(process_boolean)
+    print('Boolean column successfully processed')
     ### batch it if you are creating it from a dataframe
     ds = ds.batch(batch_size, drop_remainder=True)
 
@@ -866,7 +892,7 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
                   either option will work. This function will detect that automatically and load them.
     target: target name as a string or a 
     """
-    shuffle_flag = True
+    shuffle_flag = False
     cat_vocab_dict = defaultdict(list)
     maxrows = 10000 ### the number of maximum rows read by pandas to sample data ##
     ### Since you cannot deal with a very large dataset in pandas, let's look into how big the file is

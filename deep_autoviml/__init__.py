@@ -28,6 +28,9 @@ import pdb
 from .deep_autoviml import fit
 from .modeling.predict_model import load_test_data, predict
 from deep_autoviml.modeling.predict_model import predict_images
+from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
+from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
+from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
 ################################################################################
 if __name__ == "__main__":
     module_type = 'Running'

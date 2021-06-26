@@ -560,9 +560,13 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
             feats_max_min[key]["max"] = max(data_sample[key].values)
             feats_max_min[key]["min"] = min(data_sample[key].values)
         elif feats_max_min[key]['dtype'] in ['bool']:
-            vocab = data_sample[key].unique().astype(str)
+            ### we are going to convert boolean to float type #####
+            vocab = data_sample[key].unique()
+            full_array = data_sample[key].values
+            full_array = np.array([0.0 if type(x) == float else float(x) for x in full_array])
             ### Don't change the next line even though it appears wrong. I have tested and it works!
-            vocab = ['missing' if type(x) == float else x for x in vocab]
+            vocab = [0.0 if type(x) == float else float(x) for x in vocab]
+            feats_max_min[key]["vocab_min_var"] = [full_array.mean(), full_array.var()]
             feats_max_min[key]["vocab"] = vocab
             feats_max_min[key]['size_of_vocab'] = len(vocab)
         elif feats_max_min[key]['dtype'] in ['string']:

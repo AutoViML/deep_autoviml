@@ -158,8 +158,8 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     
     FEATURE_NAMES = bools + cats + high_string_vars + int_cats + ints + floats
     NUMERIC_FEATURE_NAMES = int_cats + ints
-    FLOATS = floats
-    CATEGORICAL_FEATURE_NAMES = bools + cats + high_string_vars
+    FLOATS = floats + bools
+    CATEGORICAL_FEATURE_NAMES = cats + high_string_vars
     
     vocab_dict = defaultdict(list)
     cats_copy = copy.deepcopy(CATEGORICAL_FEATURE_NAMES+NUMERIC_FEATURE_NAMES)

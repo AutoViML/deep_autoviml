@@ -292,7 +292,18 @@ def predict(model_or_model_path, project_name, test_dataset,
         DS_LEN = 100000
         batch_size = 64
         cat_vocab_dict2 = copy.deepcopy(cat_vocab_dict)
-    ##### Now predict on the data set here ####
+    ##### Now you must convert the boolean to string on the data set here ###################
+    BOOLS = cat_vocab_dict['bools']
+    #################################################################################
+    def process_boolean(features, target):
+        for feature_name in features:
+            if feature_name in BOOLS:
+                # Cast boolean feature values to string.
+                features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
+        return features, target
+    ##################################################################Vaish1one1*
+    test_ds = test_ds.map(process_boolean)
+    print('Boolean column successfully processed')
     ## num_steps is needed to predict on whole dataset once ##
     try:
         num_steps = int(np.ceil(DS_LEN/batch_size))
