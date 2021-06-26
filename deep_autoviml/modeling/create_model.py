@@ -396,7 +396,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
         print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
     #############  You need to compile the non-auto models here ###############
     model_body = get_compiled_model(all_inputs, model_body, output_activation, num_predicts, 
-                            num_labels, optimizer, val_loss, val_metrics, cols_len, targets)
+                            modeltype, optimizer, val_loss, val_metrics, cols_len, targets)
     print('    %s model loaded and compiled successfully...' %keras_model_type)
     if cols_len > 100:
         print('Too many columns to show model summary. Continuing...')

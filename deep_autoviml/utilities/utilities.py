@@ -161,26 +161,25 @@ def print_one_row_from_tf_label(test_label):
     test_label: tf.data.DataSet - this must be batched and num_epochs must be an integer.
                 - otherwise it won't print!
     """
+    if isinstance(test_label, tuple):
+        dict_row = list(test_label.as_numpy_iterator())[0]
+    else:
+        dict_row = test_label
+    preds = list(dict_row.element_spec[0].keys())
     try:
-        if isinstance(test_label, tuple):
-            dict_row = list(test_label.as_numpy_iterator())[0]
-        else:
-            dict_row = test_label
-        preds = list(dict_row.element_spec[0].keys())
-        if dict_row.element_spec[1].name is None:
-            labels = ['target']
-        else:
+        ### This is for multilabel problems only ####
+        if len(dict_row.element_spec[1]) >= 1:
             labels = list(dict_row.element_spec[1].keys())
+            for feats, labs in dict_row.take(1):
+                for each_label in labels:
+                    print('    label = %s, samples: %s' %(each_label, labs[each_label]))
+    except:
+        ### This is for single problems only ####
         if dict_row.element_spec[0][preds[0]].shape[0] is None or isinstance(
                 dict_row.element_spec[0][preds[0]].shape[0], int):
             for feats, labs in dict_row.take(1):
-                print("    samples from labels: %s" %(labs.numpy().tolist()[:10]))
-    except:
-        print("    samples from each label in multi_label output: ")
-        for feats, labs in dict_row.take(1):
-            for each_label in labels:
-                print(labs[each_label])
-###########################################################################################
+                print("    samples from label: %s" %(labs.numpy().tolist()[:10]))
+##########################################################################################
 from sklearn.base import TransformerMixin
 from collections import defaultdict
 import pandas as pd
@@ -300,7 +299,24 @@ from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.metrics import balanced_accuracy_score
 from collections import OrderedDict
 from collections import Counter
-def print_classification_model_stats(y_true, predicted):
+def print_classification_model_stats(y_test, y_preds):
+    """
+    This will print both multi-label and multi-class metrics. 
+    You must send in only actual and predicted labels. No probabilities!!
+    """
+    try:
+        assert y_preds.shape[1]
+        for i in range(y_preds.shape[1]):
+            if y_preds.shape[1] == y_test.shape[1]:
+                print('Target label %s results:' %(i+1))
+                print_classification_model_metrics(y_test[:,i], y_preds[:,i])
+            else:
+                print('error printing: number of labels in actuals and predicted are different ')
+    except:
+        ### This is a binary class only #######
+        print_classification_model_metrics(y_test, y_preds)
+
+def print_classification_model_metrics(y_true, predicted):
     """
     This prints classification metrics in a nice format only for binary classes
     """
@@ -652,7 +668,7 @@ def plot_regression_scatters(df, df2, num_vars, kind='scatter', plot_name=''):
                     lineStart = x.min()
                     lineEnd = x.max()
                     ax1.scatter(x, y, color=row_color)
-                    ax1.plot([lineStart, lineEnd], [lineStart, lineEnd], 'k-', color=row_color)
+                    ax1.plot([lineStart, lineEnd], [lineStart, lineEnd], 'k-', color=next(colors))
                     ax1.set_xlabel('Actuals')
                     ax1.set_ylabel('Predicted')
                     ax1.set_title('Predicted vs Actuals Plot for Target = %s' %num_vars[k])
@@ -668,20 +684,18 @@ def plot_regression_scatters(df, df2, num_vars, kind='scatter', plot_name=''):
                     if l == 0:
                         ax1 = ax[k][l]
                         ax1.scatter(x, y,  color = row_color)
-                        row_color = next(colors)
-                        ax1.plot([lineStart, lineEnd], [lineStart, lineEnd], 'k-', color = row_color)
+                        ax1.plot([lineStart, lineEnd], [lineStart, lineEnd], 'k-', color = next(colors))
                         ax1.set_xlabel('Actuals')
                         ax1.set_ylabel('Predicted')
                         ax1.set_title('Predicted vs Actuals Plot for Target = %s' %num_vars[k])
                     else:
                         ax1 = ax[k][l]
-                        row_color = next(colors)
                         try:
                             assert y.shape[1]
                             ax1.hist((x-y.ravel()), density=True,color = row_color)
                         except:
                             ax1.hist((x-y), density=True,color = row_color)
-                        ax1.axvline(color='k')
+                        ax1.axvline(linewidth=2, color='k')
                         ax1.set_title('Residuals Plot for Target = %s' %num_vars[k])
             except:
                 if col == 1:
@@ -691,6 +705,46 @@ def plot_regression_scatters(df, df2, num_vars, kind='scatter', plot_name=''):
                     counter += 1
     print('Regression Plots completed in %0.3f seconds' %(time.time()-start_time))
 ################################################################################
+def plot_regression_residuals(y_test, y_test_preds, target, project_name, num_labels):
+    """
+    Another set of plots for continuous variables.
+    """
+    try:
+        if isinstance(target, str):
+            colors = cycle('byrcmgkbyrcmgkbyrcmgkbyrcmgk')
+            row_color = next(colors)
+            plt.figure(figsize=(15,6))
+            ax1 = plt.subplot(1, 2, 1)
+            residual = pd.Series((y_test - y_test_preds))
+            residual.plot(ax=ax1, color='b')
+            ax1.set_title('Residuals by each row in held-out set')
+            ax1.axhline(y=0.0, linewidth=2, color=next(colors))
+            pdf = save_valid_predictions(y_test, y_test_preds.ravel(), project_name, num_labels)
+            ax2 = plt.subplot(1, 2, 2)
+            pdf.plot(ax=ax2)
+            ax2.set_title('Actuals vs Predictions by each row in held-out set')
+        else:
+            pdf = save_valid_predictions(y_test, y_test_preds, project_name, num_labels)
+            plt.figure(figsize=(15,6))
+            colors = cycle('byrcmgkbyrcmgkbyrcmgkbyrcmgk')
+            for i in range(num_labels):
+                row_color = next(colors)
+                ax1 = plt.subplot(1, num_labels, i+1)
+                residual = pd.Series((y_test[:,i] - y_test_preds[:,i]))
+                residual.plot(ax=ax1, color=row_color)
+                ax1.set_title(f"Actuals_{i} (x-axis) vs. Residuals_{i} (y-axis)")
+                ax1.axhline(y=0.0, linewidth=2, color=next(colors))
+            plt.figure(figsize=(15, 6)) 
+            colors = cycle('byrcmgkbyrcmgkbyrcmgkbyrcmgk')
+            for j in range(num_labels):
+                row_color = next(colors)
+                pair_cols = ['actuals_'+str(j), 'predictions_'+str(j)]
+                ax2 = plt.subplot(1, num_labels, j+1)
+                pdf[pair_cols].plot(ax=ax2)
+                ax2.set_title('Actuals_{j} vs Predictions_{j} for each row ')
+    except:
+        print('Regression plots erroring. Continuing...')
+#############################################################################################
 import os
 def save_valid_predictions(y_test, y_preds, project_name, num_labels):
     if num_labels == 1:
@@ -745,11 +799,17 @@ def get_model_defaults(keras_options, model_options, targets):
     use_bias = check_keras_options(keras_options, 'use_bias', True)
     optimizer = check_keras_options(keras_options,'optimizer', Adam(lr=0.01, beta_1=0.9, beta_2=0.999))
     if modeltype == 'Regression':
-        val_loss = check_keras_options(keras_options,'loss','mae') ### you can use tf.keras.losses.Huber() instead
+        reg_loss = check_keras_options(keras_options,'loss','mae') ### you can use tf.keras.losses.Huber() instead
         #val_metrics = [check_keras_options(keras_options,'metrics',keras.metrics.RootMeanSquaredError(name='rmse'))]
         val_metrics = check_keras_options(keras_options,'metrics',['mae','mse'])
         #val_metrics=['mae', 'mse']
         num_predicts = 1*num_labels
+        if num_labels <= 1:
+            val_loss = check_keras_options(keras_options,'loss', reg_loss)
+        else:
+            val_loss = []
+            for i in range(num_labels):
+                val_loss.append(reg_loss)
         ####### If you change the val_metrics above, you must also change its name here ####
         val_metric = 'mae'
         output_activation = 'linear' ### use "relu" or "softplus" if you want positive values as output
@@ -831,33 +891,54 @@ def get_model_defaults(keras_options, model_options, targets):
     return keras_options, model_options, num_predicts, output_activation
 ###############################################################################
 def get_uncompiled_model(inputs, result, output_activation, 
-                    num_predicts, num_labels, cols_len, targets):
+                    num_predicts, modeltype, cols_len, targets):
     ### The next 3 steps are most important! Don't mess with them! 
     #model_preprocessing = Model(inputs, meta_outputs)
     #preprocessed_inputs = model_preprocessing(inputs)
     #result = model_body(preprocessed_inputs)
     ##### now you can add the final layer here #########
     multi_label_predictions = defaultdict(list)
-    if num_labels <= 1:
-        outputs = layers.Dense(num_predicts, activation=output_activation,
-                            name=targets[0])(result)
-    else:
-        for each_label in range(num_labels):
-            key = 'predictions'
-            value = layers.Dense(num_predicts[each_label], activation=output_activation,
-                                name=targets[each_label])(result)
+    if isinstance(num_predicts, int):
+        key = 'predictions'
+        if modeltype == 'Regression':
+            ### this will be just 1 in regression ####
+            if num_predicts > 1:
+                for each_label in range(num_predicts):
+                    value = layers.Dense(1, activation=output_activation,
+                            name=targets[each_label])(result)
+                    multi_label_predictions[key].append(value)
+            else:
+                value = layers.Dense(1, activation=output_activation,
+                        name=targets[0])(result)
+                multi_label_predictions[key].append(value)
+        else:
+            ### this will be number of classes in classification ###
+            value = layers.Dense(num_predicts, activation=output_activation,
+                                name=targets[0])(result)
             multi_label_predictions[key].append(value)
-        outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
-
+    else:
+        #### This will be for multi-label, multi-class predictions only ###
+        for each_label in range(len(num_predicts)):
+            key = 'predictions'
+            if modeltype == 'Regression':
+                ### this will be just 1 in regression ####
+                value = layers.Dense(1, activation=output_activation,
+                        name=targets[0])(result)
+            else:
+                ### this will be number of classes in classification ###
+                value = layers.Dense(num_predicts[each_label], activation=output_activation,
+                                    name=targets[each_label])(result)
+            multi_label_predictions[key].append(value)
+    outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
     ##### Set the inputs and outputs of the model here
     uncompiled_model = Model(inputs=inputs, outputs=outputs)
     return uncompiled_model
 
 #####################################################################################
-def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, num_labels, 
+def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, modeltype, 
                        optimizer, val_loss, val_metrics, cols_len, targets):
     model = get_uncompiled_model(inputs, meta_outputs, output_activation, 
-                        num_predicts, num_labels, cols_len, targets)
+                        num_predicts, modeltype, cols_len, targets)
     model.compile(
         optimizer=optimizer,
         loss=val_loss,

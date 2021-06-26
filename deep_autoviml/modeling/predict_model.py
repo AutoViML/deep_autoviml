@@ -77,10 +77,10 @@ import os
 import pickle
 import time
 ############################################################################################
-def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict="",
+def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
                                                  verbose=0):
+
     ### load a small sample of data into a pandas dataframe ##
-    
     if isinstance(test_data_or_file, str):
         test_small = pd.read_csv(test_data_or_file) ### this reads the entire file
     else:
@@ -99,24 +99,6 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
 
     print('Alert! Modified column names to satisfy rules for column names in Tensorflow...')
 
-    #### This means it is not a test dataset - hence it has target columns - load it too!
-    if isinstance(target, str):
-        if target == '':
-            target_name = None
-            usecols = []
-        else:
-            usecols = [target]
-            target_name = copy.deepcopy(target)
-    elif isinstance(target, list):
-        if target == []:
-            target = ''
-        else:
-            #### then it is a multi-label problem
-            target_name = target
-            usecols = target
-    else:
-        print('Error: Target %s type not understood' %type(target))
-        return
     ################### if cat_vocab_dict is not given, load it ####
     no_cat_vocab_dict = False
     if not cat_vocab_dict:
@@ -130,11 +112,12 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
             print('Unable to load pickle file. Continuing...')
             no_cat_vocab_dict = True
     ####################################################
-    if isinstance(target, str):
-        if target == '':
-            target = cat_vocab_dict['target_variables']
-            if len(target) == 1:
-                target = target[0]
+    target = cat_vocab_dict['target_variables']
+    usecols = cat_vocab_dict['target_variables']
+    if len(target) == 1:
+        target_name = target[0]
+    else:
+        target_name = target
     ### classify variables using the small dataframe ##
     model_options = {}
     if no_cat_vocab_dict:
@@ -171,14 +154,11 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
         data_batches = tf.data.experimental.make_csv_dataset(test_data_or_file,
                                                batch_size=batch_size,
                                                column_names=preds,
-                                               label_name=target_name,
+                                               label_name=None,
                                                num_epochs = num_epochs,
                                                column_defaults=column_defaults,
                                                shuffle=False,
                                                num_parallel_reads=tf.data.experimental.AUTOTUNE)
-        ############### Do this only for Multi_Label problems ######
-        if len(usecols) > 1:
-            data_batches = data_batches.map(lambda x: split_combined_ds_into_two(x, usecols, preds))
     else:
         
         if test_small.isnull().sum().sum() > 0:
@@ -189,21 +169,7 @@ def load_test_data(test_data_or_file, project_name, target="", cat_vocab_dict=""
             print('    Dropping %s columns from dataset...' %drop_cols)
             test_small.drop(drop_cols, axis=1, inplace=True)            
         
-        if isinstance(target, str):
-            if target != '':
-                labels = test_small[target]
-                test_small.drop(target, axis=1, inplace=True)
-                data_batches = tf.data.Dataset.from_tensor_slices((dict(test_small), labels))
-            else:
-                #print('\ntarget variable is blank - continuing')
-                data_batches = tf.data.Dataset.from_tensor_slices(dict(test_small))
-        elif isinstance(target, list):
-            ##### For multi-label problems, you need to use dict of labels as well ###
-            labels = test_small[target]
-            test_small.drop(target, axis=1, inplace=True)
-            data_batches = tf.data.Dataset.from_tensor_slices((dict(test_small), dict(labels)))
-        else:
-            data_batches = tf.data.Dataset.from_tensor_slices(dict(test_small))
+        data_batches = tf.data.Dataset.from_tensor_slices(dict(test_small))
         ### batch it if you are creating it from a dataframe
         data_batches = data_batches.batch(batch_size, drop_remainder=False).repeat()
 
@@ -269,19 +235,19 @@ def load_model_dict(model_or_model_path, cat_vocab_dict, project_name):
     return model, cat_vocab_dict
 ###################################################################################################
 def predict(model_or_model_path, project_name, test_dataset, 
-                    keras_model_type, cat_vocab_dict=""):
+                    keras_model_type, cat_vocab_dict="", verbose=0):
     start_time2 = time.time()
     model, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name)
     ##### load the test data set here #######
     if isinstance(test_dataset, str):
         test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name, 
-                                target="", cat_vocab_dict=cat_vocab_dict)
+                                cat_vocab_dict=cat_vocab_dict, verbose=verbose)
         batch_size = cat_vocab_dict2["batch_size"]
         DS_LEN = cat_vocab_dict2["DS_LEN"]
         print("test data size = ",DS_LEN, ', batch_size = ',batch_size)
     elif isinstance(test_dataset, pd.DataFrame) or isinstance(test_dataset, pd.Series):
         test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name,
-                                target="", cat_vocab_dict=cat_vocab_dict)
+                                cat_vocab_dict=cat_vocab_dict, verbose=verbose)
         test_small = test_dataset
         batch_size = cat_vocab_dict2["batch_size"]
         DS_LEN = cat_vocab_dict2["DS_LEN"]
@@ -295,14 +261,14 @@ def predict(model_or_model_path, project_name, test_dataset,
     ##### Now you must convert the boolean to string on the data set here ###################
     BOOLS = cat_vocab_dict['bools']
     #################################################################################
-    def process_boolean(features, target):
+    def process_boolean_features(features):
         for feature_name in features:
             if feature_name in BOOLS:
                 # Cast boolean feature values to string.
                 features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
-        return features, target
-    ##################################################################Vaish1one1*
-    test_ds = test_ds.map(process_boolean)
+        return features
+    ##################################################################
+    test_ds = test_ds.map(process_boolean_features)
     print('Boolean column successfully processed')
     ## num_steps is needed to predict on whole dataset once ##
     try:

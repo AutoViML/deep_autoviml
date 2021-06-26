@@ -423,9 +423,11 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
             target_name = None
         else:
             target_name = copy.deepcopy(target)
+            preds = [x for x in list(train_small) if x not in [target]]
     elif isinstance(target, list):
         #### then it is a multi-label problem
         target_name = None
+        preds = left_subtract(list(train_small), target)
     else:
         print('Error: Target %s type not understood' %type(target))
         return

@@ -55,6 +55,7 @@ from tensorflow.keras import regularizers
 # Utils
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
+from deep_autoviml.utilities.utilities import plot_regression_residuals
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
 from deep_autoviml.utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
 from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_chosen_callback
@@ -204,7 +205,7 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     opt_outputs = add_inputs_outputs_to_model_body(model, inputs, meta_outputs)
 
     comp_model = get_compiled_model(inputs, opt_outputs, output_activation, num_predicts, 
-                        num_labels, optimizer, loss_fn, val_metrics, cols_len, targets)
+                        modeltype, optimizer, loss_fn, val_metrics, cols_len, targets)
 
     return comp_model
 
@@ -308,7 +309,7 @@ class MyTuner(Tuner):
         epochs, steps =  args[2], args[3]
         inputs, meta_outputs = args[4], args[5]
         cols_len, output_activation = args[6], args[7]
-        num_predicts, num_labels = args[8], args[9]
+        num_predicts, modeltype = args[8], args[9]
         optimizer, val_loss =  args[10], args[11]
         val_metrics, patience = args[12], args[13]
         val_mode, DS_LEN = args[14], args[15]
@@ -329,7 +330,7 @@ class MyTuner(Tuner):
         ###### This is where you compile the model after it is built ###############
         #### Add a final layer for outputs during compiled model phase #############
         comp_model = get_compiled_model(inputs, storm_outputs, output_activation, num_predicts, 
-                            num_labels, optimizer, val_loss, val_metrics, cols_len, targets)
+                            modeltype, optimizer, val_loss, val_metrics, cols_len, targets)
 
         #print('    Custom model compiled successfully. Training model next...')
         shuffle_size = 1000000
@@ -346,10 +347,10 @@ class MyTuner(Tuner):
                             callbacks=callbacks_list, shuffle=True, class_weight=class_weights,
                             verbose=0)            
         # here we can define custom logic to assign a score to a configuration
-        if num_labels == 1:
+        if len(targets) == 1:
             score = np.mean(history.history[val_monitor][-5:])
         else:
-            for i in range(num_labels):
+            for i in range(len(targets)):
                 ### the next line uses the list of metrics to find one that is a closest match
                 metric1 = [x for x in history.history.keys() if (targets[i] in x) & ("loss" not in x) ]
                 val_metric = metric1[0]
@@ -636,7 +637,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         #### You have to make sure that inputs are unique, otherwise error ####
         tuner.search(train_ds, valid_ds, tuner_epochs, tuner_steps, 
                             inputs, meta_outputs, cols_len, output_activation,
-                            num_predicts, num_labels, optimizer, val_loss,
+                            num_predicts, modeltype, optimizer, val_loss,
                             val_metrics, patience, val_mode, data_size,
                             learning_rate, val_monitor, callbacks_list_tuner,
                             modeltype,  class_weights, batch_size, 
@@ -747,9 +748,9 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         #######################################################################################
         #### The best_model will be used for predictions on valid_ds to get metrics #########
         best_model = get_compiled_model(inputs, best_outputs, output_activation, num_predicts, 
-                            num_labels, best_optimizer, val_loss, val_metrics, cols_len, targets)
+                            modeltype, best_optimizer, val_loss, val_metrics, cols_len, targets)
         deep_model = get_compiled_model(inputs, deep_outputs, output_activation, num_predicts, 
-                            num_labels, best_optimizer, val_loss, val_metrics, cols_len, targets)
+                            modeltype, best_optimizer, val_loss, val_metrics, cols_len, targets)
         #######################################################################################
 
     ####################################################################################
@@ -895,6 +896,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         #### This is for Single-Label Problems only ################################
         if modeltype == 'Regression':
             print_regression_model_stats(y_test, y_test_preds,target,plot_name=project_name)
+            ### plot the regression results here #########
+            plot_regression_residuals(y_test, y_test_preds, target, project_name, num_labels)
         else:
             print_classification_header(num_classes, num_labels, target)
             labels = cat_vocab_dict['original_classes']
@@ -915,6 +918,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         if modeltype == 'Regression':
             #### This is for Multi-Label Regression ################################
             print_regression_model_stats(y_test, y_test_preds,target,plot_name=project_name)
+            ### plot the regression results here #########
+            plot_regression_residuals(y_test, y_test_preds, target, project_name, num_labels)
         else:
             #### This is for Multi-Label Classification ################################
             try:
@@ -943,29 +948,6 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
                 print_classification_metrics(y_test, y_test_preds, False)
                 print(classification_report(y_test, y_test_preds ))
     ###############           P R I N T I N G   C O M P L E T E D      #################
-    ### plot the regression results here #########
-    if modeltype == 'Regression':
-        if isinstance(target, str):
-            plt.figure(figsize=(15,6))
-            ax1 = plt.subplot(1, 2, 1)
-            residual = pd.Series((y_test - y_test_preds))
-            residual.plot(ax=ax1, color='b')
-            ax1.set_title('Residuals by each row in held-out set')
-            pdf = save_valid_predictions(y_test, y_test_preds.ravel(), project_name, num_labels)
-            ax2 = plt.subplot(1, 2, 2)
-            pdf.plot(ax=ax2)
-        else:
-            pdf = save_valid_predictions(y_test, y_test_preds, project_name, num_labels)
-            plt.figure(figsize=(15,6))
-            for i in range(num_labels):
-                ax1 = plt.subplot(1, num_labels, i+1)
-                ax1.scatter(x=y_test[:,i], y=y_test_preds[:,i])
-                ax1.set_title(f"Actuals_{i} (x-axis) vs. Predictions_{i} (y-axis)")
-            plt.figure(figsize=(15, 6)) 
-            for j in range(num_labels):
-                pair_cols = ['actuals_'+str(j), 'predictions_'+str(j)]
-                ax2 = plt.subplot(1, num_labels, j+1)
-                pdf[pair_cols].plot(ax=ax2)
 
     ##################################################################################
     ###   S E C O N D   T R A I N   O N  F U L L   T R A I N   D A T A   S E T     ###    

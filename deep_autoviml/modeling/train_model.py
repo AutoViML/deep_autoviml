@@ -51,6 +51,7 @@ from tensorflow.keras import regularizers
 # Utils
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
+from deep_autoviml.utilities.utilities import plot_regression_residuals
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
 from deep_autoviml.utilities.utilities import save_valid_predictions, print_classification_header
 from deep_autoviml.utilities.utilities import get_callbacks, get_chosen_callback
@@ -360,6 +361,8 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
         #### This is for Single-Label Problems only ################################
         if modeltype == 'Regression':
             print_regression_model_stats(y_test, y_test_preds,target,plot_name=project_name)
+            ### plot the regression results here #########
+            plot_regression_residuals(y_test, y_test_preds, target, project_name, num_labels)
         else:
             print_classification_header(num_classes, num_labels, target)
             labels = cat_vocab_dict['original_classes']
@@ -378,6 +381,8 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
         if modeltype == 'Regression':
             #### This is for Multi-Label Regression ################################
             print_regression_model_stats(y_test, y_test_preds,target,plot_name=project_name)
+            ### plot the regression results here #########
+            plot_regression_residuals(y_test, y_test_preds, target, project_name, num_labels)
         else:
             #### This is for Multi-Label Classification ################################
             try:
@@ -405,32 +410,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
             except:
                 print_classification_metrics(y_test, y_test_preds, False)
                 print(classification_report(y_test, y_test_preds ))
-    ### plot the regression results here #########
-    if modeltype == 'Regression':
-        try:
-            if isinstance(target, str):
-                plt.figure(figsize=(15,6))
-                ax1 = plt.subplot(1, 2, 1)
-                residual = pd.Series((y_test - y_test_preds))
-                residual.plot(ax=ax1, color='b')
-                ax1.set_title('Residuals by each row in held-out set')
-                pdf = save_valid_predictions(y_test, y_test_preds.ravel(), project_name, num_labels)
-                ax2 = plt.subplot(1, 2, 2)
-                pdf.plot(ax=ax2)
-            else:
-                pdf = save_valid_predictions(y_test, y_test_preds, project_name, num_labels)
-                plt.figure(figsize=(15,6))
-                for i in range(num_labels):
-                    ax1 = plt.subplot(1, num_labels, i+1)
-                    ax1.scatter(x=y_test[:,i], y=y_test_preds[:,i])
-                    ax1.set_title(f"Actuals_{i} (x-axis) vs. Predictions_{i} (y-axis)")
-                plt.figure(figsize=(15, 6)) 
-                for j in range(num_labels):
-                    pair_cols = ['actuals_'+str(j), 'predictions_'+str(j)]
-                    ax2 = plt.subplot(1, num_labels, j+1)
-                    pdf[pair_cols].plot(ax=ax2)
-        except:
-            print('Regression plots erroring. Continuing...')
+
     ##################################################################################
     ###   V E R Y    I M P O R T A N T  S T E P   B E F O R E   M O D E L   F I T  ###    
     ##################################################################################
@@ -444,6 +424,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
 
     return deep_model, cat_vocab_dict
 ######################################################################################
+from itertools import cycle
 def get_save_folder(save_dir):
     run_id = time.strftime("model_%Y_%m_%d-%H_%M_%S")
     return os.path.join(save_dir, run_id)
