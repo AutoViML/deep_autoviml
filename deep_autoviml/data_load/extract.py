@@ -211,7 +211,12 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         if split_str=='csv':
             print("CSV file being loaded into tf.data.Dataset")
             compression_type = None
-        elif split_str=='zip' or split_str=='gz':
+        elif split_str=='zip' :
+            print("Zip file being loaded into tf.data.Dataset")
+            compression_type="GZIP" ### don't change this. It is correct.
+            compression = "zip" ### don't change this. It is correct.
+            print('    Using %s compression_type in make_csv_dataset argument' %compression_type)
+        elif split_str=='gz':
             print("Zip file being loaded into tf.data.Dataset")
             compression_type="GZIP"
             compression = "gzip"
@@ -248,7 +253,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     if DS_LEN > 2*maxrows:
         print('    Since number of rows > maxrows, loading a random sample of %d rows into pandas for EDA' %maxrows)
         ### we randomly sample every 2nd row until we get 10000
-        skip_function = lambda x: (x != 0) and x % 5 and x < 2*maxrows
+        skip_function = lambda x: (x != 0) and x % 5 and x < maxrows
         ### load a small sample of data into a pandas dataframe ##
         train_small = pd.read_csv(train_datafile, sep=sep, skiprows=skip_function, header=header,
                         encoding=csv_encoding, nrows=maxrows, compression=compression)
@@ -257,7 +262,12 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         ### load a small sample of data into a pandas dataframe ##
         train_small = pd.read_csv(train_datafile, sep=sep, nrows=maxrows, compression=compression,
                                 header=header, encoding=csv_encoding) 
-    ### this reads the entire file
+    ### this reads the entire file and loads it into a dataset if it is a zip file  ###### 
+    if compression_type:
+        train_small, data_batches, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_frame(
+                        train_small, target, keras_options, model_options, verbose)
+    
+        return train_small, data_batches, var_df, cat_vocab_dict, keras_options, model_options
     ##### Now detect modeltype if it is not given ###############
     try:
         modeltype = model_options["modeltype"]
