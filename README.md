@@ -113,10 +113,10 @@ deep_autoviml requires only a single line of code to get started. You can howeve
 - `train`: could be a datapath+filename or a pandas dataframe. Deep Auto_ViML even handles gz or gzip files. You must specify the full path and file name for it find and load it.
 - `target`: name of the target variable in the data set.
 - `keras_model_type`: default is "auto" ## But always try "fast", then "fast1", and "fast2", finally "auto". If you want to run NLP, use "BERT" and if you want to do image classification, set it to "image". In most structured data sets, keras_model_type is a quick way for you to select some fantastic model architectures that have been successful in the past. For example:
-fast: a quick model that applies deep layers for all variables
-fast1: a deep and wide model that sends the same variables to both a deep and wide layer simultaneously
-fast2: a deep and cross model that crosses some variables to build a deep and cross layer simultaneously
-auto: This will build a dense layer model that will choose Storm-Tuner to hyper tune the parameters for the model.
+<b>fast</b>: a quick model that applies deep layers for all variables. 
+<b>fast1</b>: a deep and wide model that sends the same variables to both a deep and wide layer simultaneously. 
+<b>fast2</b>: a deep and cross model that crosses some variables to build a deep and cross layer simultaneously. 
+<b>auto</b>: This will build a dense layer model that will choose Storm-Tuner to hyper tune the parameters for the model. 
 - `project_name`: must be a string. Name of the folder where we will save your keras saved model and logs for tensorboard
 - `model_options`: must be a dictionary. For example: {'max_trials':5} sets the number of trials to run Storm-Tuner to search for the best hyper parameters for your keras model.
 - `keras_options`: must be a dictionary. You can use it for changing any keras model option you want such as "epochs", "kernel_initializer", "activation", "loss", "metrics", etc.
