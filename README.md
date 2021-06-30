@@ -116,7 +116,7 @@ deep_autoviml requires only a single line of code to get started. You can howeve
 <b>fast</b>: a quick model that applies deep layers for all variables. 
 <b>fast1</b>: a deep and wide model that sends the same variables to both a deep and wide layer simultaneously. 
 <b>fast2</b>: a deep and cross model that crosses some variables to build a deep and cross layer simultaneously. 
-<b>auto</b>: This will build a dense layer model that will choose Storm-Tuner to hyper tune the parameters for the model. 
+<b>auto</b>: This will build multiple dense layers in sequence that will then use Storm-Tuner to fine tune the hyper parameters for your model. 
 - `project_name`: must be a string. Name of the folder where we will save your keras saved model and logs for tensorboard
 - `model_options`: must be a dictionary. For example: {'max_trials':5} sets the number of trials to run Storm-Tuner to search for the best hyper parameters for your keras model.
 - `keras_options`: must be a dictionary. You can use it for changing any keras model option you want such as "epochs", "kernel_initializer", "activation", "loss", "metrics", etc.
