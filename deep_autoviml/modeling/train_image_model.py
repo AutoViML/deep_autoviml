@@ -56,6 +56,7 @@ from tensorflow.keras import regularizers
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
+from deep_autoviml.utilities.utilities import plot_one_history_metric
 from deep_autoviml.utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
 from deep_autoviml.utilities.utilities import check_if_GPU_exists
 from deep_autoviml.utilities.utilities import save_valid_predictions, predict_plot_images
@@ -106,7 +107,11 @@ def train_image_model(deep_model, train_ds, valid_ds, cat_vocab_dict,
     history = deep_model.fit(train_ds, epochs=epochs, validation_data=valid_ds)
     result = deep_model.evaluate(valid_ds)
     print('    Model accuracy in Image validation data: %s' %result[1])
-    plot_history(history, "accuracy", 1)
+    #plot_history(history, "accuracy", 1)
+    fig = plt.figure(figsize=(8,6))
+    ax1 = plt.subplot(1, 1, 1)
+    ax1.set_title('Model Training vs Validation Loss')
+    plot_one_history_metric(history, "accuracy", ax1)
     classes = cat_vocab_dict["image_classes"]
     predict_plot_images(deep_model, valid_ds, classes)
     save_model_path = os.path.join(project_name, "image_model")
