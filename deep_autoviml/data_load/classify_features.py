@@ -497,6 +497,14 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     cat_limit = check_model_options(model_options, "variable_cat_limit", 30)
     ### Classify features using the previously define function #############
     var_df1 = classify_features(data_sample, target, model_options, verbose=verbose)
+    #####  This might be useful for users to know whether to use feature-crosses or not ###
+    stri, numi, cat_feature_cross_flag = fast_classify_features(data_sample)
+    convert_cols = []
+    if len(numi['veryhighcats']) > 0:
+        convert_cols =  numi['veryhighcats']
+    if convert_cols:
+        var_df1['int_vars'] = left_subtract(var_df1['int_vars'], convert_cols)
+        var_df1['continuous_vars'] = var_df1['continuous_vars'] + convert_cols
     
     dates = var_df1['date_vars']
     cats = var_df1['categorical_vars']
@@ -532,10 +540,14 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
         elif str(data_sample[key].dtype).split("[")[0] in ['datetime64','datetime32','datetime16']:
             feats_max_min[key]["dtype"] = "string"
         elif data_sample[key].dtype in [np.int16, np.int32, np.int64]:
-            feats_max_min[key]["dtype"] = data_sample[key].dtype
+            if key in convert_cols:
+                feats_max_min[key]["dtype"] = np.float32
+                floats.append(key)
+            else:
+                feats_max_min[key]["dtype"] = np.int32
         else:
             floats.append(key)
-            feats_max_min[key]["dtype"] = data_sample[key].dtype
+            feats_max_min[key]["dtype"] = np.float32
         if feats_max_min[key]['dtype'] in [np.int16, np.int32, np.int64,
                                 np.float16, np.float32, np.float64]:
             ##### This is for integer and float variables #######
@@ -627,6 +639,15 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     var_df1['bools'] = bools
     #### It is better to have a baseline number for the size of the dataset here ########
     feats_max_min['DS_LEN'] = len(data_sample)
+    ### check if cat_vocab_dict has cat_feature_cross_flag in it ###
+    if model_options["cat_feature_cross_flag"]:
+        ### Since they have asked to do cat feature crossing, then do it ####
+        model_options["cat_feature_cross_flag"] = cat_feature_cross_flag
+        print('performing feature crossing for %s variables' %cat_feature_cross_flag)
+    else:
+        ### If there is no input for cat_feature_cross_flag, then don't do it ###
+        cat_feature_cross_flag = ""
+        print('Not performing feature crossing for categorical nor integer variables' )
     return var_df1, feats_max_min
 ############################################################################################
 def EDA_classify_and_return_cols_by_type(df1, nlp_char_limit=20):
@@ -999,3 +1020,70 @@ def find_remove_duplicates(values):
             seen.add(value)
     return output
 #################################################################################
+from collections import defaultdict
+import copy
+def fast_classify_features(df):
+    """
+    This is a very fast way to get a handle on what a dataset looks like. Just send in df and get a print.
+    Nothing is returned. You just get a printed number of how many types of features you have in dataframe.
+    """
+    num_list = df.select_dtypes(include='integer').columns.tolist()
+    float_list = df.select_dtypes(include='float').columns.tolist()
+    str_list = left_subtract(df.columns.tolist(), num_list+float_list)
+    all_list = [str_list, num_list]
+    str_dict = defaultdict(dict)
+    int_dict = defaultdict(dict)
+    for inum, dicti in enumerate([str_dict, int_dict]):
+        bincols = []
+        catcols = []
+        highcols = []
+        numcols = []
+        for col in all_list[inum]:
+            leng = len(df[col].value_counts())
+            if leng <= 2:
+                bincols.append(col)
+            elif leng > 2 and leng <= 15:
+                catcols.append(col)
+            elif leng >15 and leng <100:
+                highcols.append(col)
+            else:
+                numcols.append(col)
+        dicti['bincols'] = bincols
+        dicti['catcols'] = catcols
+        dicti['highcats'] = highcols
+        dicti['veryhighcats'] = numcols
+        if inum == 0:
+            str_dict = copy.deepcopy(dicti)
+            print('Distribution of string columns in datatset:')
+            print('    number of binary = %d, cats = %d, high cats = %d, very high cats = %d' %(
+                len(bincols), len(catcols), len(highcols), len(numcols)))
+        else:
+            print('Distribution of integer columns in datatset:')
+            int_dict = copy.deepcopy(dicti)
+            print('    number of binary = %d, cats = %d, high cats = %d, very high cats = %d' %(
+                len(bincols), len(catcols), len(highcols), len(numcols)))
+    ###   Check if worth doing cat_feature_cross_flag on this dataset ###
+    int_dict['floats'] = float_list
+    print('Distribution of floats: floats = %d' %len(float_list))
+    print('Data Transformation Advisory:')
+    cat_feature_cross_flag = []
+    if len(str_dict['bincols']+str_dict['catcols']) > 2 and len(str_dict['bincols']+str_dict['catcols']) <= 10:
+        cat_feature_cross_flag.append("cat")
+    if len(int_dict['bincols']+int_dict['catcols']) > 2 and len(int_dict['bincols']+int_dict['catcols']) <= 10:
+        cat_feature_cross_flag.append("num")
+    if cat_feature_cross_flag:
+        if "cat" in cat_feature_cross_flag:
+            cat_feature_cross_flag = "cat"
+            print('    performing categorical feature crosses: changed cat_feat_cross_flag to "cat"')
+        elif "num" in cat_feature_cross_flag:
+            cat_feature_cross_flag = "num"
+            print('    performing integer feature crosses: changed cat_feat_cross_flag to "num" ')
+        elif "cat" in cat_feature_cross_flag and "num" in cat_feature_cross_flag:
+            cat_feature_cross_flag = "both"
+            print('    performing both integer and cat feature crosses: changed cat_feat_cross_flag to "both" ')
+    else:
+        cat_feature_cross_flag = ""
+    if len(int_dict['veryhighcats']) > 0:
+        print('    transformed %s from integer to float' %int_dict['veryhighcats'])
+    return str_dict, int_dict, cat_feature_cross_flag
+###################################################################################################

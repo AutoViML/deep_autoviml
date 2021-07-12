@@ -30,14 +30,14 @@ from collections import defaultdict
 from deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_fast_inputs, create_fast_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_all_inputs, create_all_inputs
-from deep_autoviml.preprocessing.preprocessing_tabular import encode_num_inputs
+from deep_autoviml.preprocessing.preprocessing_tabular import encode_num_inputs, encode_auto_inputs
 from deep_autoviml.modeling.train_custom_model import return_optimizer
 
 # Utils
 from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_uncompiled_model
 from deep_autoviml.utilities.utilities import get_model_defaults, check_keras_options
 from deep_autoviml.utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
-
+from deep_autoviml.utilities.utilities import get_hidden_layers
 ############################################################################################
 # TensorFlow ≥2.4 is required
 import tensorflow as tf
@@ -122,7 +122,7 @@ class BalancedAccuracy(tf.keras.metrics.Metric):
         result = tf.math.reduce_mean(diag/rowsums, axis=0)
         return result
 ##########################################################################################
-def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
+def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, keras_options, var_df,
                         keras_model_type, model_options, cat_vocab_dict):
     """
     This is a handy function to create a Sequential model architecture depending on keras_model_type option given.
@@ -148,7 +148,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     cats = var_df['categorical_vars']  ### these are low cardinality vars - you can one-hot encode them ##
     high_string_vars = var_df['discrete_string_vars']  ## discrete_string_vars are high cardinality vars ## embed them!
     bools = var_df['bools']
-    int_cats = var_df['int_cats']
+    int_cats = var_df['int_cats'] + var_df['int_bools']
     ints = var_df['int_vars']
     floats = var_df['continuous_vars']
     nlps = var_df['nlp_vars']
@@ -208,21 +208,7 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
     print('    initial learning rate = %s' %learning_rate)
     print('    initial optimizer = %s' %str(optimizer).split(".")[-1].split(" ")[0])
     ###################################################################################
-    if data_dim <= 1e6:
-        dense_layer1 = max(96,int(data_dim/30000))
-        dense_layer2 = max(64,int(dense_layer1*0.5))
-        dense_layer3 = max(32,int(dense_layer2*0.5))
-    elif data_dim > 1e6 and data_dim <= 1e8:
-        dense_layer1 = max(192,int(data_dim/50000))
-        dense_layer2 = max(128,int(dense_layer1*0.5))
-        dense_layer3 = max(64,int(dense_layer2*0.5))
-    elif data_dim > 1e8 or keras_model_type == 'big_deep':
-        dense_layer1 = 400
-        dense_layer2 = 200
-        dense_layer3 = 100
-    dense_layer1 = min(300,dense_layer1)
-    dense_layer2 = min(200,dense_layer2)
-    dense_layer3 = min(100,dense_layer3)
+    dense_layer1, dense_layer2, dense_layer3 = get_hidden_layers(data_dim)
     print('    Recommended hidden layers (with units in each Dense Layer)  = (%d, %d, %d)\n' %(
                                 dense_layer1,dense_layer2,dense_layer3))
     fast_models = ['fast']
@@ -236,15 +222,15 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                         'cnn1', 'cnn','cnn2'] 
     ######   Just do a simple check for auto models here ####################
     if keras_model_type.lower() in fast_models+fast_models1+prebuilt_models+fast_models2+nlp_models:
-            all_inputs = inputs
+        all_inputs = nlp_inputs + meta_inputs
     else:
         ### this means it's an auto model and you create one here 
         print('    creating %s model body...' %keras_model_type)
-        num_layers = check_keras_options(keras_options, 'num_layers', 1)
+        #num_layers = check_keras_options(keras_options, 'num_layers', 1)
         model_body = tf.keras.Sequential([])
-        for l_ in range(num_layers):
-            model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
-                                      activity_regularizer=tf.keras.regularizers.l2(0.01)))
+        #for l_ in range(num_layers):
+        #    model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
+        #                              activity_regularizer=tf.keras.regularizers.l2(0.01)))
         return model_body, keras_options
     ##########################   This is for non-auto models #####################################
     if isinstance(use_my_model, str) :
@@ -277,17 +263,21 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
             if keras_model_type.lower() in fast_models:
                 ########## This is a simple fast model #########################
                 dropout_rate = 0.1
-                hidden_units = [dense_layer3, dense_layer3]
-                all_inputs = create_fast_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
-                features = encode_fast_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
+                hidden_units = [dense_layer2, dense_layer3]
+                inputs = create_fast_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
+                features = encode_fast_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
                                 use_embedding=False)
                 for units in hidden_units:
                     features = layers.Dense(units)(features)
                     features = layers.BatchNormalization()(features)
                     features = layers.ReLU()(features)
                     features = layers.Dropout(dropout_rate)(features)
-                model_body = features
-                #model_body = layers.Dense(int(0.25*dense_layer1))(merged)
+                all_inputs = list(inputs.values()) ### convert input layers to a list
+                if len(nlps) > 0:
+                    all_inputs += nlp_inputs
+                    model_body = layers.concatenate([features, nlp_outputs])
+                else:
+                    model_body = features
                 print('    Created simple %s model, ...' %keras_model_type)
             elif keras_model_type.lower() in fast_models1:
                 ###############################################################################################
@@ -300,11 +290,11 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                 ###############################################################################################
                 dropout_rate = 0.1
                 hidden_units = [dense_layer2, dense_layer3]
-                all_inputs = create_all_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
-                wide = encode_all_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
+                inputs = create_all_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
+                wide = encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
                                 use_embedding=False)
                 wide = layers.BatchNormalization()(wide)
-                deep = encode_all_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
+                deep = encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
                                 use_embedding=True)
                 for units in hidden_units:
                     deep = layers.Dense(units)(deep)
@@ -312,13 +302,12 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                     deep = layers.ReLU()(deep)
                     deep = layers.Dropout(dropout_rate)(deep)
                 #### If there are NLP vars in dataset, you must combine them ##
+                all_inputs = list(inputs.values()) ### convert input layers to a list
                 if len(nlps) > 0:
-                    all_inputs = list(all_inputs.values()) ### convert input layers to a list
-                    all_inputs += inputs
-                    merged = layers.concatenate([meta_outputs, wide, deep])
+                    all_inputs += nlp_inputs
+                    model_body = layers.concatenate([wide, deep, nlp_outputs])
                 else:
-                    merged = layers.concatenate([wide, deep])
-                model_body = merged
+                    model_body = layers.concatenate([wide, deep])
                 ##### This is where you create the last layer to deliver predictions ####
                 #final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
                 #model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
@@ -332,8 +321,8 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                 dropout_rate = 0.1
                 hidden_units = [dense_layer2, dense_layer3]
                 #hidden_units = [dense_layer3]
-                all_inputs = create_all_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
-                x0 = encode_all_inputs(all_inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
+                inputs = create_all_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
+                x0 = encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
                                 use_embedding=True)
                 cross = x0
                 for _ in hidden_units:
@@ -349,13 +338,12 @@ def create_model(use_my_model, inputs, meta_outputs, keras_options, var_df,
                     deep = layers.ReLU()(deep)
                     deep = layers.Dropout(dropout_rate)(deep)
                 #### If there are NLP vars in dataset, you must combine them ##
+                all_inputs = list(inputs.values()) ### convert input layers to a list
                 if len(nlps) > 0:
-                    all_inputs = list(all_inputs.values()) ### convert input layers to a list
-                    all_inputs += inputs
-                    merged = layers.concatenate([meta_outputs, cross, deep])
+                    all_inputs += nlp_inputs
+                    model_body = layers.concatenate([cross, deep, nlp_outputs])
                 else:
-                    merged = layers.concatenate([cross, deep])
-                model_body = merged
+                    model_body = layers.concatenate([cross, deep])
                 ##### This is where you create the last layer to deliver predictions ####
                 #final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
                 #model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)

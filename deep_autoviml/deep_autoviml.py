@@ -332,7 +332,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 #################################################################################
         """)
 
-    nlp_inputs, meta_inputs, meta_outputs = perform_preprocessing(batched_data, var_df, 
+    nlp_inputs, meta_inputs, meta_outputs, nlp_outputs = perform_preprocessing(batched_data, var_df, 
                                                 cat_vocab_dict, keras_model_type, 
                                                 keras_options, model_options, 
                                                 verbose)
@@ -342,7 +342,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             if model_use_case.lower() == 'pipeline':
                 ##########  Perform keras preprocessing only and return inputs + keras layers created ##
                 print('\nReturning a keras pipeline so you can create your own Functional model.')
-                return nlp_inputs, meta_inputs, meta_outputs
+                return nlp_inputs, meta_inputs, meta_outputs, nlp_outputs
             #### There may be other use cases for model_use_case in future hence leave this empty for now #
 
     #### you must create a functional model here 
@@ -356,9 +356,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     fast_models = ['deep_and_wide','deep_wide','wide_deep', 'wide_and_deep','deep wide', 
             'wide deep', 'fast','fast1', 'fast2', 'deep_and_cross', 'deep cross', 'deep and cross'] 
     ##### This takes care of providing multi-output predictions! ######
-    inputs = nlp_inputs+meta_inputs
-    model_body, keras_options =  create_model(use_my_model, inputs, meta_outputs, 
-                                        keras_options, var_df, keras_model_type,
+    model_body, keras_options =  create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, 
+                                        nlp_outputs, keras_options, var_df, keras_model_type,
                                         model_options, cat_vocab_dict)
     
     ###########    C O M P I L E    M O D E L    H E R E         #############
@@ -381,7 +380,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     """)
     if keras_model_type.lower() == 'auto':
         print('Building and training an automatic model using %s Tuner...' %model_options['tuner'])
-        deep_model, cat_vocab_dict = train_custom_model(inputs, meta_outputs,
+        deep_model, cat_vocab_dict = train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs,
                                          batched_data, target, keras_model_type, keras_options, 
                                          model_options, var_df, cat_vocab_dict, project_name, 
                                             save_model_flag, use_my_model, verbose) 

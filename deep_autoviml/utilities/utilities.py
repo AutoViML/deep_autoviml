@@ -801,8 +801,8 @@ def get_model_defaults(keras_options, model_options, targets):
     if modeltype == 'Regression':
         reg_loss = check_keras_options(keras_options,'loss','mae') ### you can use tf.keras.losses.Huber() instead
         #val_metrics = [check_keras_options(keras_options,'metrics',keras.metrics.RootMeanSquaredError(name='rmse'))]
-        val_metrics = check_keras_options(keras_options,'metrics',['mae','mse'])
-        #val_metrics=['mae', 'mse']
+        METRICS = [keras.metrics.MeanAbsoluteError(name='mae'), keras.metrics.RootMeanSquaredError(name='rmse'),]
+        val_metrics = check_keras_options(keras_options,'metrics',METRICS)
         num_predicts = 1*num_labels
         if num_labels <= 1:
             val_loss = check_keras_options(keras_options,'loss', reg_loss)
@@ -811,7 +811,7 @@ def get_model_defaults(keras_options, model_options, targets):
             for i in range(num_labels):
                 val_loss.append(reg_loss)
         ####### If you change the val_metrics above, you must also change its name here ####
-        val_metric = 'mae'
+        val_metric = 'rmse'
         output_activation = 'linear' ### use "relu" or "softplus" if you want positive values as output
     elif modeltype == 'Classification':
         ##### This is for Binary Classification Problems
@@ -931,6 +931,7 @@ def get_uncompiled_model(inputs, result, output_activation,
             multi_label_predictions[key].append(value)
     outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
     ##### Set the inputs and outputs of the model here
+    
     uncompiled_model = Model(inputs=inputs, outputs=outputs)
     return uncompiled_model
 
@@ -946,6 +947,23 @@ def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, mo
     )
     return model
 ###############################################################################
+def add_inputs_outputs_to_auto_model_body(model_body, inputs, meta_outputs, nlp_flag=False):
+    """
+    This is specially for "auto" model types only. It requires special handling.
+    """
+    if nlp_flag:
+        wide, deep, nlp_outputs = meta_outputs
+    else:
+        wide, deep = meta_outputs
+    ##### This is the simplest way to convert a sequential model to functional!
+    for num, each_layer in enumerate(model_body.layers):
+        if num == 0:
+            final_outputs = each_layer(deep)
+        else:
+            final_outputs = each_layer(final_outputs)
+    model_body = layers.concatenate([wide, final_outputs], name='auto_concatenate_layer')
+    return model_body
+#################################################################################
 def add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs):
     ##### This is the simplest way to convert a sequential model to functional!
     for num, each_layer in enumerate(model_body.layers):
@@ -954,7 +972,6 @@ def add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs):
         else:
             final_outputs = each_layer(final_outputs)
     return final_outputs
-
 ###############################################################################
 class BalancedSparseCategoricalAccuracy(keras.metrics.SparseCategoricalAccuracy):
     def __init__(self, name='balanced_sparse_categorical_accuracy', dtype=None):
@@ -1118,3 +1135,84 @@ class OneCycleScheduler2(keras.callbacks.Callback):
             K.clear_session()
         K.set_value(self.model.optimizer.lr, rate)
 #####################################################################################################
+def find_columns_with_infinity(df):
+    """
+    This function finds all columns in a dataframe that have inifinite values (np.inf or -np.inf)
+    It returns a list of column names. If the list is empty, it means no columns were found.
+    """
+    add_cols = []
+    sum_cols = 0
+    for col in df.columns:
+        inf_sum1 = 0 
+        inf_sum2 = 0
+        inf_sum1 = len(df[df[col]==np.inf])
+        inf_sum2 = len(df[df[col]==-np.inf])
+        if (inf_sum1 > 0) or (inf_sum2 > 0):
+            add_cols.append(col)
+            sum_cols += inf_sum1
+            sum_cols += inf_sum2
+    return add_cols
+#####################################################################################################
+import copy
+def drop_rows_with_infinity(df, cols_list, fill_value=None):
+    """
+    This feature engineering function will fill infinite values in your data with a fill_value.
+    You might need this function during deep_learning models where infinite values don't work.
+    You can also leave the fill_value as None which means we will drop the rows with infinity.
+    This function checks for both negative and positive infinity values to fill or remove.
+    """
+    # first you must drop rows that have inf in them ####
+    print('    Shape of dataset initial: %s' %(df.shape[0]))
+    corr_list_copy = copy.deepcopy(cols_list)
+    init_rows = df.shape[0]
+    if fill_value:
+        for col in corr_list_copy:
+            ### Capping using the n largest value based on n given in input.
+            maxval = df[col].max()  ## what is the maximum value in this column?
+            minval = df[col].min()
+            if maxval == np.inf:
+                sorted_list = sorted(df[col].unique())
+                ### find the n_smallest values after the maximum value based on given input n
+                next_best_value_index = sorted_list.index(np.inf) - 1
+                capped_value = sorted_list[next_best_value_index]
+                df.loc[df[col]==maxval, col] =  capped_value ## maximum values are now capped
+            if minval == -np.inf:
+                sorted_list = sorted(df[col].unique())
+                ### find the n_smallest values after the maximum value based on given input n
+                next_best_value_index = sorted_list.index(-np.inf)+1
+                capped_value = sorted_list[next_best_value_index]
+                df.loc[df[col]==minval, col] =  capped_value ## maximum values are now capped
+        print('        capped all rows with infinite values in data')
+    else:
+        for col in corr_list_copy:
+            df = df[df[col]!=np.inf]
+            df = df[df[col]!=-np.inf]
+        dropped_rows = init_rows - df.shape[0]
+        print('        dropped %d rows due to infinite values in data' %dropped_rows)
+        print('    Shape of dataset after dropping rows: %s' %(df.shape[0]))
+    ###  Double check that all columns have been fixed ###############
+    cols_with_infinity = find_columns_with_infinity(df)
+    if cols_with_infinity:
+        print('There are still %d columns with infinite values. Returning...' %len(cols_with_infinity))
+    else:
+        print('There are no columns with infinite values.')
+    return df
+################################################################################################
+def get_hidden_layers(data_dim):
+    if data_dim <= 1e6:
+        dense_layer1 = max(96,int(data_dim/30000))
+        dense_layer2 = max(64,int(dense_layer1*0.5))
+        dense_layer3 = max(32,int(dense_layer2*0.5))
+    elif data_dim > 1e6 and data_dim <= 1e8:
+        dense_layer1 = max(192,int(data_dim/50000))
+        dense_layer2 = max(128,int(dense_layer1*0.5))
+        dense_layer3 = max(64,int(dense_layer2*0.5))
+    elif data_dim > 1e8 or keras_model_type == 'big_deep':
+        dense_layer1 = 400
+        dense_layer2 = 200
+        dense_layer3 = 100
+    dense_layer1 = min(300,dense_layer1)
+    dense_layer2 = min(200,dense_layer2)
+    dense_layer3 = min(100,dense_layer3)
+    return dense_layer1, dense_layer2, dense_layer3
+###################################################################################################

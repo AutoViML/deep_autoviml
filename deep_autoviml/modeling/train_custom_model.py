@@ -57,7 +57,8 @@ from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, pri
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
 from deep_autoviml.utilities.utilities import plot_regression_residuals
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
-from deep_autoviml.utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
+from deep_autoviml.utilities.utilities import get_compiled_model, add_inputs_outputs_to_auto_model_body
+from deep_autoviml.utilities.utilities import add_inputs_outputs_to_model_body
 from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_chosen_callback
 from deep_autoviml.utilities.utilities import save_valid_predictions, get_callbacks
 from deep_autoviml.utilities.utilities import print_classification_header
@@ -137,16 +138,17 @@ def reset_keras():
     config.gpu_options.visible_device_list = "0"
     set_session(tf.compat.v1.Session(config=config))
 ##################################################################################
-def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predicts, 
-                        num_labels, optimizer_options, loss_fn, val_metrics, cols_len, targets):
+def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predicts, modeltype,
+                        optimizer_options, loss_fn, val_metrics, cols_len, targets, nlp_flag):
 
     #tf.compat.v1.reset_default_graph()
     #K.clear_session()
     #reset_keras()
     #tf.keras.backend.reset_uids()
 
-    n_layers = trial.suggest_int("n_layers", 1, 6)
-    num_hidden = trial.suggest_categorical("n_units", [32, 48, 64, 96, 128])
+    n_layers = trial.suggest_int("n_layers", 1, 4)
+    #num_hidden = trial.suggest_categorical("n_units", [32, 48, 64, 96, 128])
+    num_hidden = trial.suggest_categorical("n_units", [50, 100, 150, 200, 250, 300, 350, 400, 450, 500])
     weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
     use_bias = trial.suggest_categorical("use_bias", [True, False])
     batch_norm = trial.suggest_categorical("batch_norm", [True, False])
@@ -202,7 +204,7 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
 
     optimizer = getattr(tf.optimizers, optimizer_selected)(**kwargs)
     ##### This is the simplest way to convert a sequential model to functional!
-    opt_outputs = add_inputs_outputs_to_model_body(model, inputs, meta_outputs)
+    opt_outputs = add_inputs_outputs_to_auto_model_body(model, inputs, meta_outputs, nlp_flag)
 
     comp_model = get_compiled_model(inputs, opt_outputs, output_activation, num_predicts, 
                         modeltype, optimizer, loss_fn, val_metrics, cols_len, targets)
@@ -225,6 +227,7 @@ def build_model_storm(hp, *args):
     else:
         hp.Param('batch_size', [32])
 
+    num_layers = hp.Param('num_layers', [1, 2, 3], ordered=True)
     ##### Now let us build the model body ###############
     model_body = Sequential([])
 
@@ -239,8 +242,10 @@ def build_model_storm(hp, *args):
     batch_norm_flag = hp.Param('use_batch_norm', [True, False])
 
     # example of per-block parameter
+    num_hidden = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500]
+
     model_body.add(Dense(hp.Param('kernel_size_' + str(0), 
-                            [32, 48, 64, 96, 128], ordered=True),
+                            num_hidden, ordered=True),
                             use_bias=use_bias,
                             kernel_initializer = kernel_initializer,
                             name="storm_dense_0",
@@ -268,7 +273,8 @@ def build_model_storm(hp, *args):
         dropout_value =  0.00
     batch_norm_flag = hp.values['use_batch_norm']
     # example of inline ordered parameter
-    for x in range(hp.Param('num_layers', [1, 2, 3, 4, 5, 6], ordered=True)):
+    num_copy = copy.deepcopy(num_layers)
+    for x in range(num_copy):
         #### slowly reduce the kernel size after each round ####
         kernel_size = int(0.75*kernel_size)
         # example of per-block parameter
@@ -317,12 +323,12 @@ class MyTuner(Tuner):
         callbacks_list, modeltype = args[18], args[19]
         class_weights, batch_size =  args[20], args[21]
         batch_limit, batch_nums =  args[22], args[23]
-        targets = args[24]
+        targets, nlp_flag = args[24], args[25]
 
         model_body, optimizer = build_model_storm(hp, batch_limit, batch_nums)
 
         ##### This is the simplest way to convert a sequential model to functional model!
-        storm_outputs = add_inputs_outputs_to_model_body(model_body, inputs, meta_outputs)
+        storm_outputs = add_inputs_outputs_to_auto_model_body(model_body, inputs, meta_outputs, nlp_flag)
 
         #### This final outputs is the one that is taken into final dense layer and compiled
         #print('    Custom model loaded successfully. Now compiling model...')
@@ -341,8 +347,8 @@ class MyTuner(Tuner):
         valid_ds = valid_ds.unbatch().batch(batch_size)
         valid_ds = valid_ds.prefetch(batch_size)#.repeat(5)
         steps = 20
-        #scores = []
-        history = comp_model.fit(train_ds, epochs=epochs, #steps_per_epoch=steps,# batch_size=batch_size, 
+        storm_epochs = 5
+        history = comp_model.fit(train_ds, epochs=storm_epochs, #steps_per_epoch=steps,# batch_size=batch_size, 
                             validation_data=valid_ds, #validation_steps=steps,
                             callbacks=callbacks_list, shuffle=True, class_weight=class_weights,
                             verbose=0)            
@@ -448,9 +454,9 @@ import tensorflow as tf
 
 ##########################################################################################
 import optuna
-def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type, 
-                    keras_options, model_options, var_df, cat_vocab_dict, project_name="", 
-                    save_model_flag=True, use_my_model='', verbose=0 ):
+def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_ds, target, 
+                    keras_model_type, keras_options, model_options, var_df, cat_vocab_dict,  
+                    project_name="", save_model_flag=True, use_my_model='', verbose=0 ):
     """
     Given a keras model and a tf.data.dataset that is batched, this function will 
     train a keras model. It will first split the batched_data into train_ds and  
@@ -458,6 +464,11 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     train the model and evaluate it on valid_ds. It will return a keras model fully 
     trained on the full batched_data finally and train history.
     """
+    inputs = nlp_inputs + meta_inputs
+    if nlp_inputs:
+        nlp_flag = True
+    else:
+        nlp_flag = False
     start_time = time.time()
     ########################   STORM TUNER and other DEFAULTS     ####################
     targets = cat_vocab_dict['target_variables']
@@ -472,10 +483,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
     modeltype = model_options["modeltype"]
     patience = keras_options["patience"]
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
-    data_dim = int(data_size*meta_outputs.shape[1])
+    data_dim = int(data_size*(meta_outputs[0].shape[1]))
     optimizer = keras_options['optimizer']
     early_stopping = check_keras_options(keras_options, "early_stopping", False)
-    print('After preprocessing using keras layers, features dimensions is now %s' %meta_outputs.shape[1])
+    print('After preprocessing using keras layers, features dimensions is now %s' %meta_outputs[0].shape[1])
     print('    original datasize = %s, initial batchsize = %s' %(data_size, batch_size))
     print("    Early stopping : %s" %early_stopping)
     NUMBER_OF_EPOCHS = check_keras_options(keras_options, "epochs", 100)
@@ -641,7 +652,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
                             val_metrics, patience, val_mode, data_size,
                             learning_rate, val_monitor, callbacks_list_tuner,
                             modeltype,  class_weights, batch_size, 
-                            batch_limit, batch_nums, targets)
+                            batch_limit, batch_nums, targets, nlp_flag)
         best_trial = tuner.get_best_trial()
         print('    best trial selected as %s' %best_trial)
         ##### get the best model parameters now. Also split it into two models ###########
@@ -674,7 +685,7 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         K.set_value(best_optimizer.learning_rate, optimizer_lr)
 
         ##### This is the simplest way to convert a sequential model to functional model!
-        storm_outputs = add_inputs_outputs_to_model_body(best_model, inputs, meta_outputs)
+        storm_outputs = add_inputs_outputs_to_auto_model_body(best_model, inputs, meta_outputs, nlp_flag)
 
         #### This final outputs is the one that is taken into final dense layer and compiled
         #print('    Custom model loaded successfully. Now compiling model...')
@@ -682,8 +693,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         ###### This is where you compile the model after it is built ###############
         #### Add a final layer for outputs during compiled model phase #############
 
-        best_model = get_compiled_model(inputs, storm_outputs, output_activation, num_predicts, 
-                            num_labels, best_optimizer, val_loss, val_metrics, cols_len, targets)
+        best_model = get_compiled_model(inputs, storm_outputs, output_activation, num_predicts, modeltype,
+                            best_optimizer, val_loss, val_metrics, cols_len, targets)
         deep_model = best_model
         #######################################################################################
     elif tuner.lower() == "optuna":
@@ -694,9 +705,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         def objective(trial):
             optimizer_options = ""
             opt_model = build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predicts, 
-                        num_labels, optimizer_options, val_loss, val_metrics, cols_len, targets)
+                        modeltype, optimizer_options, val_loss, val_metrics, cols_len, targets, nlp_flag)
+            optuna_epochs = 5
             history = opt_model.fit(train_ds, validation_data=valid_ds, 
-                        epochs=NUMBER_OF_EPOCHS, shuffle=True,
+                        epochs=optuna_epochs, shuffle=True,
                         callbacks=callbacks_list_tuner,
                         verbose=0)
             if num_labels == 1:
@@ -726,10 +738,10 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         print('    Best params: %s' %study.best_params)
         optimizer_options = study.best_params['optimizer']
         best_model = build_model_optuna(study.best_trial, inputs, meta_outputs, output_activation, num_predicts, 
-                        num_labels, optimizer_options, val_loss, val_metrics, cols_len, targets)
+                        modeltype, optimizer_options, val_loss, val_metrics, cols_len, targets, nlp_flag)
         best_optimizer = best_model.optimizer
         deep_model = build_model_optuna(study.best_trial, inputs, meta_outputs, output_activation, num_predicts, 
-                        num_labels, optimizer_options, val_loss, val_metrics, cols_len, targets)
+                        modeltype, optimizer_options, val_loss, val_metrics, cols_len, targets, nlp_flag)
         best_batch = batch_size
         optimizer_lr = best_optimizer.learning_rate.numpy()
         print('\nBest optimizer = %s and best learning_rate = %s' %(best_optimizer, optimizer_lr))
@@ -738,8 +750,8 @@ def train_custom_model(inputs, meta_outputs, full_ds, target, keras_model_type,
         print('skipping tuner search since use_my_model flag set to True...')
         best_model = use_my_model
         deep_model = use_my_model
-        best_outputs = add_inputs_outputs_to_model_body(best_model, inputs, meta_outputs)
-        deep_outputs = add_inputs_outputs_to_model_body(deep_model, inputs, meta_outputs)
+        best_outputs = add_inputs_outputs_to_auto_model_body(best_model, inputs, meta_outputs, nlp_flag)
+        deep_outputs = add_inputs_outputs_to_auto_model_body(deep_model, inputs, meta_outputs, nlp_flag)
         best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
         best_batch = batch_size
         optimizer_lr = best_optimizer.learning_rate.numpy()

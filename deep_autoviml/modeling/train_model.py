@@ -186,9 +186,9 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     shuffle_size = int(data_size)
     #shuffle_size = 100000
     print('    shuffle size = %d' %shuffle_size)
-    train_ds = train_ds.prefetch(batch_size).shuffle(shuffle_size, 
-                            reshuffle_each_iteration=False, seed=42)#.repeat()
-    valid_ds = valid_ds.prefetch(batch_size)#.repeat()
+    #train_ds = train_ds.prefetch(batch_size).shuffle(shuffle_size, 
+    #                        reshuffle_each_iteration=False, seed=42)#.repeat()
+    #valid_ds = valid_ds.prefetch(batch_size)#.repeat()
 
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
     for each_callback in callbacks_list:

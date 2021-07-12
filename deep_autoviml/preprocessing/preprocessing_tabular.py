@@ -137,7 +137,7 @@ from itertools import combinations
 from collections import defaultdict
 import copy
 import time
-def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, cat_vocab_dict, 
+def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_options, cat_vocab_dict, 
                                 keras_model_type,verbose=0):
     """
     ############################################################################################
@@ -157,7 +157,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     high_string_vars = var_df['discrete_string_vars']  ## discrete_string_vars are high cardinality vars ## embed them!
     bools = var_df['bools']
     int_bools = var_df['int_bools']
-    int_cats = var_df['int_cats']
+    int_cats = var_df['int_cats'] + var_df['int_bools']
     ints = var_df['int_vars']
     floats = var_df['continuous_vars']
     nlps = var_df['nlp_vars']
@@ -325,7 +325,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     if len(int_bools_copy) > 0:
         for each_int in int_bools_copy:
             try:
-                int_input = keras.Input(shape=(1,), name=each_int, dtype="int64")
+                int_input = keras.Input(shape=(1,), name=each_int, dtype="int32")
                 cat_input_dict[each_int] = int_input
                 vocab = max_tokens_zip[each_int]
                 layer = tf.keras.layers.experimental.preprocessing.IntegerLookup(vocabulary=vocab, 
@@ -353,7 +353,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                     nums_bin = max(10, int(max_tokens_zip[each_int]/10))
                 else:
                     nums_bin = max(20, int(max_tokens_zip[each_int]/40))
-                int_input = keras.Input(shape=(1,), name=each_int, dtype="int64")
+                int_input = keras.Input(shape=(1,), name=each_int, dtype="int32")
                 encoded = encode_any_integer_to_hash_categorical(int_input, each_int,
                                                                         train_ds, nums_bin)
                 all_int_inputs.append(int_input)
@@ -374,7 +374,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
     if len(ints_cat_copy) > 0:
         for each_int in ints_cat_copy:
             try:
-                int_input = keras.Input(shape=(1,), name=each_int, dtype="int64")
+                int_input = keras.Input(shape=(1,), name=each_int, dtype="int32")
                 cat_input_dict[each_int] = int_input
                 vocab = max_tokens_zip[each_int]
                 encoded = encode_integer_to_categorical_feature(int_input, each_int,
@@ -439,13 +439,13 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
                 print('    Error: Skipping %s since Keras Discrete Strings (high cats) preprocessing erroring' %each_cat)
 
     ####  If the feature crosses for categorical variables are requested, then do this here ###
-    if cat_feat_cross_flag:
-        if isinstance(cat_feat_cross_flag, str):
-            if cat_feat_cross_flag in ['cat','categorical']:
+    if cat_feature_cross_flag:
+        if isinstance(cat_feature_cross_flag, str):
+            if cat_feature_cross_flag in ['cat','categorical']:
                 cross_cats =  copy.deepcopy(cats)
-            elif cat_feat_cross_flag in ['num', 'numeric']:
+            elif cat_feature_cross_flag in ['num', 'numeric']:
                 cross_cats = int_cats+int_bools
-            elif cat_feat_cross_flag in ['both', 'Both']:
+            elif cat_feature_cross_flag in ['both', 'Both']:
                 cross_cats = cats + int_cats + int_bools
         else:
             #### If it is true just perform string categorical crosses ###
@@ -453,9 +453,9 @@ def preprocessing_tabular(train_ds, var_df, cat_feat_cross_flag, model_options, 
         if len(cross_cats) < 2:
             print('Feature crossing requested but not many cat or int-cat or int-bool variables in data')
         else:
-            print('    Performing %s feature crossing using %d variables: \n    %s' %(cat_feat_cross_flag, len(cross_cats), cross_cats))
+            print('    Performing %s feature crossing using %d variables: \n    %s' %(cat_feature_cross_flag, len(cross_cats), cross_cats))
     ##### Now you perform crosses for each kind of crosses requested ####################
-    if cat_feat_cross_flag and len(cross_cats) > 1:
+    if cat_feature_cross_flag and len(cross_cats) > 1:
         feat_cross_encoded = perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_tokens_zip, verbose)
         all_feat_cross_encoded.append(feat_cross_encoded)
     else:
@@ -1216,6 +1216,54 @@ def preprocess(features, labels):
 ######  This code is a modified version of keras.io documentation code examples ##########
 ######   https://keras.io/examples/structured_data/wide_deep_cross_networks/    ##########
 ##########################################################################################
+def encode_auto_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEATURES_WITH_VOCABULARY,
+                         hidden_units, use_embedding=False):
+    ### These are for string cat variables with small number of categories #############
+    cat_encoded = []
+    numeric_encoded = []
+    text_encoded = []
+    encoded_features = [] 
+
+    for feature_name in inputs:
+        vocabulary = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name]
+        extra_oov = 3
+        if feature_name in CATEGORICAL_FEATURE_NAMES:
+            cat_encoded.append('')
+            cat_len = len(vocabulary)
+            encoded_feature = inputs[feature_name]
+            encoded_feature = tf.keras.layers.experimental.preprocessing.StringLookup(
+                            vocabulary=vocabulary, mask_token=None, oov_token = '~UNK~')(encoded_feature)
+            cat_encoded[-1] = tf.keras.layers.experimental.preprocessing.CategoryEncoding(
+                            num_tokens = cat_len + 1)(encoded_feature)
+        elif feature_name in FLOATS:
+            ### you just ignore the floats in cross models ####
+            numeric_encoded.append('')
+            feat_mean = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name][0]
+            feat_var = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name][1]
+            normalizer = Normalization(mean=feat_mean, variance=feat_var)
+            numeric_encoded[-1] = normalizer(inputs[feature_name])
+        else:
+            cat_encoded.append('')
+            if len(vocabulary) > 100:
+                print('    ALERT! Excessive feature dimension of %s. Should %s be a float variable?' %(
+                                    len(vocabulary), feature_name))
+                use_embedding = True
+            lookup = IntegerLookup(
+                vocabulary=vocabulary,
+                mask_token=None,
+                num_oov_indices=extra_oov,
+                max_tokens=None,
+                oov_token=-9999,
+                output_mode="count" if use_embedding else "binary",
+            )
+            # Use the numerical features as-is.
+            encoded_feature = inputs[feature_name]
+            cat_encoded[-1] = lookup(encoded_feature)
+    ##### This is where are float encoded features are combined ###
+    ####Concatenate all features( Numerical input )
+    encoded_features = layers.concatenate(cat_encoded+numeric_encoded)
+    return encoded_features
+##################################################################################################
 import math
 def encode_fast_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEATURES_WITH_VOCABULARY,
                          use_embedding=False):
@@ -1259,15 +1307,16 @@ def encode_fast_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FE
             encoded_feature = normalizer(inputs[feature_name])
         else:
             if len(vocabulary) > 100:
-                print('ALERT! Excessive feature dimension %s for %s. Should be a float variable?' %(
+                print('    ALERT! Excessive feature dimension of %s. Should %s be a float variable?' %(
                                     len(vocabulary), feature_name))
+                use_embedding = True
             lookup = IntegerLookup(
                 vocabulary=vocabulary,
                 mask_token=None,
                 num_oov_indices=extra_oov,
                 max_tokens=None,
                 oov_token=-9999,
-                output_mode="count" if use_embedding else "binary",
+                output_mode="count" if not use_embedding else "binary",
             )
             # Use the numerical features as-is.
             encoded_feature = inputs[feature_name]
@@ -1302,15 +1351,15 @@ def create_all_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS):
     for feature_name in FEATURE_NAMES:
         if feature_name in FLOATS:
             inputs[feature_name] = layers.Input(
-                name=feature_name, shape=(1,), dtype=tf.float32
+                name='all_'+feature_name, shape=(1,), dtype=tf.float32
             )
         elif feature_name in NUMERIC_FEATURE_NAMES:
             inputs[feature_name] = layers.Input(
-                name=feature_name, shape=(1,), dtype=tf.float32
+                name='all_'+feature_name, shape=(1,), dtype=tf.float32
             )
         else:
             inputs[feature_name] = layers.Input(
-                name=feature_name, shape=(1,), dtype=tf.string
+                name='all_'+feature_name, shape=(1,), dtype=tf.string
             )
     return inputs
 ########################################################################################
@@ -1328,6 +1377,7 @@ def encode_num_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEA
 ####################################################################################################
 def encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEATURES_WITH_VOCABULARY,
                          use_embedding=False):
+    
     encoded_features = []
     for feature_name in inputs:
         vocabulary = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name]
@@ -1374,6 +1424,7 @@ def encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEA
     return all_features
 ################################################################################
 def perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_tokens_zip, verbose=0):
+    
     high_cats_alert = 50 ### set this number to alery you when a variable has high dimensions. Should it?
     hidden_units = [32, 32]  ## this is the number needed for feature crossing
     dropout_rate = 0.1 ### this is set at a low rate ###
@@ -1393,7 +1444,7 @@ def perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_token
     ##################################################################################
     try:
         # This is a deep and cross network for cat and int-cat + int-bool feature crosses 
-        each_cat_coded = encode_inputs(cat_input_dict, cats, floats, max_tokens_zip, 
+        each_cat_coded = encode_all_inputs(cat_input_dict, cats, floats, max_tokens_zip, 
                                             use_embedding=True)
         cross = each_cat_coded
         for _ in hidden_units:
@@ -1405,7 +1456,7 @@ def perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_token
                 each_cat_coded = tf.cast(each_cat_coded, tf.float32) 
                 cross = tf.cast(cross, tf.float32) 
                 cross = each_cat_coded * x + cross
-
+        
         cross = layers.BatchNormalization()(cross)
 
         deep = each_cat_coded
@@ -1414,6 +1465,7 @@ def perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_token
             deep = layers.BatchNormalization()(deep)
             deep = layers.ReLU()(deep)
             deep = layers.Dropout(dropout_rate)(deep)
+        
         feat_cross_encoded = layers.concatenate([cross, deep])
         #feat_cross_encoded = cross
         if verbose:

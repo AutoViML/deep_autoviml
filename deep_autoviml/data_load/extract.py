@@ -29,7 +29,7 @@ from .classify_features import check_model_options
 # Utils
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
 from deep_autoviml.utilities.utilities import My_LabelEncoder, print_one_image_from_dataset
-
+from deep_autoviml.utilities.utilities import find_columns_with_infinity, drop_rows_with_infinity
 ############################################################################################
 import pandas as pd
 import numpy as np
@@ -266,8 +266,20 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     if compression_type:
         train_small, data_batches, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_frame(
                         train_small, target, keras_options, model_options, verbose)
-    
+        #####  This might be useful for users to know whether to use feature-crosses or not ###
+        stri, numi = fast_classify_features(train_small)
+        convert_cols = []
+        if len(numi['veryhighcats']) > 0:
+            convert_cols =  numi['veryhighcats']
+        if convert_cols:
+            var_df['int_vars'] = left_subtract(var_df['int_vars'], convert_cols)
+            var_df['continuous_vars'] = var_df['continuous_vars'] + convert_cols
         return train_small, data_batches, var_df, cat_vocab_dict, keras_options, model_options
+    else:
+        convert_cols = []
+        if len(numi['veryhighcats']) > 0:
+            print('    converting them from integer to float variables automatically')
+            convert_cols =  numi['veryhighcats']
     ##### Now detect modeltype if it is not given ###############
     try:
         modeltype = model_options["modeltype"]
@@ -377,7 +389,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     ### fill all missing values in categorical variables with "None"
     ### Similarly. fill all missing values in float variables with -99
     if train_small.isnull().sum().sum() > 0:
-        print('There are %d missing values in dataset: filling them with default values...' %(
+        print('    %d missing values in dataset: filling them with default values...' %(
                                 train_small.isnull().sum().sum()))
     string_cols = train_small.select_dtypes(include='object').columns.tolist() + train_small.select_dtypes(
                                         include='category').columns.tolist()
@@ -442,6 +454,11 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         print('Error: Target %s type not understood' %type(target))
         return
 
+    ############################################################################################
+    ###########  C H E C K   F O R   I N F I N I T E   V A L U E S  H E R E ####################
+    ############################################################################################
+    cols_with_infinity = find_columns_with_infinity(train_small)
+    
     ################    T F  D A T A   D A T A S E T   L O A D I N G     H E R E ################
     ############    Create a Tensorflow Dataset using the make_csv function #####################
     if http_url:
@@ -473,10 +490,14 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                                        compression_type=compression_type,
                                        shuffle=shuffle_flag,
                                        num_parallel_reads=tf.data.experimental.AUTOTUNE)
-        ############### Additional Checkes needed - do it here  #######
-        if num_labels > 1:
-            ############### Do this step only for Multi_Label problems ######        
-            data_batches = data_batches.map(lambda x: split_combined_ds_into_two(x, usecols, preds))
+        ############### Additional post-processing checkes needed - do it here  #######
+        
+        if cols_with_infinity:
+            data_batches = data_batches.map(drop_non_finite_rows)
+            print('    ALERT! Dropping non-finite values in %d columns: %s ' %(
+                                            len(cols_with_infinity), cols_with_infinity))
+        
+        ########   P E R F O R M   L A B E L   E N C O D I N G   H E R E ############
         if label_encode_flag:
             print('    target label encoding now...')
             data_batches = data_batches.map(lambda x, y: to_ids(x, y, table))
@@ -504,6 +525,21 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         train_small.drop(drop_cols,axis=1,inplace=True)
 
     return train_small, data_batches, var_df1, cat_vocab_dict, keras_options, model_options
+############################################################################################
+def drop_non_finite_rows(features, targets):
+  cols = []
+  for key, col in features.items():
+    cols.append(col)
+  # stack the columns to build a matrix 
+  cols = tf.stack(cols, axis=-1)
+  # The good rows are the ones where all the elements are finite
+  good = tf.reduce_all(tf.math.is_finite(cols), axis=-1)
+
+  # Apply the boolean mask to each column and return it as a dict. 
+  result = {}
+  for name, value in features.items():
+    result[name] = tf.boolean_mask(value,good)
+  return result, targets
 ############################################################################################
 def to_ids(features, labels, table):
     #labels = tf.cast(labels, tf.int64) ## this should not have been used ##
@@ -655,6 +691,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
 
     print('Alert! Modified column names to satisfy rules for column names in Tensorflow...')
 
+
     #### if target is changed you must send that modified target back to other processes ######
     ### usecols is basically target in a list format. Very handy to know when target is a list.
     
@@ -675,6 +712,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     ###   Cat_Vocab_Dict contains all info about vocabulary in each variable and their size
     print('    Classifying variables using data sample in pandas...')
     var_df, cat_vocab_dict = classify_features_using_pandas(train_small, target, model_options, verbose=verbose)
+
     ##########    Just transfer all the values from var_df to cat_vocab_dict  ##################################
     for each_key in var_df:
         cat_vocab_dict[each_key] = var_df[each_key]
@@ -787,6 +825,13 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
         keras_options["batchsize"] = batch_size
         cat_vocab_dict['batch_size'] = batch_size        
 
+    ##########################################################################
+    #### C H E C K  F O R  I N F I N I T E   V A L U E S   H E R E ##########
+    ##########################################################################
+    cols_with_infinity = find_columns_with_infinity(train_small)
+    if cols_with_infinity:
+        train_small = drop_rows_with_infinity(train_small, cols_with_infinity, fill_value=True)
+
     return train_small, ds, var_df, cat_vocab_dict, keras_options, model_options
 ###############################################################################################
 def load_image_data(train_data_or_file, target, project_name, keras_options, model_options,
@@ -898,11 +943,20 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     You can also load a pandas dataframe instead of a file if you wanted to. It accepts both!
     It will automatically figure out whether input is a file or file(s) or a pandas dataframe.
 
-    Inputs:
-    -----------
+    Inputs: train_data_or_file, target
+    -------------------------------------------------------------------------------   
     train_data_or_file: this can be a name of file to load or can be a pandas dataframe to load into tf.data
                   either option will work. This function will detect that automatically and load them.
-    target: target name as a string or a 
+    target: target name as a string or a list
+
+    Outputs: train_small, model_options, ds, var_df, cat_vocab_dict, keras_options
+    -------------------------------------------------------------------------------   
+    train_small: a sample of data into a pandas dataframe
+    model_options: a dictionary describing the data
+    ds: a tf.data.Dataset containing a symbolic link to the data at rest in your train_data_or_file 
+    var_df: a dictionary classifying features in data to multiple types such as numeric, category, etc.
+    cat_vocab_dict: a dictionary containing artifacts from the data that will be used during inference
+    keras_options: a dictionary containing keras defaults for the model that will be built using this data
     """
     shuffle_flag = False
     cat_vocab_dict = defaultdict(list)
@@ -928,8 +982,6 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
         train_small, ds, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_frame(train_data_or_file, target,
                                                                 keras_options, model_options, verbose)
     ##### Just do a simple classification of the train_small data here ####################
-    #####  This might be useful for users to know whether to use feature-crosses or not ###
-    stri, numi = fast_classify_features(train_small)
     #######################################################################################
     #### if Target is modified in the above processes such as removing spaces, etc. you must re-init here
     usecols = cat_vocab_dict['target_variables']
@@ -1018,59 +1070,6 @@ def is_test(x, y):
 def is_train(x, y):
     return not is_test(x, y)
 ##################################################################################
-from collections import defaultdict
-import copy
-def fast_classify_features(df):
-    """
-    This is a very fast way to get a handle on what a dataset looks like. Just send in df and get a print.
-    Nothing is returned. You just get a printed number of how many types of features you have in dataframe.
-    """
-    num_list = df.select_dtypes(include='integer').columns.tolist()
-    float_list = df.select_dtypes(include='float').columns.tolist()
-    str_list = left_subtract(df.columns.tolist(), num_list+float_list)
-    all_list = [str_list, num_list]
-    str_dict = defaultdict(dict)
-    int_dict = defaultdict(dict)
-    for inum, dicti in enumerate([str_dict, int_dict]):
-        bincols = []
-        catcols = []
-        highcols = []
-        numcols = []
-        for col in all_list[inum]:
-            leng = len(df[col].value_counts())
-            if leng <= 2:
-                bincols.append(col)
-            elif leng > 2 and leng <= 15:
-                catcols.append(col)
-            elif leng >15 and leng <100:
-                highcols.append(col)
-            else:
-                numcols.append(col)
-        dicti['bincols'] = bincols
-        dicti['catcols'] = catcols
-        dicti['highcats'] = highcols
-        dicti['veryhighcats'] = numcols
-        if inum == 0:
-            str_dict = copy.deepcopy(dicti)
-            print('Distribution of string columns in datatset:')
-            print('    number of binary = %d, cats = %d, high cats = %d, very high cats = %d' %(
-                len(bincols), len(catcols), len(highcols), len(numcols)))
-        else:
-            print('Distribution of integer columns in datatset:')
-            int_dict = copy.deepcopy(dicti)
-            print('    number of binary = %d, cats = %d, high cats = %d, very high cats = %d' %(
-                len(bincols), len(catcols), len(highcols), len(numcols)))
-    ###   Check if worth doing cat_feature_cross_flag on this dataset ###
-    int_dict['floats'] = float_list
-    print('Distribution of floats: floats = %d' %len(float_list))
-    print('Data Transformation Advisory:')
-    if len(str_dict['bincols']+str_dict['catcols']) <= 10:
-        print('    perform categorical feature crosses')
-    if len(int_dict['bincols']+int_dict['catcols']) < 10:
-        print('    perform integer feature crosses')
-    if len(int_dict['veryhighcats']) > 0:
-        print('    transform %s from integer to float' %int_dict['veryhighcats'])
-    return str_dict, int_dict
-###################################################################################################
+
 
 ###################################################################################################
