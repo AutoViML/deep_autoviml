@@ -1,14 +1,11 @@
 ipython
 jupyter
-tensorflow==2.5.0
+tensorflow>=2.4.1
 pandas
-numpy==1.19.2
 matplotlib
 scikit-learn>=0.23.1
 regex
-storm-tuner
+storm-tuner>=0.0.8
 emoji
 xlrd
-tensorflow_hub==0.12.0
-tensorflow-text==2.5.0
-optuna
+numpy

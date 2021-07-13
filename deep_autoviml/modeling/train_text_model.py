@@ -68,6 +68,7 @@ from deep_autoviml.modeling.one_cycle import OneCycleScheduler
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
 from IPython.core.display import Image, display
 import pickle
+#############################################################################################
 ##### Suppress all TF2 and TF1.x warnings ###################
 try:
     tf.logging.set_verbosity(tf.logging.ERROR)
@@ -94,28 +95,54 @@ from sklearn.metrics import confusion_matrix, roc_auc_score, accuracy_score
 from collections import defaultdict
 from tensorflow.keras import callbacks
 #############################################################################################
-def train_image_model(deep_model, train_ds, valid_ds, cat_vocab_dict, 
+def train_text_model(deep_model, train_ds, valid_ds, cat_vocab_dict,
                       keras_options, project_name, save_model_flag):
     epochs = check_keras_options(keras_options, "epochs", 20)
-    print('Training image model. This will take time...')
-    history = deep_model.fit(train_ds, epochs=epochs, validation_data=valid_ds)
+    logdir = project_name +'_'+ "text"
+    tensorboard_logpath = os.path.join(logdir,"mylogs")
+    print('Tensorboard log directory can be found at: %s' %tensorboard_logpath)
+    cp = keras.callbacks.ModelCheckpoint(project_name, save_best_only=True,
+                                         save_weights_only=True, save_format='tf')
+    ### sometimes a model falters and restore_best_weights gives len() not found error. So avoid True option!
+    val_mode = "max"
+    val_monitor = "val_accuracy"
+    patience = check_keras_options(keras_options, "patience", 10)
+
+    es = keras.callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
+                        verbose=1, mode=val_mode, baseline=None, restore_best_weights=True)
+
+    tb = keras.callbacks.TensorBoard(log_dir=tensorboard_logpath,
+                         histogram_freq=0,
+                         write_graph=True,
+                         write_images=True,
+                         update_freq='epoch',
+                         profile_batch=2,
+                         embeddings_freq=1
+                         )
+    callbacks_list = [cp, es, tb]
+    print('Training text model. This will take time...')
+    history = deep_model.fit(train_ds, epochs=epochs, validation_data=valid_ds,
+                callbacks=callbacks_list)
     result = deep_model.evaluate(valid_ds)
-    print('    Model accuracy in Image validation data: %s' %result[1])
+    print('    Model accuracy in text validation data: %s' %result[1])
     #plot_history(history, "accuracy", 1)
     fig = plt.figure(figsize=(8,6))
     ax1 = plt.subplot(1, 1, 1)
     ax1.set_title('Model Training vs Validation Loss')
     plot_one_history_metric(history, "accuracy", ax1)
-    classes = cat_vocab_dict["image_classes"]
-    predict_plot_images(deep_model, valid_ds, classes)
-    save_model_path = os.path.join(project_name, "image_model")
+    classes = cat_vocab_dict["text_classes"]
+    loss, accuracy = deep_model.evaluate(valid_ds)
+    print("Loss: ", loss)
+    print("Accuracy: ", accuracy)
+    save_model_path = os.path.join(project_name, "text_model")
     if save_model_flag:
         print('\nSaving model in %s now...this will take time...' %save_model_path)
         if not os.path.exists(save_model_path):
             os.makedirs(save_model_path)
         deep_model.save(save_model_path)
         cat_vocab_dict['saved_model_path'] = save_model_path
-        print('     deep_autoviml image_model saved in %s directory' %save_model_path)
+        print('     deep_autoviml text saved in %s directory' %save_model_path)
     else:
         print('\nModel not being saved since save_model_flag set to False...')
     return deep_model, cat_vocab_dict
+#################################################################################

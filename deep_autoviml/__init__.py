@@ -27,7 +27,7 @@ import pdb
 
 from .deep_autoviml import fit
 from .modeling.predict_model import load_test_data, predict
-from deep_autoviml.modeling.predict_model import predict_images
+from deep_autoviml.modeling.predict_model import predict_images, predict_text
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
@@ -42,12 +42,12 @@ print("""
 from deep_autoviml import deep_autoviml as deepauto
 -------------------
 model, cat_vocab_dict = deepauto.fit(train, target, keras_model_type="fast",
-		project_name="deep_autoviml", keras_options=keras_options,  
+		project_name="deep_autoviml", keras_options=keras_options,
 		model_options=model_options, save_model_flag=True, use_my_model='',
 		model_use_case='', verbose=0)
 
 predictions = deepauto.predict(model, project_name, test_dataset=test,
-                                 keras_model_type=keras_model_type, 
+                                 keras_model_type=keras_model_type,
                                  cat_vocab_dict=cat_vocab_dict)
                                 """ %(module_type, version_number))
 ################################################################################

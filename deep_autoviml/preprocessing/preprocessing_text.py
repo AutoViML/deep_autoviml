@@ -74,43 +74,40 @@ from tensorflow.keras import Model, Sequential
 from tensorflow.keras.layers import Activation, Dense, Embedding, GlobalAveragePooling1D, GlobalMaxPooling1D, Dropout, Conv1D
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 ############################################################################################
-def preprocessing_images(train_ds, model_options):
+def preprocessing_text(train_ds, model_options):
     """
-    This produces a preprocessing layer for an incoming tf.data.Dataset. It can be images only.
-    You need to just send in a tf.data.DataSet from the training folder and a model_options dictionary.
-    It will return a full-model-ready layer that you can add to your Keras Functional model as image layer!
+    ####################################################################################################
+    This produces a preprocessing layer for an incoming NLP column using TextVectorization from keras.
+    You need to just send in a tf.data.DataSet from training folder and it will automatically apply NLP.
+    It will return a full-model-ready layer that you can add to your Keras Functional model as an NLP_layer!
+    max_tokens_zip is a dictionary of each NLP column name and its max_tokens as defined by train data.
     ###########   Motivation and suggestions for coding for Image processing came from this blog #########
     Greatly indebted to Srivatsan for his Github and notebooks: https://github.com/srivatsan88/YouTubeLI
     ####################################################################################################
     """
+    num_predicts = model_options["num_classes"]
     try:
       #######    L O A D     F E A T U R E    E X T R A C T O R   ################
-      url = "https://tfhub.dev/google/tf2-preview/mobilenet_v2/feature_vector/4"
+      url = "https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1"
       feature_extractor = check_model_options(model_options, "tf_hub_model", url)
-      img_height = model_options["image_height"]
-      img_width = model_options["image_width"]
-      image_channels = model_options["image_channels"]
-      num_predicts = model_options["num_predicts"]
       try:
-          feature_extractor_layer = hub.KerasLayer(feature_extractor, input_shape=(
-                                  img_height,img_width,image_channels))
+          feature_extractor_layer = hub.KerasLayer("https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1", output_shape=[20],
+                           input_shape=[], dtype=tf.string)
       except:
         print('Loading model from Tensorflow Hub failed. Check the URL and try again...')
         return
       feature_extractor_layer.trainable = False
-      normalization_layer = tf.keras.layers.experimental.preprocessing.Rescaling(1./255)
       tf.random.set_seed(111)
       model = tf.keras.Sequential([
-                normalization_layer,
                 feature_extractor_layer,
-                tf.keras.layers.Dropout(0.3),
-                tf.keras.layers.Dense(num_predicts,activation='softmax')
+                tf.keras.layers.Dense(16, activation='relu'),
+                tf.keras.layers.Dense(num_predicts,activation='sigmoid')
               ])
       model.compile(
                 optimizer='adam',
                 loss=tf.losses.SparseCategoricalCrossentropy(from_logits=True),
                 metrics=['accuracy'])
     except:
-        print('    Error: Failed image preprocessing layer. Returning...')
+        print('    Error: Failed NLP preprocessing layer. Returning...')
         return
     return model

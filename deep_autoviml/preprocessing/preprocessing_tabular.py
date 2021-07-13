@@ -32,7 +32,7 @@ np.set_printoptions(precision=3, suppress=True)
 ############################################################################################
 # data pipelines and feature engg here
 
-# pre-defined TF2 Keras models and your own models here 
+# pre-defined TF2 Keras models and your own models here
 
 # Utils
 
@@ -137,7 +137,7 @@ from itertools import combinations
 from collections import defaultdict
 import copy
 import time
-def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_options, cat_vocab_dict, 
+def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_options, cat_vocab_dict,
                                 keras_model_type,verbose=0):
     """
     ############################################################################################
@@ -173,7 +173,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
     all_encoded = []
     all_features = []
     all_input_names = []
-    dropout_rate = 0.1 ### this is needed for feature crossing 
+    dropout_rate = 0.1 ### this is needed for feature crossing
 
     ### just use this to set the limit for max tokens for different variables ###
     ### we are setting the number of max_tokens to be 2X the number of tokens found in train
@@ -280,7 +280,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
             #### This is where you do the category crossing of hourofday and dayofweek first 24*7 bins
 
             try:
-                encoded_hour_day = encode_cat_feature_crosses_numeric(encoded_day, encoded_hour, train_ds, 
+                encoded_hour_day = encode_cat_feature_crosses_numeric(encoded_day, encoded_hour, train_ds,
                                             bins_num=24*7)
                 all_date_encoded.append(encoded_hour_day)
                 if verbose:
@@ -291,7 +291,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 print('    Error: Skipping %s since Keras Date day-hour cross preprocessing erroring' %each_date)
             #### This is where you do the category crossing of dayofweek and monthofyear first 12*7 bins
             try:
-                encoded_month_day = encode_cat_feature_crosses_numeric(encoded_month, encoded_day, train_ds, 
+                encoded_month_day = encode_cat_feature_crosses_numeric(encoded_month, encoded_day, train_ds,
                                             bins_num=12*7)
                 all_date_encoded.append(encoded_month_day)
                 if verbose:
@@ -301,7 +301,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
             except:
                 print('    Error: Skipping %s since Keras Date month-day cross preprocessing erroring' %each_date)
 
-    
+
     #####  If boolean variables exist, you must do this here ######
 
     if len(bools) > 0:
@@ -328,7 +328,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 int_input = keras.Input(shape=(1,), name=each_int, dtype="int32")
                 cat_input_dict[each_int] = int_input
                 vocab = max_tokens_zip[each_int]
-                layer = tf.keras.layers.experimental.preprocessing.IntegerLookup(vocabulary=vocab, 
+                layer = tf.keras.layers.experimental.preprocessing.IntegerLookup(vocabulary=vocab,
                             mask_token=None, num_oov_indices=1, output_mode="int")
                 # Convert the string input values into a one hot encoding.
                 encoded = layer(int_input)
@@ -336,11 +336,11 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 all_int_bool_encoded.append(encoded)
                 all_input_names.append(each_int)
                 if verbose:
-                    print('    %s number of categories = %d and after integer encoding shape: %s' %(each_int, 
+                    print('    %s number of categories = %d and after integer encoding shape: %s' %(each_int,
                                             len(max_tokens_zip[each_int]), encoded.shape[1]))
             except:
                 print('    Error: Skipping %s since Keras Boolean Integer preprocessing erroring' %each_int)
-    
+
     ######  This is where we handle high cardinality >50 categories integers ##################
     ints_copy = copy.deepcopy(ints)
     if len(ints_copy) > 0:
@@ -360,7 +360,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 all_int_encoded.append(encoded)
                 all_input_names.append(each_int)
                 if verbose:
-                    print('    %s number of categories = %d and bins = %d: after integer hash encoding shape: %s' %(each_int, 
+                    print('    %s number of categories = %d and bins = %d: after integer hash encoding shape: %s' %(each_int,
                                             max_tokens_zip[each_int], nums_bin, encoded.shape[1]))
                     if (encoded.shape[1] >= high_cats_alert) or (max_tokens_zip[each_int] >= high_cats_alert):
                         print('        Alert! excessive feature trap. Should this not be a float variable?? %s' %each_int)
@@ -369,7 +369,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
 
 
     ######  This is where we handle low cardinality <=50 categories integers ##################
-    
+
     ints_cat_copy = copy.deepcopy(int_cats)
     if len(ints_cat_copy) > 0:
         for each_int in ints_cat_copy:
@@ -459,7 +459,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         feat_cross_encoded = perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_tokens_zip, verbose)
         all_feat_cross_encoded.append(feat_cross_encoded)
     else:
-        print('    no feature crossing performed')    
+        print('    no feature crossing performed')
     ##################################################################################
     # Numerical features are treated as Numericals  ### this is a direct feed to the final layer ###
     nums_copy = left_subtract(floats,lats+lons)
@@ -482,7 +482,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 print('    %s numeric column left as is for feature preprocessing' %each_num)
             except:
                 print('    Error: Skipping %s since Keras Float preprocessing erroring' %each_num)
-    
+
 
     # Latitude and Longitude Numerical features are Binned first and then Category Encoded #######
     lat_lon_paired_dict = dict([])
@@ -496,12 +496,12 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         lats_copy = copy.deepcopy(lats)
         for each_lat in lats_copy:
             try:
-                bins_lat = pd.qcut(lat_lists, q=find_number_bins(cat_vocab_dict[each_lat]['vocab']), 
+                bins_lat = pd.qcut(lat_lists, q=find_number_bins(cat_vocab_dict[each_lat]['vocab']),
                                    duplicates='drop', retbins=True)[1]
                 ##### Now we create the inputs and the encoded outputs ######
                 lat_lon_input = keras.Input(shape=(1,), name=each_lat, dtype="float32")
                 all_latlon_inputs.append(lat_lon_input)
-                lat_lon_encoded = encode_binning_numeric_feature_categorical(lat_lon_input, each_lat, train_ds, 
+                lat_lon_encoded = encode_binning_numeric_feature_categorical(lat_lon_input, each_lat, train_ds,
                                                 bins_lat=bins_lat,
                                                 bins_num=len(bins_lat))
                 all_latlon_encoded.append(lat_lon_encoded)
@@ -522,12 +522,12 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         lons_copy = copy.deepcopy(lons)
         for each_lon in lons_copy:
             try:
-                bins_lon = pd.qcut(lon_lists, q=find_number_bins(cat_vocab_dict[each_lon]['vocab']), 
+                bins_lon = pd.qcut(lon_lists, q=find_number_bins(cat_vocab_dict[each_lon]['vocab']),
                                    duplicates='drop', retbins=True)[1]
                 ##### Now we create the inputs and the encoded outputs ######
                 lat_lon_input = keras.Input(shape=(1,), name=each_lon, dtype="float32")
                 all_latlon_inputs.append(lat_lon_input)
-                lat_lon_encoded = encode_binning_numeric_feature_categorical(lat_lon_input, each_lon, train_ds, 
+                lat_lon_encoded = encode_binning_numeric_feature_categorical(lat_lon_input, each_lon, train_ds,
                                                 bins_lat=bins_lon,
                                                 bins_num=len(bins_lon))
                 all_latlon_encoded.append(lat_lon_encoded)
@@ -545,8 +545,8 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         matched_lat_lons_copy = copy.deepcopy(matched_lat_lons)
         for (lat_in_pair, lon_in_pair) in matched_lat_lons_copy:
             try:
-                encoded_pair = encode_feature_crosses_lat_lon_numeric(lat_lon_paired_dict[lat_in_pair], 
-                                                              lat_lon_paired_dict[lon_in_pair],  
+                encoded_pair = encode_feature_crosses_lat_lon_numeric(lat_lon_paired_dict[lat_in_pair],
+                                                              lat_lon_paired_dict[lon_in_pair],
                                                        dataset=train_ds, bins_lat=bins_lat)
                 lat_lon_paired_encoded.append(encoded_pair)
                 if verbose:
@@ -555,9 +555,9 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                         print('        Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping (%s, %s) since Keras lat-lon paired preprocessing erroring' %(lat_in_pair, lon_in_pair))
-    
+
     #####  SEQUENCE OF THESE INPUTS AND OUTPUTS MUST MATCH ABOVE - we gather all outputs above into a single list
-    all_inputs = all_bool_inputs + all_date_inputs + all_int_inputs + all_int_cat_inputs + all_cat_inputs + all_num_inputs + all_latlon_inputs 
+    all_inputs = all_bool_inputs + all_date_inputs + all_int_inputs + all_int_cat_inputs + all_cat_inputs + all_num_inputs + all_latlon_inputs
     all_encoded = all_bool_encoded + all_date_encoded+all_int_bool_encoded+all_int_encoded+all_int_cat_encoded+all_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+lat_lon_paired_encoded
     all_low_cat_encoded = all_int_bool_encoded+all_int_encoded+all_int_cat_encoded  ## these are integer outputs ####
     all_numeric_encoded = all_bool_encoded + all_date_encoded+all_cat_encoded+all_high_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+all_latlon_encoded+lat_lon_paired_encoded## these are all float ##
@@ -593,7 +593,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
     concat_kernel_initializer = "he_normal"
     concat_activation = 'relu'
     concat_layer_neurons = dense_layer1
-    
+
     ####Concatenate all categorical features( Categorical input ) #########
     if len(all_low_cat_encoded) == 0:
         skip_meta_categ1 = True
@@ -669,7 +669,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         all_features = concat_layers[0]
     else:
         all_features = layers.concatenate(concat_layers)
-    
+
     print('Time taken for preprocessing (in seconds) = %d' %(time.time()-start_time))
     return all_features, all_inputs, all_input_names
 
@@ -694,20 +694,20 @@ def encode_numerical_feature_numeric(feature_input, name, dataset):
     """
     Inputs:
     ----------
-    feature_input: must be a keras.Input variable, so make sure you create a variable first for the 
+    feature_input: must be a keras.Input variable, so make sure you create a variable first for the
              column in your dataset that want to transform. Please make sure it has a
              shape of (None, 1).
     name: this is the name of the column in your dataset that you want to transform
     dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
-            for example: it can be a batched or a prefetched dataset. 
+            for example: it can be a batched or a prefetched dataset.
             Warning: You must be careful to set num_epochs when creating this dataset.
-                   If num_epochs=None, this function will loop forever. If you set it to a number, 
-                   it will stop after that many epochs. So be careful! 
-            
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
+
     Outputs:
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
-               The Tensor has a shape of (None, 1) - None indicates that it has not been 
+               The Tensor has a shape of (None, 1) - None indicates that it has not been
     """
     # Create a Normalization layer for our feature
     normalizer = Normalization()
@@ -728,20 +728,20 @@ def encode_binning_numeric_feature_categorical(feature, name, dataset, bins_lat,
     """
     Inputs:
     ----------
-    feature: must be a keras.Input variable, so make sure you create a variable first for the 
+    feature: must be a keras.Input variable, so make sure you create a variable first for the
              column in your dataset that want to transform. Please make sure it has a
              shape of (None, 1).
     name: this is the name of the column in your dataset that you want to transform
     dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
-            for example: it can be a batched or a prefetched dataset. 
+            for example: it can be a batched or a prefetched dataset.
             Warning: You must be careful to set num_epochs when creating this dataset.
-                   If num_epochs=None, this function will loop forever. If you set it to a number, 
-                   it will stop after that many epochs. So be careful! 
-            
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
+
     Outputs:
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
-               The Tensor has a shape of (None, 1) - None indicates that it has not been 
+               The Tensor has a shape of (None, 1) - None indicates that it has not been
     CategoryEncoding output dtype is float32 even if output is binary or count.
     """
     # Create a StringLookup layer which will turn strings into integer indices
@@ -775,25 +775,25 @@ def encode_string_categorical_feature_categorical(feature_input, name, dataset, 
     """
     Inputs:
     ----------
-    feature_input: must be a keras.Input variable, so make sure you create a variable first for the 
+    feature_input: must be a keras.Input variable, so make sure you create a variable first for the
              column in your dataset that want to transform. Please make sure it has a
              shape of (None, 1).
     name: this is the name of the column in your dataset that you want to transform
     dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
-            for example: it can be a batched or a prefetched dataset. 
+            for example: it can be a batched or a prefetched dataset.
             Warning: You must be careful to set num_epochs when creating this dataset.
-                   If num_epochs=None, this function will loop forever. If you set it to a number, 
-                   it will stop after that many epochs. So be careful! 
-            
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
+
     Outputs:
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
-               The Tensor has a shape of (None, 1) - None indicates that it has not been 
+               The Tensor has a shape of (None, 1) - None indicates that it has not been
     When the output_mode = "binary" or "count", the output is in float otherwise it is integer.
     """
     extra_oov = 3
     # Create a StringLookup layer which will turn strings into integer indices
-    index = StringLookup(max_tokens=None, num_oov_indices=extra_oov, 
+    index = StringLookup(max_tokens=None, num_oov_indices=extra_oov,
                         vocabulary=vocab, output_mode="count")
 
     # Prepare a Dataset that only yields our feature
@@ -813,26 +813,26 @@ def encode_integer_to_categorical_feature(feature_input, name, dataset, vocab):
     """
     Inputs:
     ----------
-    feature_input: must be a keras.Input variable, so make sure you create a variable first for the 
+    feature_input: must be a keras.Input variable, so make sure you create a variable first for the
              column in your dataset that want to transform. Please make sure it has a
              shape of (None, 1).
     name: this is the name of the column in your dataset that you want to transform
     dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
-            for example: it can be a batched or a prefetched dataset. 
+            for example: it can be a batched or a prefetched dataset.
             Warning: You must be careful to set num_epochs when creating this dataset.
-                   If num_epochs=None, this function will loop forever. If you set it to a number, 
-                   it will stop after that many epochs. So be careful! 
-            
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
+
     Outputs:
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
-               The Tensor has a shape of (None, 1) - None indicates that it has not been 
+               The Tensor has a shape of (None, 1) - None indicates that it has not been
     When the output_mode = "binary" or "count", the output is in float otherwise it is integer.
     """
     extra_oov = 3
     # Create a StringLookup layer which will turn strings into integer indices
     ### For now we will leave the max_values as None which means there is no limit.
-    index = IntegerLookup(vocabulary=vocab, mask_token=None, 
+    index = IntegerLookup(vocabulary=vocab, mask_token=None,
                         num_oov_indices=extra_oov, oov_token=-9999,
                         output_mode='int')
 
@@ -858,21 +858,21 @@ def encode_cat_feature_crosses_numeric(encoded_input1, encoded_input2, dataset, 
 
     Inputs:
     ----------
-    encoded_input1: This must be an encoded input - create a Keras.input variable first. 
+    encoded_input1: This must be an encoded input - create a Keras.input variable first.
              Then do a StringLookup column on it and then a CategoryEncoding of it. Now you
              can feed that encoded variable into this as the first input.
-    encoded_input1: This must be an encoded input - Similar to above: create a Keras.input variable first. 
+    encoded_input1: This must be an encoded input - Similar to above: create a Keras.input variable first.
              Then do a StringLookup column on it and then a CategoryEncoding of it. Now you
-             can feed that encoded variable into this as the second input.             
+             can feed that encoded variable into this as the second input.
     dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
-            for example: it can be a batched or a prefetched dataset. 
+            for example: it can be a batched or a prefetched dataset.
             Warning: You must be careful to set num_epochs when creating this dataset.
-                   If num_epochs=None, this function will loop forever. If you set it to a number, 
-                   it will stop after that many epochs. So be careful! 
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
     bins_num: this is the number of bins you want to use in the hashing of the column
             Typically this can be 64. But you can make it smaller or larger.
 
-            
+
     Outputs:
     -----------
     cat_cross_cat1_cat2: a keras.Tensor. You can use this tensor in keras models for training.
@@ -903,21 +903,21 @@ def encode_feature_crosses_lat_lon_numeric(cat_pickup_lat, cat_pickup_lon, datas
 
     Inputs:
     ----------
-    cat_pickup_lat: This must be an encoded input - create a Keras.input variable first. 
+    cat_pickup_lat: This must be an encoded input - create a Keras.input variable first.
              Then do a Discretization column on it and then a CategoryEncoding of it. Now you
              can feed that encoded variable into this as the first input.
-    cat_pickup_lon: This must be an encoded input - Similar to above: create a Keras.input variable first. 
+    cat_pickup_lon: This must be an encoded input - Similar to above: create a Keras.input variable first.
              Then do a Discretization column on it and then a CategoryEncoding of it. Now you
-             can feed that encoded variable into this as the second input.             
+             can feed that encoded variable into this as the second input.
     dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
-            for example: it can be a batched or a prefetched dataset. 
+            for example: it can be a batched or a prefetched dataset.
             Warning: You must be careful to set num_epochs when creating this dataset.
-                   If num_epochs=None, this function will loop forever. If you set it to a number, 
-                   it will stop after that many epochs. So be careful! 
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
     bins_lat: this is a pandas qcut bins - DO NOT SEND IN A NUMBER. It will fail!
             Typically you do this after binning the Latitude or Longitude after pd.qcut and set ret_bins=True.
 
-            
+
     Outputs:
     -----------
     embed_cross_pick_lon_lat: a keras.Tensor. You can use this tensor in keras models for training.
@@ -937,29 +937,29 @@ def encode_feature_crosses_lat_lon_numeric(cat_pickup_lat, cat_pickup_lon, datas
                             [cat_pickup_lat, cat_pickup_lon])
     hash_cross_pick_lon_lat = tf.keras.layers.experimental.preprocessing.Hashing(
                             num_bins=nums_bin)(cross_pick_lon_lat)
-    
+
     # Cross to embedding
     embed_cross_pick_lon_lat = tf.keras.layers.Embedding(
                         nums_bin, 10) (hash_cross_pick_lon_lat)
     embed_cross_pick_lon_lat = tf.reduce_sum(embed_cross_pick_lon_lat, axis=-2)
-    
+
     return embed_cross_pick_lon_lat
 ################################################################################
 def encode_any_integer_to_hash_categorical(feature_input, name, dataset, bins_num=30):
     """
     Inputs:
     ----------
-    feature_input: must be a keras.Input variable, so make sure you create a variable first for the 
+    feature_input: must be a keras.Input variable, so make sure you create a variable first for the
              column in your dataset that want to transform. Please make sure it has a
              shape of (None, 1).
     name: this is the name of the column in your dataset that you want to transform
     dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
-            for example: it can be a batched or a prefetched dataset. 
+            for example: it can be a batched or a prefetched dataset.
             Warning: You must be careful to set num_epochs when creating this dataset.
-                   If num_epochs=None, this function will loop forever. If you set it to a number, 
-                   it will stop after that many epochs. So be careful! 
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
     bins_num: this is the number of bins you want the hashing layer to split the data into
-            
+
     Outputs:
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
@@ -986,17 +986,17 @@ def encode_any_feature_to_embed_categorical(feature_input, name, dataset, vocabu
     """
     Inputs:
     ----------
-    feature_input: must be a keras.Input variable, so make sure you create a variable first for the 
+    feature_input: must be a keras.Input variable, so make sure you create a variable first for the
              column in your dataset that want to transform. Please make sure it has a
              shape of (None, 1).
     name: this is the name of the column in your dataset that you want to transform
     dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
-            for example: it can be a batched or a prefetched dataset. 
+            for example: it can be a batched or a prefetched dataset.
             Warning: You must be careful to set num_epochs when creating this dataset.
-                   If num_epochs=None, this function will loop forever. If you set it to a number, 
-                   it will stop after that many epochs. So be careful! 
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
     vocabulary: this is the number of bins you want the hashing layer to split the data into
-            
+
     Outputs:
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
@@ -1037,22 +1037,22 @@ def encode_date_time_var_dayofweek_categorical(feature_input, name, dataset):
 
     Inputs:
     ----------
-    feature_input: must be a keras.Input variable, so make sure you create a variable first for the 
+    feature_input: must be a keras.Input variable, so make sure you create a variable first for the
              date-time column in your dataset that you want to transform. Please make sure it has a
              shape of (None, 1). It will split the hour of day from that column and create a new column.
     name: this is the name of the column in your dataset that you want to transform
     dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
-            for example: it can be a batched or a prefetched dataset. 
+            for example: it can be a batched or a prefetched dataset.
             Warning: You must be careful to set num_epochs when creating this dataset.
-                   If num_epochs=None, this function will loop forever. If you set it to a number, 
-                   it will stop after that many epochs. So be careful! 
-            
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
+
     Outputs:
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
-               The Tensor has a shape of (None, 1) - None indicates that it has not been 
+               The Tensor has a shape of (None, 1) - None indicates that it has not been
     CategoryEncoding output dtype is float32 even if output is binary or count.
-    """    
+    """
     index = StringLookup()
 
     # Prepare a Dataset that only yields our feature
@@ -1085,22 +1085,22 @@ def encode_date_time_var_monthofyear_categorical(feature_input, name, dataset):
 
     Inputs:
     ----------
-    feature_input: must be a keras.Input variable, so make sure you create a variable first for the 
+    feature_input: must be a keras.Input variable, so make sure you create a variable first for the
              date-time column in your dataset that you want to transform. Please make sure it has a
              shape of (None, 1). It will split the hour of day from that column and create a new column.
     name: this is the name of the column in your dataset that you want to transform
     dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
-            for example: it can be a batched or a prefetched dataset. 
+            for example: it can be a batched or a prefetched dataset.
             Warning: You must be careful to set num_epochs when creating this dataset.
-                   If num_epochs=None, this function will loop forever. If you set it to a number, 
-                   it will stop after that many epochs. So be careful! 
-            
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
+
     Outputs:
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
-               The Tensor has a shape of (None, 1) - None indicates that it has not been 
+               The Tensor has a shape of (None, 1) - None indicates that it has not been
     CategoryEncoding output dtype is float32 even if output is binary or count.
-    """    
+    """
     index = StringLookup()
 
     # Prepare a Dataset that only yields our feature
@@ -1133,22 +1133,22 @@ def encode_date_time_var_hourofday_categorical(feature_input, name, dataset):
 
     Inputs:
     ----------
-    feature_input: must be a keras.Input variable, so make sure you create a variable first for the 
+    feature_input: must be a keras.Input variable, so make sure you create a variable first for the
              date-time column in your dataset that you want to transform. Please make sure it has a
              shape of (None, 1). It will split the hour of day from that column and create a new column.
     name: this is the name of the column in your dataset that you want to transform
     dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
-            for example: it can be a batched or a prefetched dataset. 
+            for example: it can be a batched or a prefetched dataset.
             Warning: You must be careful to set num_epochs when creating this dataset.
-                   If num_epochs=None, this function will loop forever. If you set it to a number, 
-                   it will stop after that many epochs. So be careful! 
-            
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
+
     Outputs:
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
-               The Tensor has a shape of (None, 1) - None indicates that it has not been 
+               The Tensor has a shape of (None, 1) - None indicates that it has not been
     CategoryEncoding output dtype is float32 even if output is binary or count.
-    """    
+    """
     index = StringLookup()
 
     # Prepare a Dataset that only yields our feature
@@ -1222,7 +1222,7 @@ def encode_auto_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FE
     cat_encoded = []
     numeric_encoded = []
     text_encoded = []
-    encoded_features = [] 
+    encoded_features = []
 
     for feature_name in inputs:
         vocabulary = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name]
@@ -1351,15 +1351,15 @@ def create_all_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS):
     for feature_name in FEATURE_NAMES:
         if feature_name in FLOATS:
             inputs[feature_name] = layers.Input(
-                name='all_'+feature_name, shape=(1,), dtype=tf.float32
+                name=feature_name, shape=(1,), dtype=tf.float32
             )
         elif feature_name in NUMERIC_FEATURE_NAMES:
             inputs[feature_name] = layers.Input(
-                name='all_'+feature_name, shape=(1,), dtype=tf.float32
+                name=feature_name, shape=(1,), dtype=tf.float32
             )
         else:
             inputs[feature_name] = layers.Input(
-                name='all_'+feature_name, shape=(1,), dtype=tf.string
+                name=feature_name, shape=(1,), dtype=tf.string
             )
     return inputs
 ########################################################################################
@@ -1377,7 +1377,7 @@ def encode_num_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEA
 ####################################################################################################
 def encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEATURES_WITH_VOCABULARY,
                          use_embedding=False):
-    
+
     encoded_features = []
     for feature_name in inputs:
         vocabulary = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name]
@@ -1424,7 +1424,7 @@ def encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEA
     return all_features
 ################################################################################
 def perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_tokens_zip, verbose=0):
-    
+
     high_cats_alert = 50 ### set this number to alery you when a variable has high dimensions. Should it?
     hidden_units = [32, 32]  ## this is the number needed for feature crossing
     dropout_rate = 0.1 ### this is set at a low rate ###
@@ -1443,8 +1443,8 @@ def perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_token
     cross_cats = copy.deepcopy(ls)
     ##################################################################################
     try:
-        # This is a deep and cross network for cat and int-cat + int-bool feature crosses 
-        each_cat_coded = encode_all_inputs(cat_input_dict, cats, floats, max_tokens_zip, 
+        # This is a deep and cross network for cat and int-cat + int-bool feature crosses
+        each_cat_coded = encode_all_inputs(cat_input_dict, cats, floats, max_tokens_zip,
                                             use_embedding=True)
         cross = each_cat_coded
         for _ in hidden_units:
@@ -1453,10 +1453,10 @@ def perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_token
             if cross.dtype == x.dtype:
                 cross = each_cat_coded * x + cross
             else:
-                each_cat_coded = tf.cast(each_cat_coded, tf.float32) 
-                cross = tf.cast(cross, tf.float32) 
+                each_cat_coded = tf.cast(each_cat_coded, tf.float32)
+                cross = tf.cast(cross, tf.float32)
                 cross = each_cat_coded * x + cross
-        
+
         cross = layers.BatchNormalization()(cross)
 
         deep = each_cat_coded
@@ -1465,7 +1465,7 @@ def perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_token
             deep = layers.BatchNormalization()(deep)
             deep = layers.ReLU()(deep)
             deep = layers.Dropout(dropout_rate)(deep)
-        
+
         feat_cross_encoded = layers.concatenate([cross, deep])
         #feat_cross_encoded = cross
         if verbose:
@@ -1493,7 +1493,7 @@ def encode_bool_inputs(inputs):
             mask_token=None,
             num_oov_indices=1,
             max_tokens=None,
-            output_mode="binary" 
+            output_mode="binary"
         )
         encoded_feature = inputs[feature_name]
         encoded_feature = lookup(encoded_feature)

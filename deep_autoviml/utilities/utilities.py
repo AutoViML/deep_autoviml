@@ -63,7 +63,7 @@ def check_if_GPU_exists(verbose=0):
     tpus = tf.config.list_logical_devices('TPU')
     #### In some cases like Kaggle kernels, the GPU is not enabled. Hence this check.
     if logical_gpus:
-        # Restrict TensorFlow to only use the first GPU        
+        # Restrict TensorFlow to only use the first GPU
         if verbose:
             print("Num GPUs Available: ", len(logical_gpus))
             print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU")
@@ -272,8 +272,8 @@ def plot_history(history, metric, targets):
             ax1.set_title('Model Training vs Validation Loss')
             plot_one_history_metric(history, each_target+"_loss", ax1)
             ax2 = plt.subplot(1, 2, 2)
-            ### Since we are using total loss, we must find another metric to show. 
-            ###  This is how we do it - by collecting all metrics with target name 
+            ### Since we are using total loss, we must find another metric to show.
+            ###  This is how we do it - by collecting all metrics with target name
             ###  and pick the first one. This may or may not always get the best answer, but we will see.
             metric1 = [x for x in hist.columns.tolist() if (each_target in x) & ("loss" not in x) ]
             metric2 = metric1[0]
@@ -301,7 +301,7 @@ from collections import OrderedDict
 from collections import Counter
 def print_classification_model_stats(y_test, y_preds):
     """
-    This will print both multi-label and multi-class metrics. 
+    This will print both multi-label and multi-class metrics.
     You must send in only actual and predicted labels. No probabilities!!
     """
     try:
@@ -374,7 +374,7 @@ def draw_confusion_matrix(y_test,y_pred, labels, target_names, model_name='Model
     #Get the confusion matrix and put it into a df
 
     cm = confusion_matrix(y_test, y_pred)
-    
+
     cm_df = pd.DataFrame(cm,
                          index = labels,
                          columns = target_names,
@@ -509,7 +509,7 @@ def print_classification_header(num_classes, num_labels, target_name):
         if np.max(num_classes) > 2:
             print('Multi Label (multi-output) Multi-Class Report: %s' %target_name)
             print('#################################################################')
-        else:            
+        else:
             print('Multi Label (multi-output) Binary Class Metrics Report: %s' %target_name)
             print('#################################################################')
     else:
@@ -734,7 +734,7 @@ def plot_regression_residuals(y_test, y_test_preds, target, project_name, num_la
                 residual.plot(ax=ax1, color=row_color)
                 ax1.set_title(f"Actuals_{i} (x-axis) vs. Residuals_{i} (y-axis)")
                 ax1.axhline(y=0.0, linewidth=2, color=next(colors))
-            plt.figure(figsize=(15, 6)) 
+            plt.figure(figsize=(15, 6))
             colors = cycle('byrcmgkbyrcmgkbyrcmgkbyrcmgk')
             for j in range(num_labels):
                 row_color = next(colors)
@@ -761,7 +761,7 @@ def save_valid_predictions(y_test, y_preds, project_name, num_labels):
     pdf.to_csv(preds_path,index=False)
     print('Saved predictions in %s file' %preds_path)
     return pdf
-#########################################################################################    
+#########################################################################################
 import matplotlib.pyplot as plt
 from IPython.display import Image, display
 def print_one_image_from_dataset(train_ds, classes):
@@ -780,9 +780,9 @@ def predict_plot_images(model, test_ds, classes):
         ax = plt.subplot(3, 3, i + 1)
 
         plt.tight_layout()
-        
-        img = tf.keras.preprocessing.image.img_to_array(images[i])                    
-        img = np.expand_dims(img, axis=0)  
+
+        img = tf.keras.preprocessing.image.img_to_array(images[i])
+        img = np.expand_dims(img, axis=0)
 
         pred=model.predict(img)
         plt.imshow(images[i].numpy().astype("uint8"))
@@ -890,9 +890,9 @@ def get_model_defaults(keras_options, model_options, targets):
     keras_options['optimizer'] = optimizer
     return keras_options, model_options, num_predicts, output_activation
 ###############################################################################
-def get_uncompiled_model(inputs, result, output_activation, 
+def get_uncompiled_model(inputs, result, output_activation,
                     num_predicts, modeltype, cols_len, targets):
-    ### The next 3 steps are most important! Don't mess with them! 
+    ### The next 3 steps are most important! Don't mess with them!
     #model_preprocessing = Model(inputs, meta_outputs)
     #preprocessed_inputs = model_preprocessing(inputs)
     #result = model_body(preprocessed_inputs)
@@ -931,14 +931,14 @@ def get_uncompiled_model(inputs, result, output_activation,
             multi_label_predictions[key].append(value)
     outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
     ##### Set the inputs and outputs of the model here
-    
+
     uncompiled_model = Model(inputs=inputs, outputs=outputs)
     return uncompiled_model
 
 #####################################################################################
-def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, modeltype, 
+def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, modeltype,
                        optimizer, val_loss, val_metrics, cols_len, targets):
-    model = get_uncompiled_model(inputs, meta_outputs, output_activation, 
+    model = get_uncompiled_model(inputs, meta_outputs, output_activation,
                         num_predicts, modeltype, cols_len, targets)
     model.compile(
         optimizer=optimizer,
@@ -991,7 +991,7 @@ class BalancedSparseCategoricalAccuracy(keras.metrics.SparseCategoricalAccuracy)
 def check_keras_options(keras_options, name, default):
     try:
         if keras_options[name]:
-            value = keras_options[name] 
+            value = keras_options[name]
         else:
             value = default
     except:
@@ -1046,7 +1046,7 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
 
     es = keras.callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
                         verbose=1, mode=val_mode, baseline=None, restore_best_weights=True)
-    
+
     tb = keras.callbacks.TensorBoard(log_dir=tensorboard_logpath,
                          histogram_freq=0,
                          write_graph=True,
@@ -1143,7 +1143,7 @@ def find_columns_with_infinity(df):
     add_cols = []
     sum_cols = 0
     for col in df.columns:
-        inf_sum1 = 0 
+        inf_sum1 = 0
         inf_sum2 = 0
         inf_sum1 = len(df[df[col]==np.inf])
         inf_sum2 = len(df[df[col]==-np.inf])
@@ -1216,3 +1216,14 @@ def get_hidden_layers(data_dim):
     dense_layer3 = min(100,dense_layer3)
     return dense_layer1, dense_layer2, dense_layer3
 ###################################################################################################
+def print_one_text_from_dataset(raw_train_ds, class_names):
+    """
+    print one row from the dataset - only works for text data
+    """
+    for text_batch, label_batch in raw_train_ds.take(1):
+      for i in range(1):
+        print("Text", text_batch.numpy()[i])
+        print("Label", label_batch.numpy()[i])
+    print("Label 0 corresponds to", class_names[0])
+    print("Label 1 corresponds to", class_names[1])
+#########################################################################################

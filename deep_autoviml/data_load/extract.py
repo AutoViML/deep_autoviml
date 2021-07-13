@@ -21,14 +21,15 @@
 ################################################################################
 # data pipelines and feature engg here
 
-# pre-defined TF2 Keras models and your own models here 
+# pre-defined TF2 Keras models and your own models here
 
 # Utils
 from .classify_features import classify_features_using_pandas
-from .classify_features import check_model_options
+from .classify_features import check_model_options, fast_classify_features
 # Utils
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
 from deep_autoviml.utilities.utilities import My_LabelEncoder, print_one_image_from_dataset
+from deep_autoviml.utilities.utilities import print_one_text_from_dataset
 from deep_autoviml.utilities.utilities import find_columns_with_infinity, drop_rows_with_infinity
 ############################################################################################
 import pandas as pd
@@ -125,7 +126,7 @@ def transform_train_target(train_target, target, modeltype, model_label, cat_voc
     train_target = copy.deepcopy(train_target)
     cat_vocab_dict = copy.deepcopy(cat_vocab_dict)
     ### Just have to change the target from string to Numeric in entire dataframe! ###
-    
+
     if modeltype != 'Regression':
         if model_label == 'Multi_Label':
             target_copy = copy.deepcopy(target)
@@ -261,25 +262,13 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         print('    Since number of rows in file <= %d maxrows, loading entire file into pandas for EDA' %maxrows)
         ### load a small sample of data into a pandas dataframe ##
         train_small = pd.read_csv(train_datafile, sep=sep, nrows=maxrows, compression=compression,
-                                header=header, encoding=csv_encoding) 
-    ### this reads the entire file and loads it into a dataset if it is a zip file  ###### 
+                                header=header, encoding=csv_encoding)
+    ### this reads the entire file and loads it into a dataset if it is a zip file  ######
     if compression_type:
         train_small, data_batches, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_frame(
                         train_small, target, keras_options, model_options, verbose)
         #####  This might be useful for users to know whether to use feature-crosses or not ###
-        stri, numi = fast_classify_features(train_small)
-        convert_cols = []
-        if len(numi['veryhighcats']) > 0:
-            convert_cols =  numi['veryhighcats']
-        if convert_cols:
-            var_df['int_vars'] = left_subtract(var_df['int_vars'], convert_cols)
-            var_df['continuous_vars'] = var_df['continuous_vars'] + convert_cols
         return train_small, data_batches, var_df, cat_vocab_dict, keras_options, model_options
-    else:
-        convert_cols = []
-        if len(numi['veryhighcats']) > 0:
-            print('    converting them from integer to float variables automatically')
-            convert_cols =  numi['veryhighcats']
     ##### Now detect modeltype if it is not given ###############
     try:
         modeltype = model_options["modeltype"]
@@ -318,7 +307,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
 
     print('Alert! Modified column names to satisfy rules for column names in Tensorflow...')
 
-    ### modeltype and usecols are very important to know before doing any processing #####    
+    ### modeltype and usecols are very important to know before doing any processing #####
     #### usecols is a very handy tool to handle a target which can be single label or multi-label!
     if modeltype == '':
         ### usecols is basically target in a list format. Very handy to know when target is a list.
@@ -326,7 +315,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     else:
         ### if modeltype is given, then do not find the model type using this function
         _,  _, usecols = find_problem_type(train_small, target, model_options, verbose)
-    
+
     label_encode_flag = False
     ##########  Find small details about the data to help create the right model ###
 
@@ -355,7 +344,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     #### This is where we set the model_options for num_classes and num_labels #########
     model_options['num_classes'] = num_classes
 
-    #############   Sample Data classifying features into variaous types ##################  
+    #############   Sample Data classifying features into variaous types ##################
     print('Loaded a small data sample of size = %s into pandas dataframe to analyze...' %(train_small.shape,))
     ### classify variables using the small dataframe ##
     print('    Classifying variables using data sample in pandas...')
@@ -374,7 +363,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     cat_vocab_dict["target_transformed"] = label_encode_flag
 
     # Construct a lookup table to map string chars to indexes,
-    
+
     # using the vocab loaded above:
     if label_encode_flag:
         #### Sometimes, using tf.int64 works. Hence this is needed.
@@ -383,7 +372,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                 keys=target_vocab, values=tf.constant(list(range(len(target_vocab))),
                                                dtype=tf.int64)),
             default_value=int(len(target_vocab)+1))
-    
+
     #### Set column defaults while reading dataset from CSV files - that way, missing values avoided!
     ### The following are valid CSV dtypes for missing values: float32, float64, int32, int64, or string
     ### fill all missing values in categorical variables with "None"
@@ -395,11 +384,11 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                                         include='category').columns.tolist()
     integer_cols =  train_small.select_dtypes(include='integer').columns.tolist()
     float_cols = train_small.select_dtypes(include='float').columns.tolist()
-    column_defaults = [-99.0 if x in float_cols else -99 if x in integer_cols else "missing" 
+    column_defaults = [-99.0 if x in float_cols else -99 if x in integer_cols else "missing"
                                 for x in list(train_small)]
     ####### Make sure you don't move this next stage. It should be after column defaults! ###
     if label_encode_flag:
-        trans_output, cat_vocab_dict = transform_train_target(train_small, target, modeltype, 
+        trans_output, cat_vocab_dict = transform_train_target(train_small, target, modeltype,
                                     model_label, cat_vocab_dict)
         train_small[target] = trans_output.values
 
@@ -437,7 +426,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     except:
         batch_size = find_batch_size(DS_LEN)
         keras_options["batchsize"] = batch_size
-        cat_vocab_dict['batch_size'] = batch_size        
+        cat_vocab_dict['batch_size'] = batch_size
     ######  Do this for selecting what columns to load into TF.Data  #######
     #### This means it is not a test dataset - hence it has target columns - load it too!
     if isinstance(target, str):
@@ -458,7 +447,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     ###########  C H E C K   F O R   I N F I N I T E   V A L U E S  H E R E ####################
     ############################################################################################
     cols_with_infinity = find_columns_with_infinity(train_small)
-    
+
     ################    T F  D A T A   D A T A S E T   L O A D I N G     H E R E ################
     ############    Create a Tensorflow Dataset using the make_csv function #####################
     if http_url:
@@ -491,12 +480,12 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                                        shuffle=shuffle_flag,
                                        num_parallel_reads=tf.data.experimental.AUTOTUNE)
         ############### Additional post-processing checkes needed - do it here  #######
-        
+
         if cols_with_infinity:
             data_batches = data_batches.map(drop_non_finite_rows)
             print('    ALERT! Dropping non-finite values in %d columns: %s ' %(
                                             len(cols_with_infinity), cols_with_infinity))
-        
+
         ########   P E R F O R M   L A B E L   E N C O D I N G   H E R E ############
         if label_encode_flag:
             print('    target label encoding now...')
@@ -514,7 +503,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                 features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
         return features, target
     #################################################################################
-    data_batches = data_batches.map(process_boolean)    
+    data_batches = data_batches.map(process_boolean)
     print('Boolean column successfully processed')
     drop_cols = var_df1['cols_delete']
     preds = [x for x in list(train_small) if x not in usecols+drop_cols]
@@ -530,18 +519,19 @@ def drop_non_finite_rows(features, targets):
   cols = []
   for key, col in features.items():
     cols.append(col)
-  # stack the columns to build a matrix 
+  # stack the columns to build a matrix
   cols = tf.stack(cols, axis=-1)
   # The good rows are the ones where all the elements are finite
   good = tf.reduce_all(tf.math.is_finite(cols), axis=-1)
 
-  # Apply the boolean mask to each column and return it as a dict. 
+  # Apply the boolean mask to each column and return it as a dict.
   result = {}
   for name, value in features.items():
     result[name] = tf.boolean_mask(value,good)
   return result, targets
 ############################################################################################
 def to_ids(features, labels, table):
+    if labels.dtype==np.int32: labels = tf.cast(labels, tf.int64)
     #labels = tf.cast(labels, tf.int64) ## this should not have been used ##
     labels = table.lookup(labels)
     return (features, labels)
@@ -603,7 +593,7 @@ def fill_missing_values_for_TF2(train_small, var_df):
     lats = var_df['lat_vars']
     lons = var_df['lon_vars']
     ffill_cols = lats + lons + date_vars
-    
+
     if len(cat_cols) > 0:
         if train_small[cat_cols].isnull().sum().sum() > 0:
             for col in cat_cols:
@@ -663,13 +653,13 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
         batch_size = find_batch_size(DS_LEN)
     #########  Modify or Convert column names to fit tensorflow rules of no space in names!
     sel_preds = ["_".join(x.split(" ")) for x in list(train_small) ]
-    #### This can also be a problem with other special characters ###    
+    #### This can also be a problem with other special characters ###
     sel_preds = ["_".join(x.split("(")) for x in sel_preds ]
     sel_preds = ["_".join(x.split(")")) for x in sel_preds ]
     sel_preds = ["_".join(x.split("/")) for x in sel_preds ]
     sel_preds = ["_".join(x.split("\\")) for x in sel_preds ]
     sel_preds = [x.lower() for x in sel_preds ]
-    
+
     if isinstance(target, str):
         target = "_".join(target.split(" "))
         target = "_".join(target.split("("))
@@ -694,7 +684,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
 
     #### if target is changed you must send that modified target back to other processes ######
     ### usecols is basically target in a list format. Very handy to know when target is a list.
-    
+
     try:
         modeltype = model_options["modeltype"]
         if model_options["modeltype"] == '':
@@ -708,7 +698,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     except:
         ### if modeltype is given, then do not find the model type using this function
         modeltype,  model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
-    
+
     ###   Cat_Vocab_Dict contains all info about vocabulary in each variable and their size
     print('    Classifying variables using data sample in pandas...')
     var_df, cat_vocab_dict = classify_features_using_pandas(train_small, target, model_options, verbose=verbose)
@@ -771,7 +761,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
 
     ####   fill missing values using this function ##############
     train_small = fill_missing_values_for_TF2(train_small, cat_vocab_dict)
-    
+
     ##### Do the deletion of cols after filling with missing values since otherwise fill errors!
     drop_cols = var_df['cols_delete']
     cat_vocab_dict['columns_deleted'] = drop_cols
@@ -782,7 +772,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     ######### Now load the train Dataframe into a tf.data.dataset  #############
     if target_transformed:
         ####################### T R A N S F O R M I N G   T A R G E T ########################
-        train_small[target], cat_vocab_dict = transform_train_target(train_small, target, modeltype, 
+        train_small[target], cat_vocab_dict = transform_train_target(train_small, target, modeltype,
                                                 model_label, cat_vocab_dict)
 
     if isinstance(target, str):
@@ -823,7 +813,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     except:
         batch_size = find_batch_size(DS_LEN)
         keras_options["batchsize"] = batch_size
-        cat_vocab_dict['batch_size'] = batch_size        
+        cat_vocab_dict['batch_size'] = batch_size
 
     ##########################################################################
     #### C H E C K  F O R  I N F I N I T E   V A L U E S   H E R E ##########
@@ -834,26 +824,37 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
 
     return train_small, ds, var_df, cat_vocab_dict, keras_options, model_options
 ###############################################################################################
-def load_image_data(train_data_or_file, target, project_name, keras_options, model_options,
+def load_image_data(image_directory, project_name, keras_options, model_options,
                         verbose=0):
     """
     Handy function that collects a sequence of image files  into a tf.data generator.
 
+    Your images input folder or directory must be like the following. If not, you will get error.
+        main_directory/
+        ...class_a/
+        ......image_1.png
+        ......image_2.png
+        ...class_b/
+        ......image_3.png
+        ......image_4.png
+
     Inputs:
     -----------
-    train_data_or_file: this can be a name of file to load or can be a pandas dataframe to load into tf.data
-                  either option will work. This function will detect that automatically and load them.
-    target: target name as a string or a 
+    image_directory: This is the folder that contains image files organized by class_label.
+    project_name: This is where the model will be stored once it is trained.
+    keras_options: a data dictionary that contains keras model options you can send.
+    model_options: a data dictionary that saves all the characteristics of your model
+
+    Outputs:
+    -----------
+    train_ds: a train dataset in tf.data.Dataset
+    valid_ds: a validation dataset in tf.data.Dataset format
+    cat_vocab_dict: a data dictionary that saves all the characteristics of your data
+    model_options: a data dictionary that saves all the characteristics of your model
     """
     cat_vocab_dict = dict()
-    cat_vocab_dict['target_variables'] =  target
+    cat_vocab_dict['target_variables'] =  "target"
     cat_vocab_dict['project_name'] = project_name
-    if 'image_directory' in model_options.keys():
-        print('    Image directory given as %s' %model_options['image_directory'])
-        image_directory = model_options["image_directory"]
-    else:
-        print("    No image directory given. Provide image directory in model_options...")
-        return
     if 'image_height' in model_options.keys():
         print('    Image height given as %d' %model_options['image_height'])
     else:
@@ -876,7 +877,7 @@ def load_image_data(train_data_or_file, target, project_name, keras_options, mod
             return
     except:
         print('Error: Not able to find any train or test image folder in the given folder %s' %image_train_folder)
-        print("""   You must put images under folders named train, 
+        print("""   You must put images under folders named train,
                     validation (optional) and test folders under given %s folder.
                     Otherwise deep_autoviml won't work. """ %image_directory)
     image_train_split = False
@@ -923,6 +924,10 @@ def load_image_data(train_data_or_file, target, project_name, keras_options, mod
     MLB.inverse_transformer = dict(zip(outs,ins))
     cat_vocab_dict['target_le'] = MLB
     print('Number of image classes = %d and they are: %s' %(len(classes), classes))
+    if len(classes) <= 2:
+        model_options["num_predicts"] = 1
+    else:
+        model_options["num_predicts"] = len(classes)
     print_one_image_from_dataset(train_ds, classes)
     AUTOTUNE = tf.data.AUTOTUNE
     train_ds = train_ds.cache().prefetch(buffer_size=AUTOTUNE)
@@ -939,21 +944,21 @@ from collections import Counter
 def load_train_data(train_data_or_file, target, project_name, keras_options, model_options,
                   verbose=0):
     """
-    Handy function that loads a file or a sequence of files (*.csv) into a tf.data.Dataset 
+    Handy function that loads a file or a sequence of files (*.csv) into a tf.data.Dataset
     You can also load a pandas dataframe instead of a file if you wanted to. It accepts both!
     It will automatically figure out whether input is a file or file(s) or a pandas dataframe.
 
     Inputs: train_data_or_file, target
-    -------------------------------------------------------------------------------   
+    -------------------------------------------------------------------------------
     train_data_or_file: this can be a name of file to load or can be a pandas dataframe to load into tf.data
                   either option will work. This function will detect that automatically and load them.
     target: target name as a string or a list
 
     Outputs: train_small, model_options, ds, var_df, cat_vocab_dict, keras_options
-    -------------------------------------------------------------------------------   
+    -------------------------------------------------------------------------------
     train_small: a sample of data into a pandas dataframe
     model_options: a dictionary describing the data
-    ds: a tf.data.Dataset containing a symbolic link to the data at rest in your train_data_or_file 
+    ds: a tf.data.Dataset containing a symbolic link to the data at rest in your train_data_or_file
     var_df: a dictionary classifying features in data to multiple types such as numeric, category, etc.
     cat_vocab_dict: a dictionary containing artifacts from the data that will be used during inference
     keras_options: a dictionary containing keras defaults for the model that will be built using this data
@@ -976,7 +981,7 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     ##########    LOADING EITHER FILE OR DATAFRAME INTO TF DATASET HERE  ##################
     if isinstance(train_data_or_file, str):
         #### do this for files only ##################
-        train_small, ds, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_file(train_data_or_file, target, 
+        train_small, ds, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_file(train_data_or_file, target,
                                                                 keras_options, model_options, verbose)
     else:
         train_small, ds, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_frame(train_data_or_file, target,
@@ -1008,7 +1013,7 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     ####  CREATE  CLASS_WEIGHTS HERE #################
     if modeltype != 'Regression':
         find_rare_class(y_train, verbose=1)
-        if keras_options['class_weight'] and not model_options['model_label']=='Multi_Label':
+        if 'class_weight' in keras_options.keys() and not model_options['model_label']=='Multi_Label':
             # Class weights are only applicable to single labels in Keras right now
             class_weights = get_class_distribution(y_train)
             keras_options['class_weight'] = class_weights
@@ -1070,6 +1075,90 @@ def is_test(x, y):
 def is_train(x, y):
     return not is_test(x, y)
 ##################################################################################
+def load_text_data(text_directory, project_name, keras_options, model_options,
+                        verbose=0):
+    """
+    Handy function that collects a sequence of text files  into a tf.data generator.
+    Your text input folder or directory must be like the following. If not, you will get error.
+        main_directory/
+        ...class_a/
+        ......a_text_1.txt
+        ......a_text_2.txt
+        ...class_b/
+        ......b_text_1.txt
+        ......b_text_2.txt
 
+    Inputs:
+    -----------
+    text_directory: This is the folder that contains .txt files organized by class_label.
+    project_name: This is where the model will be stored once it is trained.
+    keras_options: a data dictionary that contains keras model options you can send.
+    model_options: a data dictionary that saves all the characteristics of your model
 
-###################################################################################################
+    Outputs:
+    -----------
+    train_ds: a train dataset in tf.data.Dataset
+    valid_ds: a validation dataset in tf.data.Dataset format
+    cat_vocab_dict: a data dictionary that saves all the characteristics of your data
+    model_options: a data dictionary that saves all the characteristics of your model
+    """
+    cat_vocab_dict = dict()
+    cat_vocab_dict['target_variables'] =  "target"
+    cat_vocab_dict['project_name'] = project_name
+    try:
+        text_train_folder = os.path.join(text_directory,"train")
+        if not os.path.exists(text_train_folder):
+            print("text use case. No train folder exists under given directory. Returning...")
+            return
+    except:
+        print('Error: Not able to find any train or test folder in the given folder %s' %text_train_folder)
+        print("""   You must put texts under folders named train,
+                    validation (optional) and test folders under given %s folder.
+                    Otherwise deep_autoviml won't work. """ %text_directory)
+    text_train_split = False
+    text_train_folder = os.path.join(text_directory,"train")
+    if not os.path.exists(text_train_folder):
+        print("No train folder found under given text directory %s. Returning..." %text_directory)
+        text_train_folder = os.path.join(text_directory,"validation")
+    text_valid_folder = os.path.join(text_directory,"validation")
+    if not os.path.exists(text_valid_folder):
+        print("No validation folder found under given text directory %s. Returning..." %text_directory)
+        text_train_split = True
+    #### make this a small number - default batch_size ###
+    batch_size = check_model_options(model_options, "batch_size", 64)
+    model_options["batch_size"] = batch_size
+    full_ds = tf.keras.preprocessing.text_dataset_from_directory(text_train_folder,
+                                  seed=111,
+                                  batch_size=batch_size)
+    if text_train_split:
+        ############## Split train into train and validation datasets here ###############
+        classes = full_ds.class_names
+        recover = lambda x,y: y
+        print('\nSplitting train into two: train and validation data')
+        valid_ds = full_ds.enumerate().filter(is_valid).map(recover)
+        train_ds = full_ds.enumerate().filter(is_train).map(recover)
+    else:
+        train_ds = full_ds
+        valid_ds = tf.keras.preprocessing.text_dataset_from_directory(text_valid_folder,
+          seed=111,
+          batch_size=batch_size)
+        classes = train_ds.class_names
+    ####  Successfully loaded train and validation data sets ################
+    cat_vocab_dict["text_classes"] = classes
+    cat_vocab_dict["target_transformed"] = True
+    cat_vocab_dict['modeltype'] =  'Classification'
+    MLB = My_LabelEncoder()
+    ins = copy.deepcopy(classes)
+    outs = np.arange(len(classes))
+    MLB.transformer = dict(zip(ins,outs))
+    MLB.inverse_transformer = dict(zip(outs,ins))
+    cat_vocab_dict['target_le'] = MLB
+    print('Number of text classes = %d and they are: %s' %(len(classes), classes))
+    print_one_text_from_dataset(train_ds, classes)
+    AUTOTUNE = tf.data.AUTOTUNE
+    train_ds = train_ds.cache().prefetch(buffer_size=AUTOTUNE)
+    valid_ds = valid_ds.cache().prefetch(buffer_size=AUTOTUNE)
+    model_options["num_classes"] = len(classes)
+    cat_vocab_dict["batch_size"] = batch_size
+    return train_ds, valid_ds, cat_vocab_dict, model_options
+###################################################################################

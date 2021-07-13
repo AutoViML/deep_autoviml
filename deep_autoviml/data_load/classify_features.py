@@ -58,7 +58,7 @@ np.set_printoptions(precision=3, suppress=True)
 ############################################################################################
 # data pipelines and feature engg here
 
-# pre-defined TF2 Keras models and your own models here 
+# pre-defined TF2 Keras models and your own models here
 
 # Utils
 
@@ -212,14 +212,14 @@ def classify_columns(df_preds, model_options={}, verbose=0):
     train = copy.deepcopy(df_preds)
     #### If there are 30 chars are more in a discrete_string_var, it is then considered an NLP variable
     ### if a variable has more than this many chars, it will be treated like a NLP variable
-    
+
     max_nlp_char_size = check_model_options(model_options, "nlp_char_limit", 30)
     ### if a variable has more than this limit, it will not be treated like a cat variable #
     #### Cat_Limit defines the max number of categories a column can have to be called a categorical colum
     cat_limit = check_model_options(model_options, "variable_cat_limit", 30)
     max_cols_to_print = 30
-    #### Make this limit low so that float variables below this limit become cat vars ### 
-    float_limit = 15 
+    #### Make this limit low so that float variables below this limit become cat vars ###
+    float_limit = 15
     print('############## C L A S S I F Y I N G  V A R I A B L E S  ####################')
     print('Classifying variables in data set...')
     def add(a,b):
@@ -505,7 +505,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     if convert_cols:
         var_df1['int_vars'] = left_subtract(var_df1['int_vars'], convert_cols)
         var_df1['continuous_vars'] = var_df1['continuous_vars'] + convert_cols
-    
+
     dates = var_df1['date_vars']
     cats = var_df1['categorical_vars']
     discrete_strings = var_df1['discrete_string_vars']
@@ -591,7 +591,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     var_df1['categorical_vars'] = cats
                 elif key in discrete_strings:
                     discrete_strings.remove(key)
-                    var_df1['discrete_string_vars'] = discrete_strings                    
+                    var_df1['discrete_string_vars'] = discrete_strings
                 print('    %s is detected as an NLP variable' %key)
                 if key not in var_df1['nlp_vars']:
                     var_df1['nlp_vars'].append(key)
@@ -631,7 +631,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     int_bools = [ x for x in all_ints if feats_max_min[x]['size_of_vocab'] == 2 and x not in floats]
 
     int_cats = [ x for x in all_ints if feats_max_min[x]['size_of_vocab'] <= cat_limit and x not in floats+int_bools]
-    
+
     var_df1['int_vars'] = ints
     var_df1['int_cats'] = int_cats
     var_df1['int_bools'] = int_bools
@@ -640,7 +640,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     #### It is better to have a baseline number for the size of the dataset here ########
     feats_max_min['DS_LEN'] = len(data_sample)
     ### check if cat_vocab_dict has cat_feature_cross_flag in it ###
-    if model_options["cat_feature_cross_flag"]:
+    if "cat_feature_cross_flag" in model_options.keys():
         ### Since they have asked to do cat feature crossing, then do it ####
         model_options["cat_feature_cross_flag"] = cat_feature_cross_flag
         print('performing feature crossing for %s variables' %cat_feature_cross_flag)
@@ -756,7 +756,7 @@ def find_latitude_columns(df, verbose=0):
     ###### This is where we find whether they are truly latitudes ############
     print('    possible latitude columns in dataset: %s' %sel_columns)
     sel_columns_copy = copy.deepcopy(sel_columns)
-    for sel_col in sel_columns_copy: 
+    for sel_col in sel_columns_copy:
         if not lat_keywords[sel_col]:
             sel_columns.remove(sel_col)
     if len(sel_columns) == 0:
@@ -902,7 +902,7 @@ def find_longitude_columns(df, verbose=0):
     #####  This is where we test whether they are indeed longitude columns ####
     print('    possible longitude columns in dataset: %s' %sel_columns)
     sel_columns_copy = copy.deepcopy(sel_columns)
-    for sel_col in sel_columns_copy: 
+    for sel_col in sel_columns_copy:
         if not lon_keywords[sel_col]:
             sel_columns.remove(sel_col)
     if len(sel_columns) == 0:
@@ -960,7 +960,7 @@ def classify_dtypes_using_TF2(data_sample, idcols, verbose=0):
     cats = []
     int_vocab = 0
     feats_max_min = nested_dictionary()
-    
+
     #### Take(1) always displays only one batch only if num_epochs is set to 1 or a number. Otherwise No print! ########
     #### If you execute the below code without take, then it will go into an infinite loop if num_epochs was set to None.
     if data_sample.element_spec[0][preds[0]].shape[0] is None:

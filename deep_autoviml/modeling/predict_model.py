@@ -51,7 +51,7 @@ from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
 
 ############################################################################################
-# data pipelines 
+# data pipelines
 from deep_autoviml.data_load.classify_features import classify_features_using_pandas
 
 from deep_autoviml.data_load.extract import fill_missing_values_for_TF2
@@ -122,7 +122,7 @@ def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
     model_options = {}
     if no_cat_vocab_dict:
         model_options['DS_LEN'] = 10000  ### Just set some default #######
-        var_df, cat_vocab_dict = classify_features_using_pandas(test_small, target=target_name, 
+        var_df, cat_vocab_dict = classify_features_using_pandas(test_small, target=target_name,
                                     model_options=model_options, verbose=verbose)
         ##########    Just transfer all the values from var_df to cat_vocab_dict  ##########
         for each_key in var_df:
@@ -133,7 +133,7 @@ def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
     ############  Now load the file or dataframe into tf.data.DataSet here #################
     preds = list(test_small)
     #batch_size = 64   ## artificially set a size ###
-    batch_size = cat_vocab_dict["batch_size"] 
+    batch_size = cat_vocab_dict["batch_size"]
     cat_vocab_dict["DS_LEN"] = filesize
     num_epochs = None
     ###  Initially set this batch_size very high so that you can get the max(), min() and vocab to be realistic
@@ -160,15 +160,15 @@ def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
                                                shuffle=False,
                                                num_parallel_reads=tf.data.experimental.AUTOTUNE)
     else:
-        
+
         if test_small.isnull().sum().sum() > 0:
             test_small = fill_missing_values_for_TF2(test_small, cat_vocab_dict)
-             
+
         drop_cols = cat_vocab_dict['columns_deleted']
         if len(drop_cols) > 0:
             print('    Dropping %s columns from dataset...' %drop_cols)
-            test_small.drop(drop_cols, axis=1, inplace=True)            
-        
+            test_small.drop(drop_cols, axis=1, inplace=True)
+
         data_batches = tf.data.Dataset.from_tensor_slices(dict(test_small))
         ### batch it if you are creating it from a dataframe
         data_batches = data_batches.batch(batch_size, drop_remainder=False).repeat()
@@ -179,7 +179,7 @@ def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
         print_one_row_from_tf_dataset(data_batches)
     #### These are the input variables for which we are going to create keras.Inputs ###\
     return data_batches, cat_vocab_dict
-#################################################################################################    
+#################################################################################################
 def lenopenreadlines(filename):
     with open(filename) as f:
         return len(f.readlines())
@@ -234,13 +234,13 @@ def load_model_dict(model_or_model_path, cat_vocab_dict, project_name):
     print('Time taken to load saved model = %0.0f seconds' %((time.time()-start_time)))
     return model, cat_vocab_dict
 ###################################################################################################
-def predict(model_or_model_path, project_name, test_dataset, 
+def predict(model_or_model_path, project_name, test_dataset,
                     keras_model_type, cat_vocab_dict="", verbose=0):
     start_time2 = time.time()
     model, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name)
     ##### load the test data set here #######
     if isinstance(test_dataset, str):
-        test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name, 
+        test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name,
                                 cat_vocab_dict=cat_vocab_dict, verbose=verbose)
         batch_size = cat_vocab_dict2["batch_size"]
         DS_LEN = cat_vocab_dict2["DS_LEN"]
@@ -279,11 +279,11 @@ def predict(model_or_model_path, project_name, test_dataset,
     print('    number of steps needed to predict: %d' %num_steps)
     y_test_preds_list = []
     targets = cat_vocab_dict2['target_variables']
-    
+
     try:
         y_probas = model.predict(test_ds, steps=num_steps)
         if len(targets) == 1:
-            y_test_preds_list.append(y_probas)    
+            y_test_preds_list.append(y_probas)
         else:
             y_test_preds_list = copy.deepcopy(y_probas)
     except Exception as error:
@@ -315,7 +315,7 @@ def predict(model_or_model_path, project_name, test_dataset,
                     y_test_preds = np.c_[y_test_preds, y_probas[each_t].mean(axis=1)]
 
     ##### Now you have to convert the output to original classes and labels ####
-    
+
     num_labels = cat_vocab_dict['num_labels']
     num_classes = cat_vocab_dict['num_classes']
     if num_labels <= 1:
@@ -392,7 +392,7 @@ def convert_predictions_from_model(y_probas, cat_vocab_dict):
                 try:
                     y_test_preds_t = cat_vocab_dict['target_le'].inverse_transform(y_test_preds)
                     print('    Sample predictions after inverse_transform: %s' %y_test_preds_t[:5])
-                    y_test_preds_list.append(y_test_preds_t)                
+                    y_test_preds_list.append(y_test_preds_t)
                 except:
                     print('    Inverse transform erroring. Continuing...')
                     y_test_preds_list.append(y_test_preds)
@@ -425,7 +425,7 @@ def convert_predictions_from_model(y_probas, cat_vocab_dict):
                         y_test_preds_t = cat_vocab_dict[each_target]['target_le'].inverse_transform(
                                                 y_test_preds_t)
                         print('    Sample predictions after inverse_transform: %s' %y_test_preds_t[:5])
-                        y_test_preds_list.append(y_test_preds_t)                
+                        y_test_preds_list.append(y_test_preds_t)
                     except:
                         print('    Inverse transform erroring. Continuing...')
                         y_test_preds_list.append(y_test_preds_t)
@@ -456,7 +456,7 @@ def predict_images(test_image_dir, model_or_model_path, cat_vocab_dict):
     if isinstance(test_image_dir, str):
         if test_image_dir.split(".")[-1] in ["jpg","png"]:
             print("    loading and predicting on file : %s" %test_image_dir)
-            pred_label = model_loaded.predict(process_image_file(test_image_dir, 
+            pred_label = model_loaded.predict(process_image_file(test_image_dir,
                                 img_height, img_weight, img_channels))
             print('Predicted Label: %s' %(classes[np.argmax(pred_label)]))
             print('Predicted probabilities: %s' %pred_label)
@@ -473,3 +473,50 @@ def predict_images(test_image_dir, model_or_model_path, cat_vocab_dict):
         print('Error: test_image_dir should be either a directory containining test folder or a single JPG or PNG image file')
         return None
 ########################################################################################################
+def predict_text(test_text_dir, model_or_model_path, cat_vocab_dict):
+    project_name = cat_vocab_dict["project_name"]
+    model_loaded, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name)
+    ##### Now load the classes neede for predictions ###
+    y_test_preds_list = []
+    classes = cat_vocab_dict['text_classes']
+    if isinstance(test_text_dir, str):
+        if test_text_dir.split(".")[-1] in ["txt"]:
+            try:
+                batch_size = cat_vocab_dict["batch_size"]
+            except:
+                batch_size = 32
+            print("    loading and predicting on TXT file : %s" %test_text_dir)
+            pred_label = model_loaded.predict(test_text_dir)
+            print('Predicted Label: %s' %(classes[np.argmax(pred_label)]))
+            print('Predicted probabilities: %s' %pred_label)
+        elif test_text_dir.split(".")[-1] in ["csv"]:
+            print("    loading and predicting on CSV file : %s" %test_text_dir)
+            test_ds, cat_vocab_dict = load_test_data(test_text_dir, project_name, cat_vocab_dict=cat_vocab_dict,
+                                                             verbose=0)
+            DS_LEN = cat_vocab_dict['DS_LEN']
+            batch_size = cat_vocab_dict["batch_size"]
+            try:
+                num_steps = int(np.ceil(DS_LEN/batch_size))
+            except:
+                num_steps = 1
+            #########  See if you can predict here if not return the null result #####
+            print('    number of steps needed to predict: %d' %num_steps)
+            y_probas = model_loaded.predict(test_ds, steps=num_steps)
+            pred_label = convert_predictions_from_model(y_probas, cat_vocab_dict)
+            return pred_label
+        else:
+            try:
+                batch_size = cat_vocab_dict["batch_size"]
+            except:
+                batch_size = 32
+            print("    loading and predicting on folder: %s" %test_text_dir)
+            test_ds = tf.keras.preprocessing.text_dataset_from_directory(test_text_dir,
+                          seed=111,
+                          batch_size=batch_size)
+            y_probas = model_loaded.predict(test_ds)
+            pred_label = convert_predictions_from_model(y_probas, cat_vocab_dict)
+            return pred_label
+    else:
+        print('Error: test_text_dir should be either a directory containining test folder or a single .txt file')
+        return None
+##########################################################################################################

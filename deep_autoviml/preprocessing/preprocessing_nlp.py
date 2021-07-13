@@ -30,7 +30,7 @@ np.set_printoptions(precision=3, suppress=True)
 # data pipelines and feature engg here
 from deep_autoviml.data_load.classify_features import check_model_options
 
-# pre-defined TF2 Keras models and your own models here 
+# pre-defined TF2 Keras models and your own models here
 from deep_autoviml.models.tf_hub_lookup import map_hub_to_name, map_name_to_handle
 from deep_autoviml.models.tf_hub_lookup import map_name_to_preprocess
 
@@ -153,7 +153,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         print('Using Tensorflow Hub model: %s given as input' %tf_hub_model)
         tf_hub = True
     ##### This is where we use different pre-trained models to create word and sentence embeddings ##
-    if keras_model_type.lower() in ['bert','nlp','text']:
+    if keras_model_type.lower() in ['bert']:
         if tf_hub:
             tfhub_handle_encoder = model_options['tf_hub_model']
             try:
@@ -168,7 +168,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         preprocessor = hub.KerasLayer(tfhub_handle_preprocess, name='BERT_preprocessing')
         encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
         print(f'    BERT model auto-selected: {tfhub_handle_encoder}')
-        print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')        
+        print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')
     elif keras_model_type.lower() in ["use"]:
         if tf_hub:
             tfhub_handle_encoder = model_options['tf_hub_model']
@@ -184,12 +184,18 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         preprocessor = hub.KerasLayer(tfhub_handle_preprocess, name='USE_preprocessing')
         encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=False, name='USE_encoder')
         print(f'    Universal Sentence Encoder auto-selected: {tfhub_handle_encoder}')
-        print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')                    
+        print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')
     else:
+        #### If they give the default NLP or text as input, then we would use a default model.
         if tf_hub:
             #### If it is not BERT, then you don't have to do special preprocessing
             tfhub_handle_encoder = model_options['tf_hub_model']
-            encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='Non_BERT_encoder')
+            bert_model_name = 'Non_BERT_encoder'
+            encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=False, name='Non_BERT_encoder')
+        else:
+            bert_model_name = 'Swivel_20_model'
+            tfhub_handle_encoder = "https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1"
+            encoder = hub.KerasLayer(tfhub_handle_encoder, name='Swivel_encoder')
     ##### Now we do preprocessing one NLP input at a time using the above models #########
     for nlp_column in nlp_columns_copy:
         if verbose:
@@ -209,7 +215,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         # A string input for each string column ###############################
         ##### Now we handle multiple choices in embedding and model building ###
         try:
-            if keras_model_type.lower() in ['bert','nlp','text']:
+            if keras_model_type.lower() in ['bert']:
                 nlp_input = tf.keras.layers.Input(shape=(), dtype=tf.string, name=nlp_column)
                 ### You need to do some special pre-processing if it is a BERT model
                 x = encoder(preprocessor(nlp_input))['pooled_output']
@@ -217,14 +223,14 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
                 nlp_input = tf.keras.layers.Input(shape=(), dtype=tf.string, name=nlp_column)
                 ### You need to do some special pre-processing if it is a BERT model
                 x = encoder(preprocessor(nlp_input))["default"]
-            else:
+            elif keras_model_type.lower() in ['nlp', 'text']:
                 if tf_hub:
                     # Start by creating an explicit input layer. It needs to have a shape of
                     # (1,) (because we need to guarantee that there is exactly one string
                     # input per batch), and the dtype needs to be 'string'.
                     #nlp_input = tf.keras.layers.Input(shape=(1,), dtype=tf.string, name=nlp_column)
-                    print('If it is not BERT or USE, we cannot build correct preprocessing. Hence ignoring input...')
-                    #nlp_vectorized = encode_NLP_column(train_ds, nlp_column, nlp_input, 
+                    print('If non-BERT model, no preprocessing done. Hence you must preprocess text...')
+                    #nlp_vectorized = encode_NLP_column(train_ds, nlp_column, nlp_input,
                     #                    vocab_size, sequence_length)
                     #x = encoder(nlp_vectorized)
                     #net = outputs['pooled_output']
@@ -232,9 +238,13 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
                 # Start by creating an explicit input layer. It needs to have a shape of
                 # (1,) (because we need to guarantee that there is exactly one string
                 # input per batch), and the dtype needs to be 'string'.
+                nlp_input = tf.keras.layers.Input(shape=(), dtype=tf.string, name=nlp_column)
+                ### You need to do some special pre-processing if it is a BERT model
+                x = encoder(nlp_input)
+            else:
                 nlp_input = tf.keras.layers.Input(shape=(1,), dtype=tf.string, name=nlp_column)
                 #### If nothing is given, then just choose a basic embedding ######
-                nlp_vectorized = encode_NLP_column(train_ds, nlp_column, nlp_input, 
+                nlp_vectorized = encode_NLP_column(train_ds, nlp_column, nlp_input,
                                         vocab_size, sequence_length)
                 x = Embedding(max_features+1, embedding_dim, name=nlp_column+'_embedding')(nlp_vectorized)
                 #x = Flatten()(x)
