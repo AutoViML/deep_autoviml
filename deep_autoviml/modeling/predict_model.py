@@ -112,25 +112,42 @@ def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
             print('Unable to load pickle file. Continuing...')
             no_cat_vocab_dict = True
     ####################################################
-    target = cat_vocab_dict['target_variables']
-    usecols = cat_vocab_dict['target_variables']
-    if len(target) == 1:
-        target_name = target[0]
+    if not no_cat_vocab_dict:
+        target = cat_vocab_dict['target_variables']
+        usecols = cat_vocab_dict['target_variables']
+        if len(target) == 1:
+            target_name = target[0]
+        else:
+            target_name = target
     else:
-        target_name = target
+        target = []
+        target_name = ''
+        print('no target variable found since model artifacts dictionary could not be found')
     ### classify variables using the small dataframe ##
     model_options = {}
+
     if no_cat_vocab_dict:
         model_options['DS_LEN'] = 10000  ### Just set some default #######
-        var_df, cat_vocab_dict = classify_features_using_pandas(test_small, target=target_name,
+        ###### Just send in entire dataframe to convert and correct dtypes using this function ##
+        ######   If you don't do this, in some data sets due to mixed types it errors ###
+        ######  Just send in target_name as '' since we want even target to be corrected if it
+        #####    has the wrong data type since tensorflow automatically detects data types.
+        test_small, var_df, cat_vocab_dict = classify_features_using_pandas(test_small, target='',
                                     model_options=model_options, verbose=verbose)
         ##########    Just transfer all the values from var_df to cat_vocab_dict  ##########
         for each_key in var_df:
             cat_vocab_dict[each_key] = var_df[each_key]
         ####################################################################################
     else:
+        ###### Just send in entire dataframe to convert and correct dtypes using this function ##
+        ######   If you don't do this, in some data sets due to mixed types it errors ###
+        ######  Just send in target_name as '' since we want even target to be corrected if it
+        #####    has the wrong data type since tensorflow automatically detects data types.
         model_options['DS_LEN'] = cat_vocab_dict['DS_LEN'] ### you need this to classify features
+        test_small, _, _ = classify_features_using_pandas(test_small, target='',
+                                    model_options=model_options, verbose=verbose)
     ############  Now load the file or dataframe into tf.data.DataSet here #################
+
     preds = list(test_small)
     #batch_size = 64   ## artificially set a size ###
     batch_size = cat_vocab_dict["batch_size"]
@@ -160,7 +177,7 @@ def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
                                                shuffle=False,
                                                num_parallel_reads=tf.data.experimental.AUTOTUNE)
     else:
-
+        #### This is to load dataframes into datasets ########################
         if test_small.isnull().sum().sum() > 0:
             test_small = fill_missing_values_for_TF2(test_small, cat_vocab_dict)
 
@@ -168,6 +185,7 @@ def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
         if len(drop_cols) > 0:
             print('    Dropping %s columns from dataset...' %drop_cols)
             test_small.drop(drop_cols, axis=1, inplace=True)
+        #### In some datasets, due to mixed data types in test_small, this next line errors. Beware!!
 
         data_batches = tf.data.Dataset.from_tensor_slices(dict(test_small))
         ### batch it if you are creating it from a dataframe
@@ -176,7 +194,10 @@ def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
     print('    test data loaded successfully.')
 
     if verbose >= 1:
-        print_one_row_from_tf_dataset(data_batches)
+        try:
+            print_one_row_from_tf_dataset(data_batches)
+        except:
+            pass
     #### These are the input variables for which we are going to create keras.Inputs ###\
     return data_batches, cat_vocab_dict
 #################################################################################################

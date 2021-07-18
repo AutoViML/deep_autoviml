@@ -348,7 +348,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     print('Loaded a small data sample of size = %s into pandas dataframe to analyze...' %(train_small.shape,))
     ### classify variables using the small dataframe ##
     print('    Classifying variables using data sample in pandas...')
-    var_df1, cat_vocab_dict = classify_features_using_pandas(train_small, target, model_options, verbose=verbose)
+    train_small, var_df1, cat_vocab_dict = classify_features_using_pandas(train_small, target, model_options, verbose=verbose)
 
     ##########    Just transfer all the values from var_df to cat_vocab_dict  ##################################
     for each_key in var_df1:
@@ -644,6 +644,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     train_small = copy.deepcopy(train_small)
     DS_LEN = model_options['DS_LEN']
     #### do this for dataframes ##################
+
     try:
         batch_size = keras_options["batchsize"]
         if isinstance(keras_options["batchsize"], str):
@@ -701,7 +702,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
 
     ###   Cat_Vocab_Dict contains all info about vocabulary in each variable and their size
     print('    Classifying variables using data sample in pandas...')
-    var_df, cat_vocab_dict = classify_features_using_pandas(train_small, target, model_options, verbose=verbose)
+    train_small, var_df, cat_vocab_dict = classify_features_using_pandas(train_small, target, model_options, verbose=verbose)
 
     ##########    Just transfer all the values from var_df to cat_vocab_dict  ##################################
     for each_key in var_df:

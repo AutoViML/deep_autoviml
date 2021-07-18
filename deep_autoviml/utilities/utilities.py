@@ -149,7 +149,7 @@ def print_one_row_from_tf_dataset(test_ds):
                 for labels, value in batch.items():
                     print("{:40s}: {}".format(labels, value.numpy()[:4]))
     except:
-        print(list(test_ds.as_numpy_iterator())[0])
+        print('    Error printing. Continuing...')
 #########################################################################################
 def print_one_row_from_tf_label(test_label):
     """

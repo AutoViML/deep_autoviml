@@ -91,7 +91,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     Remember this is the most valuable part of this entire library!
     This is one humongous preprocessing step to build everything needed for preprocessing into a keras model!
     But it will break in some cases since we cannot handle every known dataset!
-    It will be good enough for most instances to create a fast keras pipeline + baseline model. 
+    It will be good enough for most instances to create a fast keras pipeline + baseline model.
     You can always fine tune it.
     You can always create your own model and feed it once you have successfully created preprocessing pipeline.
     """
@@ -148,8 +148,8 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
         if num_classes == 2:
             class_size = 1
         else:
-            class_size = num_classes    
-    ###### Now calculate some layer sizes #####    
+            class_size = num_classes
+    ###### Now calculate some layer sizes #####
     data_size = cat_vocab_dict["DS_LEN"]
     data_dim = data_size*len(FEATURE_NAMES)
     dense_layer1, dense_layer2, dense_layer3 = get_hidden_layers(data_dim)
@@ -157,7 +157,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     ###########     F E A T U R E    P R E P R O C E S S I N G   H E R E      #######
     #################################################################################
     nlps = var_df['nlp_vars']
-    keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, 
+    keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options,
                                     model_options, targets)
     ##################  NLP Text Features are Proprocessed Here  ################
     nlp_inputs = []
@@ -165,7 +165,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     if len(nlps) > 0:
         print('Starting NLP string column layer preprocessing...')
         nlp_inputs, embedding, nlp_names = preprocessing_nlp(train_ds, model_options,
-                                                var_df, cat_vocab_dict, 
+                                                var_df, cat_vocab_dict,
                                                 keras_model_type, verbose)
         ### we call nlp_outputs as embedding in this section of the program ####
         print('    NLP Preprocessing completed.')
@@ -182,7 +182,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
         ################################################################################
         ############ T H I S   I S   F O R  "A U T O"  M O D E L S    O N L Y  #########
         ################################################################################
-        
+
         if len(nlps) > 0:
             ###### This is to transform NLP embeddings into outputs #############
             x = layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True))(embedding)
@@ -192,7 +192,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             nlp_outputs = embedding
         if len(lats+lons) > 0:
             print('    starting categorical, float and integer layer preprocessing...')
-            meta_outputs, meta_inputs, meta_names = preprocessing_tabular(train_ds, var_df, 
+            meta_outputs, meta_inputs, meta_names = preprocessing_tabular(train_ds, var_df,
                                                         cat_feat_cross_flag, model_options,
                                                         cat_vocab_dict, keras_model_type, verbose)
             print('    All Non-NLP feature preprocessing for %s completed.' %keras_model_type)
@@ -230,7 +230,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             return nlp_inputs, meta_inputs, merged, nlp_outputs
     ##### You need to send in the ouput from embedding layer to this sequence of layers ####
     nlp_outputs = []
-    if len(nlps) > 0:
+    if not isinstance(embedding, list):
         if keras_model_type.lower() in ['bert','nlp','text', 'use']:
             ###### This is where you define the NLP Embedded Layers ########
             #x = layers.Dense(64, activation='relu')(embedding)
@@ -256,7 +256,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
 
         elif keras_model_type.lower() in ['cnn1']:
             # Conv1D + global max pooling
-            x = Conv1D(dense_layer1, 14, name='cnn_dense1', padding="same", 
+            x = Conv1D(dense_layer1, 14, name='cnn_dense1', padding="same",
                                     activation="relu", strides=3)(embedding)
             x = GlobalMaxPooling1D()(x)
             nlp_outputs = layers.Dense(num_predicts, activation=output_activation)(x)
@@ -269,7 +269,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
         elif keras_model_type.lower() in ['gru','cnn2']:
             #### Use this only for Binary-Class classification problems ########
             ####  LSTM with 1D convnet with maxpooling ########
-            x = Conv1D(filters, 
+            x = Conv1D(filters,
                              kernel_size,
                              padding='valid',
                              activation='relu',
@@ -302,7 +302,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
         meta_outputs = []
         return nlp_inputs, meta_inputs, meta_outputs, nlp_outputs
     else:
-        #### This is only for non-fast but "auto" with latitude and longitude columns ## 
+        #### This is only for non-fast but "auto" with latitude and longitude columns ##
         if isinstance(meta_outputs, list):
             ### if meta_outputs is a list, it means there is no int, float or cat variable in this data set
             print('There is no numeric or cat or int variables in this data set.')
