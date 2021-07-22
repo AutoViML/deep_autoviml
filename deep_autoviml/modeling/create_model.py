@@ -36,7 +36,7 @@ from deep_autoviml.modeling.train_custom_model import return_optimizer
 # Utils
 from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_uncompiled_model
 from deep_autoviml.utilities.utilities import get_model_defaults, check_keras_options
-from deep_autoviml.utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
+from deep_autoviml.utilities.utilities import get_compiled_model, add_outputs_to_model_body
 from deep_autoviml.utilities.utilities import get_hidden_layers
 ############################################################################################
 # TensorFlow ≥2.4 is required
@@ -185,6 +185,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
     val_metrics = keras_options["metrics"]
     learning_rate = 5e-2
     ############################################################################
+    print('Creating a keras Function model...')
     try:
         print('    number of outputs = %s, output_activation = %s' %(
                             num_labels, output_activation))
@@ -257,7 +258,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
             ###### You have to do this for all prebuilt models ####################
             if keras_model_type.lower() in prebuilt_models:
                 print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
-                model_body = add_inputs_outputs_to_model_body(model_body, all_inputs, meta_outputs)
+                model_body = add_outputs_to_model_body(model_body, meta_outputs)
                 #### This final outputs is the one that is taken into final dense layer and compiled
                 print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
             if keras_model_type.lower() in fast_models:
@@ -357,7 +358,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                     model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
                                               activity_regularizer=tf.keras.regularizers.l2(0.01)))
                 print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
-                model_body = add_inputs_outputs_to_model_body(model_body, all_inputs, meta_outputs)
+                model_body = add_outputs_to_model_body(model_body, meta_outputs)
                 #### This final outputs is the one that is taken into final dense layer and compiled
         else:
             try:
@@ -371,7 +372,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                 model_body = Sequential([layers.Dense(dense_layer1, activation='relu')])
             ############   This is what you need to add to pre-built model body shells ###
             print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
-            model_body = add_inputs_outputs_to_model_body(model_body, all_inputs, meta_outputs)
+            model_body = add_outputs_to_model_body(model_body, meta_outputs)
             #### This final outputs is the one that is taken into final dense layer and compiled
             print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
     else:
@@ -379,7 +380,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
         model_body = use_my_model
         ############   This is what you need to add to pre-built model body shells ###
         print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
-        model_body = add_inputs_outputs_to_model_body(model_body, all_inputs, meta_outputs)
+        model_body = add_outputs_to_model_body(model_body, meta_outputs)
         #### This final outputs is the one that is taken into final dense layer and compiled
         print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
     #############  You need to compile the non-auto models here ###############

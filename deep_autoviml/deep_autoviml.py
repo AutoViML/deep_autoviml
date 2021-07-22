@@ -97,14 +97,14 @@ from .modeling.create_model import create_model
 from .models import basic, deep, big_deep, giant_deep, cnn1, cnn2
 from .modeling.train_model import train_model
 from .modeling.train_custom_model import train_custom_model, return_optimizer
-from .modeling.predict_model import predict, predict_images
+from .modeling.predict_model import predict, predict_images, predict_text
 from .modeling.train_image_model import train_image_model
 from .modeling.train_text_model import train_text_model
 
 # Utils
 from .utilities.utilities import print_one_row_from_tf_dataset
 from .utilities.utilities import print_one_row_from_tf_label
-from .utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
+from .utilities.utilities import get_compiled_model
 from .utilities.utilities import check_if_GPU_exists, plot_history
 
 #############################################################################################
@@ -175,7 +175,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             'mode': default = it will choose automatically based on modeltype
             "lr_scheduler": default = "onecycle" but you can choose from any below:
                     ##  ["scheduler", 'onecycle', 'rlr' (reduce LR on plateau), 'decay']
-            "early_stopping": default = False. You can change it to True.
+            "early_stopping": default = True. You can change it to False.
             "class_weight": {}: you can send in class weights for imbalanced classes as a dictionary.
     model_options: dictionary:  you can send in any deep autoviml model option you
                     want to change using this dictionary.
@@ -246,7 +246,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                                             project_name, save_model_flag)
         print(deep_model.summary())
         return deep_model, cat_vocab_dict
-    elif keras_model_type.lower() in ['text', 'text classification', "text_classification"]:
+    elif keras_model_type.lower() in ['text', 'nlp', 'text classification', "text_classification"]:
         ###############   Now do special image processing here ###################################
         with my_strategy.scope():
             text_alt = True ### This means you use the text directory option
@@ -254,7 +254,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 print('    text directory given as %s' %model_options['text_directory'])
                 text_dir = model_options["text_directory"]
             else:
-                print("    No text directory given. Using train data given in %s..." %train_data_or_file)
+                print("    No text directory given. Using train data given as input..." )
                 text_alt = False ## this means you use the text file given
             ################   T E X T    C L A S S I F I C A T I O N   #########
             if text_alt:
@@ -271,6 +271,21 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                                     train_data_or_file, target, project_name, keras_options,
                                     model_options, verbose=verbose)
                 print('Loaded text classification file or dataframe using input given:')
+                if keras_model_type.lower() in ['nlp', 'text']:
+                    NLP_VARS = var_df['nlp_vars']
+                    ################################################################
+                    @tf.function
+                    def process_NLP_features(features):
+                        """
+                        This is how you combine all your string NLP features into a single new feature.
+                        Then you can perform embedding on this combined feature.
+                        It takes as input an ordered dict named features and returns the same features format.
+                        """
+                        return tf.strings.reduce_join([features[i] for i in NLP_VARS],axis=0,
+                                keepdims=False, separator=' ', name="combined")
+                    ################################################################
+                    full_ds = full_ds.map(lambda x, y: (process_NLP_features(x), y))
+                    print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
                 ############## Split train into train and validation datasets here ###############
                 recover = lambda x,y: y
                 print('\nSplitting train into 80+20 percent: train and validation data')
@@ -278,7 +293,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 train_ds = full_ds.enumerate().filter(is_train).map(recover)
             ###################  P R E P R O C E S S    T E X T   #########################
             try:
-                deep_model = preprocessing_text(train_ds, model_options)
+                deep_model = preprocessing_text(train_ds, keras_model_type, model_options)
             except:
                 print('    Error in text preprocessing: check your model_options and try again.')
                 return
@@ -310,7 +325,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     keras_options_defaults['monitor'] = ""
     keras_options_defaults['mode'] = ""
     keras_options_defaults["lr_scheduler"] = ""
-    keras_options_defaults["early_stopping"] = ""
+    keras_options_defaults["early_stopping"] = True
     keras_options_defaults["class_weight"] = {}
 
     list_of_keras_options = ["batchsize", "activation", "save_weights_only", "use_bias",

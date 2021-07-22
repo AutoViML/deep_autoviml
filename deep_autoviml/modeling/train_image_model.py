@@ -57,7 +57,7 @@ from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, pri
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
 from deep_autoviml.utilities.utilities import plot_one_history_metric
-from deep_autoviml.utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
+from deep_autoviml.utilities.utilities import get_compiled_model
 from deep_autoviml.utilities.utilities import check_if_GPU_exists
 from deep_autoviml.utilities.utilities import save_valid_predictions, predict_plot_images
 

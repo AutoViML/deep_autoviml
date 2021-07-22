@@ -470,6 +470,15 @@ def classify_columns(df_preds, model_options={}, verbose=0):
 from collections import defaultdict
 def nested_dictionary():
     return defaultdict(nested_dictionary)
+#########################################################################################
+import re
+WORD = re.compile(r'\w+')
+def tokenize_fast(text):
+    """
+    This is a fast function that tokenizes a string of text into its words
+    """
+    words = WORD.findall(text)
+    return words
 ############################################################################################
 def check_model_options(model_options, name, default):
     try:
@@ -636,19 +645,28 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     print('    %s is detected as an NLP variable' %key)
                     if key not in var_df1['nlp_vars']:
                         var_df1['nlp_vars'].append(key)
-                    feats_max_min[key]['seq_length'] = int(data_sample[key].fillna("missing").map(len).max())
-                    num_words_in_each_row = data_sample[key].fillna("missing").map(lambda x: len(x.split(" "))).mean()
+                    #### Now let's calculate some statistics on this NLP variable ###
                     num_rows_in_data = model_options['DS_LEN']
-                    feats_max_min[key]['size_of_vocab'] = int(num_rows_in_data*num_words_in_each_row)
+                    vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast))
+                    vocab = np.unique(vocab).tolist()
+                    feats_max_min[key]["vocab"] = vocab
+                    try:
+                        feats_max_min[key]['seq_length'] = int(data_sample[key].fillna("missing").map(len).max())
+                        num_words_in_each_row = data_sample[key].fillna("missing").map(lambda x: len(x.split(" "))).mean()
+                        feats_max_min[key]['size_of_vocab'] = int(num_rows_in_data*num_words_in_each_row)
+                    except:
+                        feats_max_min[key]['seq_length'] = len(vocab) // num_rows_in_data
+                        feats_max_min[key]['size_of_vocab'] = len(vocab)
                 else:
                     ### This is for string variables ########
                     ####  Now we select features if they are present in the data set ###
-                    #feats_max_min[key]["vocab"] = data_sample[key].unique()
-                    vocab = data_sample[key].unique()
-                    vocab = ['missing' if type(x) != str  else x for x in vocab]
+                    num_rows_in_data = model_options['DS_LEN']
+                    vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast))
+                    vocab = np.unique(vocab).tolist()
+                    #vocab = ['missing' if type(x) != str  else x for x in vocab]
                     feats_max_min[key]["vocab"] = vocab
                     feats_max_min[key]['size_of_vocab'] = len(vocab)
-                    #feats_max_min[key]['size_of_vocab'] = len(feats_max_min[key]["vocab"])
+                    feats_max_min[key]['seq_length'] = len(vocab) // num_rows_in_data
             else:
                 ####  Now we treat bool and other variable types ###
                 #feats_max_min[key]["vocab"] = data_sample[key].unique()
@@ -659,7 +677,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                 feats_max_min[key]['size_of_vocab'] = len(vocab)
                 #feats_max_min[key]['size_of_vocab'] = len(feats_max_min[key]["vocab"])
             if print_features and verbose > 1:
-                print("  {!r:20s}: {}".format(key, data_sample[key].values[:4]))
+                print("  {!r:20s}: {}".format('    sample words from vocab', key, data_sample[key].values[:4]))
                 print("  {!r:25s}: {}".format('    size of vocab', feats_max_min[key]["size_of_vocab"]))
                 print("  {!r:25s}: {}".format('    max', feats_max_min[key]["max"]))
                 print("  {!r:25s}: {}".format('    min', feats_max_min[key]["min"]))

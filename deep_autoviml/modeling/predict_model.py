@@ -79,7 +79,15 @@ import time
 ############################################################################################
 def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
                                                  verbose=0):
+    """
+    Load a CSV file and given a project name, it will load the artifacts in project_name folder.
+    Optionally you can provide the artifacts dictionary as "cat_vocab_dict" in this input.
 
+    Outputs:
+    --------
+    data_batches: a tf.data.Dataset which will be Repeat batched dataset
+    cat_vocab_dict: artifacts dictionary that you can feed to the predict function of model.
+    """
     ### load a small sample of data into a pandas dataframe ##
     if isinstance(test_data_or_file, str):
         test_small = pd.read_csv(test_data_or_file) ### this reads the entire file
@@ -222,30 +230,51 @@ def find_batch_size(DS_LEN):
     print('    Batch size selected as %d' %batch_len)
     return batch_len
 ###############################################################################################
+class BalancedSparseCategoricalAccuracy(keras.metrics.SparseCategoricalAccuracy):
+    def __init__(self, name='balanced_sparse_categorical_accuracy', dtype=None):
+        super().__init__(name, dtype=dtype)
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_flat = y_true
+        if y_true.shape.ndims == y_pred.shape.ndims:
+            y_flat = tf.squeeze(y_flat, axis=[-1])
+        y_true_int = tf.cast(y_flat, tf.int32)
+
+        cls_counts = tf.math.bincount(y_true_int)
+        cls_counts = tf.math.reciprocal_no_nan(tf.cast(cls_counts, self.dtype))
+        weight = tf.gather(cls_counts, y_true_int)
+        return super().update_state(y_true, y_pred, sample_weight=weight)
+#####################################################################################
 def load_model_dict(model_or_model_path, cat_vocab_dict, project_name):
     start_time = time.time()
     if not cat_vocab_dict:
         ### No cat_vocab_dict is given. Hence you must load it from disk ###
-        try:
-            pickle_path = os.path.join(project_name, "cat_vocab_dict.pickle")
-            print('\nLoading cat_vocab_dict file using pickle in %s...will take time...' %pickle_path)
-            cat_vocab_dict = pickle.load(open(pickle_path,"rb"))
-            print('    Loaded pickle file in %s' %pickle_path)
+        print('\nNo model artifacts file given. Loading cat_vocab_dict file using pickle. Will take time...')
+        if isinstance(model_or_model_path, str):
+            if model_or_model_path:
+                try:
+                    pickle_path = os.path.join(model_or_model_path,os.path.join("artifacts", "cat_vocab_dict.pickle"))
+                    cat_vocab_dict = pickle.load(open(pickle_path,"rb"))
+                    print('    Loaded pickle file in %s' %pickle_path)
+                except:
+                    print('Unable to load model and data artifacts cat_vocab_dictionary file. Returning...')
+                    return []
             modeltype = cat_vocab_dict['modeltype']
-        except:
-            print('Unable to load model and data artifacts cat_vocab_dictionary file. Returning...')
-            return []
     else:
         ### cat_vocab_dictionary is given #####
             modeltype = cat_vocab_dict['modeltype']
     ### Check if model is available to be loaded #######
+    print('\nLoading deep_autoviml model from %s folder. This will take time...' %model_or_model_path)
     if isinstance(model_or_model_path, str):
         try:
             if model_or_model_path == "":
                 model_or_model_path = os.path.join(project_name, keras_model_type)
-            print('\nLoading deep_autoviml model from %s folder...' %model_or_model_path)
-            model = tf.keras.models.load_model(os.path.join(model_or_model_path))
-            print('    time taken in mins for loading model = %0.0f' %((time.time()-start_time)/60))
+            else:
+                if modeltype == 'Regression':
+                    model = tf.keras.models.load_model(os.path.join(model_or_model_path))
+                else:
+                    model = tf.keras.models.load_model(os.path.join(model_or_model_path),
+                            custom_objects={'balanced_sparse_categorical_accuracy':BalancedSparseCategoricalAccuracy})
         except Exception as error:
             print('Could not load given model.\nError: %s\n Please check your model path and try again.' %error)
             return
@@ -260,49 +289,119 @@ def predict(model_or_model_path, project_name, test_dataset,
     start_time2 = time.time()
     model, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name)
     ##### load the test data set here #######
+    if keras_model_type.lower() in ['nlp', 'text']:
+        NLP_VARS = cat_vocab_dict['predictors_in_train']
+    else:
+        NLP_VARS = cat_vocab_dict['nlp_vars']
+    ################################################################
+    @tf.function
+    def process_NLP_features(features):
+        """
+        This is how you combine all your string NLP features into a single new feature.
+        Then you can perform embedding on this combined feature.
+        It takes as input an ordered dict named features and returns the same features format.
+        """
+        return tf.strings.reduce_join([features[i] for i in NLP_VARS],axis=0,
+                keepdims=False, separator=' ', name="combined")
+    ################################################################
+    NLP_COLUMN = "combined_nlp_text"
+    ################################################################
+    @tf.function
+    def combine_nlp_text(features):
+        ##use x to derive additional columns u want. Set the shape as well
+        y = {}
+        y.update(features)
+        y[NLP_COLUMN] = tf.strings.reduce_join([features[i] for i in NLP_VARS],axis=0,
+                keepdims=False, separator=' ')
+        return y    
+    ################################################################
     if isinstance(test_dataset, str):
         test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name,
                                 cat_vocab_dict=cat_vocab_dict, verbose=verbose)
+        ### You have to load only the NLP or text variables into dataset. otherwise, it will fail during predict
+        if keras_model_type.lower() in ['nlp', 'text']:
+            test_ds = test_ds.map(process_NLP_features)
+            test_ds = test_ds.unbatch().batch(batch_size)
+            print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
+        else:
+            if NLP_VARS:
+                test_ds = test_ds.map(process_NLP_features)
+                print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
+            else:
+                print('No NLP vars in data set. No preprocessing done.')
         batch_size = cat_vocab_dict2["batch_size"]
         DS_LEN = cat_vocab_dict2["DS_LEN"]
         print("test data size = ",DS_LEN, ', batch_size = ',batch_size)
     elif isinstance(test_dataset, pd.DataFrame) or isinstance(test_dataset, pd.Series):
+        if keras_model_type.lower() in ['nlp', 'text']:
+            #### You must only load the text or nlp columns into the dataset. Otherwise, it will fail during predict.
+            test_dataset = test_dataset[NLP_VARS]
         test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name,
                                 cat_vocab_dict=cat_vocab_dict, verbose=verbose)
-        test_small = test_dataset
         batch_size = cat_vocab_dict2["batch_size"]
         DS_LEN = cat_vocab_dict2["DS_LEN"]
         print("test data size = ",DS_LEN, ', batch_size = ',batch_size)
+        if not keras_model_type.lower() in ['nlp', 'text']:
+            if NLP_VARS:
+                test_ds = test_ds.map(process_NLP_features)
+                print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
+            else:
+                print('No NLP vars in data set. No preprocessing done.')
     else:
         ### It must be a tf.data.Dataset hence just load it as is ####
+        if cat_vocab_dict:
+            DS_LEN = cat_vocab_dict["DS_LEN"]
+            batch_size = cat_vocab_dict["batch_size"]
+        else:
+            print('Since artifacts dictionary (cat_vocab_dict) not provided, using 100,000 as default test data size and batch size as 64.')
+            print('    if you want to modify them, send in cat_vocab_dict["DS_LEN"] and cat_vocab_dict["batch_size"]')
+            DS_LEN = 100000
+            batch_size = 64
         test_ds = test_dataset
-        DS_LEN = 100000
-        batch_size = 64
+        if keras_model_type.lower() in ['nlp', 'text']:
+            test_ds = test_ds.map(process_NLP_features)
+            test_ds = test_ds.unbatch().batch(batch_size)
+            print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
+        else:
+            if NLP_VARS:
+                test_ds = test_ds.map(process_NLP_features)
+                print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
+            else:
+                print('No NLP vars in data set. No preprocessing done.')
         cat_vocab_dict2 = copy.deepcopy(cat_vocab_dict)
-    ##### Now you must convert the boolean to string on the data set here ###################
-    BOOLS = cat_vocab_dict['bools']
+    ##################################################################
+    BOOLS = cat_vocab_dict2['bools']
     #################################################################################
+    @tf.function
     def process_boolean_features(features):
+        """
+        This is how you convert all your boolean features into float variables.
+        The reason you have to do this is because tf.keras does not know how to handle boolean types.
+        It takes as input an ordered dict named features and returns the same in features format.
+        """
         for feature_name in features:
             if feature_name in BOOLS:
                 # Cast boolean feature values to string.
                 features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
         return features
     ##################################################################
-    test_ds = test_ds.map(process_boolean_features)
-    print('Boolean column successfully processed')
+    try:
+        test_ds = test_ds.map(process_boolean_features)
+        print('Boolean column successfully processed')
+    except:
+        print('Error in Boolean column processing. Continuing...')
     ## num_steps is needed to predict on whole dataset once ##
     try:
         num_steps = int(np.ceil(DS_LEN/batch_size))
+        print('Batch size = %s' %batch_size)
     except:
         num_steps = 1
     #########  See if you can predict here if not return the null result #####
     print('    number of steps needed to predict: %d' %num_steps)
     y_test_preds_list = []
     targets = cat_vocab_dict2['target_variables']
-
     try:
-        y_probas = model.predict(test_ds, steps=num_steps)
+        y_probas = model.predict(test_ds, steps=num_steps)[:DS_LEN,:]
         if len(targets) == 1:
             y_test_preds_list.append(y_probas)
         else:

@@ -57,8 +57,8 @@ from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, pri
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
 from deep_autoviml.utilities.utilities import plot_regression_residuals
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
-from deep_autoviml.utilities.utilities import get_compiled_model, add_inputs_outputs_to_auto_model_body
-from deep_autoviml.utilities.utilities import add_inputs_outputs_to_model_body
+from deep_autoviml.utilities.utilities import get_compiled_model, add_outputs_to_auto_model_body
+from deep_autoviml.utilities.utilities import add_outputs_to_model_body
 from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_chosen_callback
 from deep_autoviml.utilities.utilities import save_valid_predictions, get_callbacks
 from deep_autoviml.utilities.utilities import print_classification_header
@@ -149,7 +149,8 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     n_layers = trial.suggest_int("n_layers", 1, 4)
     #num_hidden = trial.suggest_categorical("n_units", [32, 48, 64, 96, 128])
     num_hidden = trial.suggest_categorical("n_units", [50, 100, 150, 200, 250, 300, 350, 400, 450, 500])
-    weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
+    #weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
+    weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-7,1e-6, 1e-5,1e-4, 1e-3,1e-2, 1e-1)
     use_bias = trial.suggest_categorical("use_bias", [True, False])
     batch_norm = trial.suggest_categorical("batch_norm", [True, False])
     add_noise = trial.suggest_categorical("add_noise", [True, False])
@@ -204,7 +205,7 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
 
     optimizer = getattr(tf.optimizers, optimizer_selected)(**kwargs)
     ##### This is the simplest way to convert a sequential model to functional!
-    opt_outputs = add_inputs_outputs_to_auto_model_body(model, inputs, meta_outputs, nlp_flag)
+    opt_outputs = add_outputs_to_auto_model_body(model, meta_outputs, nlp_flag)
 
     comp_model = get_compiled_model(inputs, opt_outputs, output_activation, num_predicts, 
                         modeltype, optimizer, loss_fn, val_metrics, cols_len, targets)
@@ -234,7 +235,9 @@ def build_model_storm(hp, *args):
     # example of model-wide unordered categorical parameter
     activation_fn = hp.Param('activation', ['tanh','relu', 'selu', 'elu'])
     use_bias = hp.Param('use_bias', [True, False])
-    weight_decay = hp.Param("weight_decay", np.logspace(-8, -3))
+    #weight_decay = hp.Param("weight_decay", np.logspace(-8, -3))
+    weight_decay = hp.Param("weight_decay", [1e-8, 1e-7,1e-6, 1e-5,1e-4, 1e-3,1e-2, 1e-1])
+
     batch_norm = hp.Param("batch_norm", [True, False])
     kernel_initializer = hp.Param("kernel_initializer",
                         ['glorot_uniform','he_normal','lecun_normal','he_uniform'], ordered=False)
@@ -328,7 +331,7 @@ class MyTuner(Tuner):
         model_body, optimizer = build_model_storm(hp, batch_limit, batch_nums)
 
         ##### This is the simplest way to convert a sequential model to functional model!
-        storm_outputs = add_inputs_outputs_to_auto_model_body(model_body, inputs, meta_outputs, nlp_flag)
+        storm_outputs = add_outputs_to_auto_model_body(model_body, meta_outputs, nlp_flag)
 
         #### This final outputs is the one that is taken into final dense layer and compiled
         #print('    Custom model loaded successfully. Now compiling model...')
@@ -685,7 +688,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
         K.set_value(best_optimizer.learning_rate, optimizer_lr)
 
         ##### This is the simplest way to convert a sequential model to functional model!
-        storm_outputs = add_inputs_outputs_to_auto_model_body(best_model, inputs, meta_outputs, nlp_flag)
+        storm_outputs = add_outputs_to_auto_model_body(best_model, meta_outputs, nlp_flag)
 
         #### This final outputs is the one that is taken into final dense layer and compiled
         #print('    Custom model loaded successfully. Now compiling model...')
@@ -750,8 +753,8 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
         print('skipping tuner search since use_my_model flag set to True...')
         best_model = use_my_model
         deep_model = use_my_model
-        best_outputs = add_inputs_outputs_to_auto_model_body(best_model, inputs, meta_outputs, nlp_flag)
-        deep_outputs = add_inputs_outputs_to_auto_model_body(deep_model, inputs, meta_outputs, nlp_flag)
+        best_outputs = add_outputs_to_auto_model_body(best_model, meta_outputs, nlp_flag)
+        deep_outputs = add_outputs_to_auto_model_body(deep_model, meta_outputs, nlp_flag)
         best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
         best_batch = batch_size
         optimizer_lr = best_optimizer.learning_rate.numpy()
@@ -1013,7 +1016,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
                 print('     deep model saved in %s directory in %s format' %(
                                 save_model_path, model_options["save_model_format"]))
             else:
-                deep_model.save(save_model_path)
+                deep_model.save(save_model_path, save_traces=True)
                 print('     deep model saved in %s directory in .pb format' %save_model_path)
             cat_vocab_dict['saved_model_path'] = save_model_path
             cat_vocab_dict['save_model_format'] = model_options["save_model_format"]
