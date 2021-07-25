@@ -661,7 +661,10 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     ### This is for string variables ########
                     ####  Now we select features if they are present in the data set ###
                     num_rows_in_data = model_options['DS_LEN']
-                    vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast))
+                    if data_sample[key].isnull().sum() > 0:
+                        vocab = data_sample[key].fillna("missing").unique().tolist()
+                    else:
+                        vocab = data_sample[key].unique().tolist()
                     vocab = np.unique(vocab).tolist()
                     #vocab = ['missing' if type(x) != str  else x for x in vocab]
                     feats_max_min[key]["vocab"] = vocab

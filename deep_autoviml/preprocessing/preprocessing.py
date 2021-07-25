@@ -173,7 +173,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
         embedding = []
         print('There are no NLP variables in this dataset for preprocessing...')
     ##################  All other Features are Proprocessed Here  ################
-    fast_models = ['fast','deep_and_wide','deep_wide','wide_deep', 
+    fast_models = ['fast','deep_and_wide','deep_wide','wide_deep',
                     'wide_and_deep','deep wide', 'wide deep', 'fast1',
                     'deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
     ##############################################################################
@@ -222,6 +222,8 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             #                                    kernel_regularizer=regularizers.l2(0.01)))(x)
             print('    %s model loaded and compiled successfully...' %keras_model_type)
             return nlp_inputs, meta_inputs, merged, embedding
+    else:
+        meta_inputs = []
     ##### You need to send in the ouput from embedding layer to this sequence of layers ####
     nlp_outputs = []
     if not isinstance(embedding, list):
@@ -295,6 +297,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
         if isinstance(nlp_outputs, list):
             ### if NLP_outputs is a list, it means there is no NLP variable in the data set
             print('    There is no NLP variable in this data set. Returning')
+            consolidated_outputs = meta_outputs
         else:
             print('    Number of predictions = %s from NLP variable fed into model' %(nlp_outputs.shape,))
             consolidated_outputs = nlp_outputs
@@ -309,7 +312,6 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             ### if NLP_outputs is NOT a list, it means there is some NLP variable in the data set
             print('    Number of predictions = %s from NLP variable fed into model' %(nlp_outputs.shape,))
             consolidated_outputs = layers.concatenate([nlp_outputs, meta_outputs])
-
-    print('Shape of output from all preprocessing layers before model training = %s' %(consolidated_outputs.shape,))
+            print('Shape of output from all preprocessing layers before model training = %s' %(consolidated_outputs.shape,))
     return nlp_inputs, meta_inputs, consolidated_outputs, nlp_outputs
 ##########################################################################################

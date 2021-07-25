@@ -284,6 +284,8 @@ def load_model_dict(model_or_model_path, cat_vocab_dict, project_name):
     print('Time taken to load saved model = %0.0f seconds' %((time.time()-start_time)))
     return model, cat_vocab_dict
 ###################################################################################################
+##########     THIS IS THE MAIN PREDICT() FUNCTION            #####################################
+###################################################################################################
 def predict(model_or_model_path, project_name, test_dataset,
                     keras_model_type, cat_vocab_dict="", verbose=0):
     start_time2 = time.time()
@@ -313,22 +315,22 @@ def predict(model_or_model_path, project_name, test_dataset,
         y.update(features)
         y[NLP_COLUMN] = tf.strings.reduce_join([features[i] for i in NLP_VARS],axis=0,
                 keepdims=False, separator=' ')
-        return y    
+        return y
     ################################################################
     if isinstance(test_dataset, str):
         test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name,
                                 cat_vocab_dict=cat_vocab_dict, verbose=verbose)
         ### You have to load only the NLP or text variables into dataset. otherwise, it will fail during predict
-        if keras_model_type.lower() in ['nlp', 'text']:
-            test_ds = test_ds.map(process_NLP_features)
-            test_ds = test_ds.unbatch().batch(batch_size)
-            print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
-        else:
-            if NLP_VARS:
+        if NLP_VARS:
+            if keras_model_type.lower() in ['nlp', 'text']:
                 test_ds = test_ds.map(process_NLP_features)
+                test_ds = test_ds.unbatch().batch(batch_size)
                 print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
             else:
-                print('No NLP vars in data set. No preprocessing done.')
+                test_ds = test_ds.map(combine_nlp_text)
+                print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
+        else:
+            print('No NLP vars in data set. No preprocessing done.')
         batch_size = cat_vocab_dict2["batch_size"]
         DS_LEN = cat_vocab_dict2["DS_LEN"]
         print("test data size = ",DS_LEN, ', batch_size = ',batch_size)
@@ -341,12 +343,16 @@ def predict(model_or_model_path, project_name, test_dataset,
         batch_size = cat_vocab_dict2["batch_size"]
         DS_LEN = cat_vocab_dict2["DS_LEN"]
         print("test data size = ",DS_LEN, ', batch_size = ',batch_size)
-        if not keras_model_type.lower() in ['nlp', 'text']:
-            if NLP_VARS:
+        if NLP_VARS:
+            if keras_model_type.lower() in ['nlp', 'text']:
                 test_ds = test_ds.map(process_NLP_features)
-                print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
+                test_ds = test_ds.unbatch().batch(batch_size)
+                print('    processed NLP and text vars: %s successfully' %NLP_VARS)
             else:
-                print('No NLP vars in data set. No preprocessing done.')
+                test_ds = test_ds.map(combine_nlp_text)
+                print('    combined NLP or text vars: %s into a single combined_nlp_text successfully' %NLP_VARS)
+        else:
+            print('No NLP vars in data set. No preprocessing done.')
     else:
         ### It must be a tf.data.Dataset hence just load it as is ####
         if cat_vocab_dict:
@@ -358,16 +364,16 @@ def predict(model_or_model_path, project_name, test_dataset,
             DS_LEN = 100000
             batch_size = 64
         test_ds = test_dataset
-        if keras_model_type.lower() in ['nlp', 'text']:
-            test_ds = test_ds.map(process_NLP_features)
-            test_ds = test_ds.unbatch().batch(batch_size)
-            print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
-        else:
-            if NLP_VARS:
+        if NLP_VARS:
+            if keras_model_type.lower() in ['nlp', 'text']:
                 test_ds = test_ds.map(process_NLP_features)
-                print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
+                test_ds = test_ds.unbatch().batch(batch_size)
+                print('    processed NLP and text vars: %s successfully' %NLP_VARS)
             else:
-                print('No NLP vars in data set. No preprocessing done.')
+                test_ds = test_ds.map(combine_nlp_text)
+                print('    combined NLP or text vars: %s into a single combined_nlp_text successfully' %NLP_VARS)
+        else:
+            print('No NLP vars in data set. No preprocessing done.')
         cat_vocab_dict2 = copy.deepcopy(cat_vocab_dict)
     ##################################################################
     BOOLS = cat_vocab_dict2['bools']
@@ -400,6 +406,7 @@ def predict(model_or_model_path, project_name, test_dataset,
     print('    number of steps needed to predict: %d' %num_steps)
     y_test_preds_list = []
     targets = cat_vocab_dict2['target_variables']
+    ########  This is where we start predictions on test data set ##############
     try:
         y_probas = model.predict(test_ds, steps=num_steps)[:DS_LEN,:]
         if len(targets) == 1:
