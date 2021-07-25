@@ -192,9 +192,11 @@ def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
         drop_cols = cat_vocab_dict['columns_deleted']
         if len(drop_cols) > 0:
             print('    Dropping %s columns from dataset...' %drop_cols)
-            test_small.drop(drop_cols, axis=1, inplace=True)
-        #### In some datasets, due to mixed data types in test_small, this next line errors. Beware!!
-
+            try:
+                test_small.drop(drop_cols, axis=1, inplace=True)
+                #### In some datasets, due to mixed data types in test_small, this next line errors. Beware!!
+            except:
+                print('    in some datasets, due to mixed data types in test, this errors. Continuing...')
         data_batches = tf.data.Dataset.from_tensor_slices(dict(test_small))
         ### batch it if you are creating it from a dataframe
         data_batches = data_batches.batch(batch_size, drop_remainder=False).repeat()
@@ -245,7 +247,7 @@ class BalancedSparseCategoricalAccuracy(keras.metrics.SparseCategoricalAccuracy)
         weight = tf.gather(cls_counts, y_true_int)
         return super().update_state(y_true, y_pred, sample_weight=weight)
 #####################################################################################
-def load_model_dict(model_or_model_path, cat_vocab_dict, project_name):
+def load_model_dict(model_or_model_path, cat_vocab_dict, project_name, keras_model_type):
     start_time = time.time()
     if not cat_vocab_dict:
         ### No cat_vocab_dict is given. Hence you must load it from disk ###
@@ -260,6 +262,22 @@ def load_model_dict(model_or_model_path, cat_vocab_dict, project_name):
                     print('Unable to load model and data artifacts cat_vocab_dictionary file. Returning...')
                     return []
             modeltype = cat_vocab_dict['modeltype']
+        else:
+            try:
+                ### Since model_path is not given, we will use project_name and keras_model_type to find it ##
+                pickle_path = os.path.join(project_name, keras_model_type)
+                list_folders = os.listdir(pickle_path)
+                folder_path = list_folders[0]
+                pickle_path = os.path.join(pickle_path, folder_path)
+                pickle_path = os.path.join(pickle_path, "artifacts")
+                print('Selecting first artifacts file in folder %s. Change model path if you want different.' %folder_path)
+                pickle_path = os.path.join(pickle_path, "cat_vocab_dict.pickle")
+                cat_vocab_dict = pickle.load(open(pickle_path,"rb"))
+                print('    Loaded pickle file in %s' %pickle_path)
+                modeltype = cat_vocab_dict['modeltype']
+            except:
+                print('Error: No path for model artifacts such as model_path given. Returning')
+                return
     else:
         ### cat_vocab_dictionary is given #####
             modeltype = cat_vocab_dict['modeltype']
@@ -274,7 +292,7 @@ def load_model_dict(model_or_model_path, cat_vocab_dict, project_name):
                     model = tf.keras.models.load_model(os.path.join(model_or_model_path))
                 else:
                     model = tf.keras.models.load_model(os.path.join(model_or_model_path),
-                            custom_objects={'balanced_sparse_categorical_accuracy':BalancedSparseCategoricalAccuracy})
+                            custom_objects={'BalancedSparseCategoricalAccuracy': BalancedSparseCategoricalAccuracy})
         except Exception as error:
             print('Could not load given model.\nError: %s\n Please check your model path and try again.' %error)
             return
@@ -289,7 +307,7 @@ def load_model_dict(model_or_model_path, cat_vocab_dict, project_name):
 def predict(model_or_model_path, project_name, test_dataset,
                     keras_model_type, cat_vocab_dict="", verbose=0):
     start_time2 = time.time()
-    model, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name)
+    model, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name, keras_model_type)
     ##### load the test data set here #######
     if keras_model_type.lower() in ['nlp', 'text']:
         NLP_VARS = cat_vocab_dict['predictors_in_train']
@@ -570,9 +588,9 @@ def process_image_file(filename, img_height, img_weight, img_channels):
     np_image = np.expand_dims(np_image, axis=0)
     return np_image
 ##############################################################################################
-def predict_images(test_image_dir, model_or_model_path, cat_vocab_dict):
+def predict_images(test_image_dir, model_or_model_path, cat_vocab_dict, keras_model_type):
     project_name = cat_vocab_dict["project_name"]
-    model_loaded, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name)
+    model_loaded, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name, keras_model_type)
     ##### Now load the classes neede for predictions ###
     y_test_preds_list = []
     classes = cat_vocab_dict['image_classes']
@@ -600,9 +618,9 @@ def predict_images(test_image_dir, model_or_model_path, cat_vocab_dict):
         print('Error: test_image_dir should be either a directory containining test folder or a single JPG or PNG image file')
         return None
 ########################################################################################################
-def predict_text(test_text_dir, model_or_model_path, cat_vocab_dict):
+def predict_text(test_text_dir, model_or_model_path, cat_vocab_dict, keras_model_type):
     project_name = cat_vocab_dict["project_name"]
-    model_loaded, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name)
+    model_loaded, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name, keras_model_type)
     ##### Now load the classes neede for predictions ###
     y_test_preds_list = []
     classes = cat_vocab_dict['text_classes']
