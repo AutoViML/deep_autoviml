@@ -284,6 +284,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         sel_preds = ["_".join(x.split(")")) for x in sel_preds ]
         sel_preds = ["_".join(x.split("/")) for x in sel_preds ]
         sel_preds = ["_".join(x.split("\\")) for x in sel_preds ]
+        sel_preds = ["_".join(x.split("?")) for x in sel_preds ]
         sel_preds = [x.lower() for x in sel_preds ]
 
     if isinstance(target, str):
@@ -292,6 +293,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         target = "_".join(target.split(")"))
         target = "_".join(target.split("/"))
         target = "_".join(target.split("\\"))
+        target = "_".join(target.split("?"))
         target = target.lower()
         model_label = 'Single_Label'
     else:
@@ -300,6 +302,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         target = ["_".join(x.split(")")) for x in target ]
         target = ["_".join(x.split("/")) for x in target ]
         target = ["_".join(x.split("\\")) for x in target ]
+        target = ["_".join(x.split("?")) for x in target ]
         target = [x.lower() for x in target ]
         model_label = 'Multi_Label'
 
@@ -492,24 +495,6 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
             data_batches = data_batches.map(lambda x, y: to_ids(x, y, table))
             print('    target label encoding completed.')
     print('    train data loaded successfully.')
-    BOOLS = cat_vocab_dict['bools']
-    #################################################################################
-    ##### F E A T U R E    E N G I N E E R I N G   H E R E              #############
-    #################################################################################
-    def process_boolean(features, target):
-        """
-        This is how you convert all your boolean features into float variables.
-        The reason you have to do this is because tf.keras does not know how to handle boolean types.
-        It takes as input an ordered dict named features and returns the same in features format.
-        """
-        for feature_name in features:
-            if feature_name in BOOLS:
-                # Cast boolean feature values to string.
-                features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
-        return features, target
-    #################################################################################
-    data_batches = data_batches.map(process_boolean)
-    print('Boolean column successfully processed')
     drop_cols = var_df1['cols_delete']
     preds = [x for x in list(train_small) if x not in usecols+drop_cols]
     print('\nNumber of predictors to be used = %s in predict step: keras preprocessing...' %len(preds))
@@ -664,6 +649,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
     sel_preds = ["_".join(x.split(")")) for x in sel_preds ]
     sel_preds = ["_".join(x.split("/")) for x in sel_preds ]
     sel_preds = ["_".join(x.split("\\")) for x in sel_preds ]
+    sel_preds = ["_".join(x.split("?")) for x in sel_preds ]
     sel_preds = [x.lower() for x in sel_preds ]
 
     if isinstance(target, str):
@@ -672,6 +658,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
         target = "_".join(target.split(")"))
         target = "_".join(target.split("/"))
         target = "_".join(target.split("\\"))
+        target = "_".join(target.split("?"))
         target = target.lower()
         model_label = 'Single_Label'
     else:
@@ -680,6 +667,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
         target = ["_".join(x.split(")")) for x in target ]
         target = ["_".join(x.split("/")) for x in target ]
         target = ["_".join(x.split("\\")) for x in target ]
+        target = ["_".join(x.split("?")) for x in target ]
         target = [x.lower() for x in target ]
         model_label = 'Multi_Label'
 
@@ -797,22 +785,7 @@ def load_train_data_frame(train_small, target, keras_options, model_options, ver
             ds = tf.data.Dataset.from_tensor_slices((dict(features), dict(labels)))
     else:
         ds = tf.data.Dataset.from_tensor_slices(dict(train_small))
-    #################################################################################
-    ##### F E A T U R E    E N G I N E E R I N G   H E R E              #############
-    #################################################################################
-    BOOLS = cat_vocab_dict['bools']
-    def process_boolean(features, target):
-        for feature_name in features:
-            if feature_name in BOOLS:
-                # Cast boolean feature values to string.
-                features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
-        return features, target
-    #################################################################################
-    ds = ds.map(process_boolean)
-    print('Boolean column successfully processed')
-    ### batch it if you are creating it from a dataframe
-    ds = ds.batch(batch_size, drop_remainder=True)
-
+    ######   Now save some defaults in cat_vocab_dict ##########################
     try:
         keras_options["batchsize"] = batch_size
         cat_vocab_dict['batch_size'] = batch_size
@@ -948,7 +921,7 @@ from collections import defaultdict
 from collections import Counter
 
 def load_train_data(train_data_or_file, target, project_name, keras_options, model_options,
-                  verbose=0):
+                  keras_model_type, verbose=0):
     """
     Handy function that loads a file or a sequence of files (*.csv) into a tf.data.Dataset
     You can also load a pandas dataframe instead of a file if you wanted to. It accepts both!
@@ -987,18 +960,78 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     ##########    LOADING EITHER FILE OR DATAFRAME INTO TF DATASET HERE  ##################
     if isinstance(train_data_or_file, str):
         #### do this for files only ##################
-        train_small, ds, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_file(train_data_or_file, target,
+        train_small, train_ds, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_file(train_data_or_file, target,
                                                                 keras_options, model_options, verbose)
     else:
-        train_small, ds, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_frame(train_data_or_file, target,
+        train_small, train_ds, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_frame(train_data_or_file, target,
                                                                 keras_options, model_options, verbose)
-    ##### Just do a simple classification of the train_small data here ####################
-    #######################################################################################
+    ### This is where we do all kinds of feature engineering - this needs to be in predict ####
+    BOOLS = cat_vocab_dict['bools']
+    #################################################################################
+    ##### F E A T U R E    E N G I N E E R I N G   H E R E              #############
+    #################################################################################
+    def process_boolean(features, target):
+        """
+        This is how you convert all your boolean features into float variables.
+        The reason you have to do this is because tf.keras does not know how to handle boolean types.
+        It takes as input an ordered dict named features and returns the same in features format.
+        """
+        for feature_name in features:
+            if feature_name in BOOLS:
+                # Cast boolean feature values to string.
+                features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
+        return features, target
+    #################################################################################
+    train_ds = train_ds.map(process_boolean)
+    print('Boolean column successfully processed')
+    #################################################################################
+    if keras_model_type.lower() in ['nlp', 'text']:
+        NLP_VARS = cat_vocab_dict['predictors_in_train']
+    else:
+        NLP_VARS = cat_vocab_dict['nlp_vars']
+    ################################################################
+    @tf.function
+    def process_NLP_features(features):
+        """
+        This is how you combine all your string NLP features into a single new feature.
+        Then you can perform embedding on this combined feature.
+        It takes as input an ordered dict named features and returns the same features format.
+        """
+        return tf.strings.reduce_join([features[i] for i in NLP_VARS],axis=0,
+                keepdims=False, separator=' ', name="combined")
+    ################################################################
+    NLP_COLUMN = "combined_nlp_text"
+    ################################################################
+    @tf.function
+    def combine_nlp_text(features):
+        ##use x to derive additional columns u want. Set the shape as well
+        y = {}
+        y.update(features)
+        y[NLP_COLUMN] = tf.strings.reduce_join([features[i] for i in NLP_VARS],axis=0,
+                keepdims=False, separator=' ')
+        return y
+    ################################################################
+    ### You have to load only the NLP or text variables into dataset. otherwise, it will fail during predict
+    if NLP_VARS:
+        if keras_model_type.lower() in ['nlp', 'text']:
+            train_ds = train_ds.map(lambda x, y: (process_NLP_features(x), y))
+            #train_ds = train_ds.unbatch().batch(batch_size)
+            print('    processed NLP or text vars: %s successfully' %NLP_VARS)
+        else:
+            train_ds = train_ds.map(lambda x, y: (combine_nlp_text(x), y))
+            print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
+    else:
+        print('No NLP vars in data set. No preprocessing done.')
+    ############################################################################
+    ### You must batch it if you are creating it from a dataframe
+    batch_size = cat_vocab_dict['batch_size']
+    if not isinstance(train_data_or_file, str):
+        train_ds = train_ds.batch(batch_size, drop_remainder=True)
     #### if Target is modified in the above processes such as removing spaces, etc. you must re-init here
     usecols = cat_vocab_dict['target_variables']
     cat_vocab_dict['DS_LEN'] = DS_LEN
     if verbose >= 1 and train_small.shape[1] <= 30:
-        print_one_row_from_tf_dataset(ds)
+        print_one_row_from_tf_dataset(train_ds)
     ####  Set Class Weights for Imbalanced Data Sets here ##########
     modeltype = model_options["modeltype"]
     #### You need to do this transform only for files. Otherwise, it is done already for dataframes.
@@ -1029,7 +1062,7 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     else:
         keras_options['class_weight'] = {}
         print('    No class weights specified. Continuing...')
-    return train_small, model_options, ds, var_df, cat_vocab_dict, keras_options
+    return train_small, model_options, train_ds, var_df, cat_vocab_dict, keras_options
 ##########################################################################################################
 from collections import OrderedDict
 def find_rare_class(classes, verbose=0):

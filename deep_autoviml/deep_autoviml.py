@@ -269,23 +269,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 #### Use the text file given and split it into train and valid_ds ####
                 dft, model_options, full_ds, var_df, cat_vocab_dict, keras_options = load_train_data(
                                     train_data_or_file, target, project_name, keras_options,
-                                    model_options, verbose=verbose)
+                                    model_options, keras_model_type, verbose=verbose)
                 print('Loaded text classification file or dataframe using input given:')
-                if keras_model_type.lower() in ['nlp', 'text']:
-                    NLP_VARS = var_df['nlp_vars']
-                    ################################################################
-                    @tf.function
-                    def process_NLP_features(features):
-                        """
-                        This is how you combine all your string NLP features into a single new feature.
-                        Then you can perform embedding on this combined feature.
-                        It takes as input an ordered dict named features and returns the same features format.
-                        """
-                        return tf.strings.reduce_join([features[i] for i in NLP_VARS],axis=0,
-                                keepdims=False, separator=' ', name="combined")
-                    ################################################################
-                    full_ds = full_ds.map(lambda x, y: (process_NLP_features(x), y))
-                    print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
                 ############## Split train into train and validation datasets here ###############
                 recover = lambda x,y: y
                 print('\nSplitting train into 80+20 percent: train and validation data')
@@ -374,8 +359,10 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 print('    %s : %s' %(key, model_options_copy[key]))
                 model_options[key] = model_options_copy[key]
 
-    if keras_model_type.lower() in ['fast', 'fast1', 'fast2']:
-        print('Max Trials is 10 for faster processing. Please increase max_trials if you want more accuracy...')
+    fast_models = ['deep_and_wide','deep_wide','wide_deep', 'wide_and_deep','deep wide',
+            'wide deep', 'fast','fast1', 'fast2', 'deep_and_cross', 'deep cross', 'deep and cross']
+    if keras_model_type.lower() in fast_models:
+        print('max_trials set to 10 for fast models. Please increase it if you want better performance...')
         model_options["max_trials"] = 10
     else:
         if model_options["max_trials"] <= 20:
@@ -390,7 +377,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         """)
     dft, model_options, batched_data, var_df, cat_vocab_dict, keras_options = load_train_data(
                                     train_data_or_file, target, project_name, keras_options,
-                                    model_options, verbose=verbose)
+                                    model_options, keras_model_type, verbose=verbose)
 
     try:
         data_size = cat_vocab_dict['DS_LEN']
@@ -428,8 +415,6 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 #################################################################################
         ''')
     ######### this is where you get the model body either by yourself or sent as input ##
-    fast_models = ['deep_and_wide','deep_wide','wide_deep', 'wide_and_deep','deep wide',
-            'wide deep', 'fast','fast1', 'fast2', 'deep_and_cross', 'deep cross', 'deep and cross']
     ##### This takes care of providing multi-output predictions! ######
     model_body, keras_options =  create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs,
                                         nlp_outputs, keras_options, var_df, keras_model_type,

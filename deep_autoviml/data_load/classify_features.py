@@ -515,20 +515,19 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     if convert_cols:
         var_df1['int_vars'] = left_subtract(var_df1['int_vars'], convert_cols)
         var_df1['continuous_vars'] = var_df1['continuous_vars'] + convert_cols
-
+    ########################## Set the default variable types here #############
     dates = var_df1['date_vars']
     cats = var_df1['categorical_vars']
     discrete_strings = var_df1['discrete_string_vars']
     lats = var_df1['lat_vars']
     lons = var_df1['lon_vars']
-    ignore_variables = var_df1['cols_delete']
+    ignore_variables = copy.deepcopy(var_df1['cols_delete'])
     all_ints = var_df1['int_vars']
     if isinstance(target, list):
         preds = [x for x in  list(data_sample) if x not in target+ignore_variables]
-        feats_max_min['predictors_in_train'] = [x for x in  list(data_sample) if x not in target]
     else:
         preds = [x for x in  list(data_sample) if x not in [target]+ignore_variables]
-        feats_max_min['predictors_in_train'] = [x for x in  list(data_sample) if x not in [target]]
+    feats_max_min['predictors_in_train'] = copy.deepcopy(preds)
     #### Take(1) always displays only one batch only if num_epochs is set to 1 or a number. Otherwise No print! ########
     #### If you execute the below code without take, then it will go into an infinite loop if num_epochs was set to None.
     if verbose >= 1 and target:
@@ -541,15 +540,20 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     floats = []
     preds_copy = copy.deepcopy(preds)
     for key in preds_copy:
-        if len(data_sample[key].map(type).value_counts()) > 1:
-            print('ALERT: %s variable has mixed data types: better convert it to one data type' %key)
-            var_df1['cols_delete'].append(key)
-            feats_max_min['predictors_in_train'].remove(key)
+        data_types = len(data_sample[key].map(type).value_counts())
+        if data_types > 1:
+            print('\nDATA CLEANING ALERT: Dropping %s since it has %s mixed data types.' %(key, data_types))
+            print('    Transform variable to single data type and re-run. Continuing...')
+            ignore_variables.append(key)
             preds.remove(key)
+            feats_max_min['predictors_in_train'] = preds
+            var_df1['cols_delete'] = copy.deepcopy(ignore_variables)
             if key in cats:
                 cats.remove(key)
+                var_df1['categorical_vars'] = copy.deepcopy(cats)
             elif key in discrete_strings:
                 discrete_strings.remove(key)
+                var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
         elif len(data_sample[key].map(type).value_counts()) == 1:
             if data_sample[key].dtype in ['object'] or str(data_sample[key].dtype) == 'category':
                 if data_sample[key].map(type).value_counts().index[0] == object or data_sample[key].map(type).value_counts().index[0] == str:
@@ -560,24 +564,30 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     all_ints.append(key)
                     if key in cats:
                         cats.remove(key)
+                        var_df1['categorical_vars'] = copy.deepcopy(cats)
                     elif key in discrete_strings:
                         discrete_strings.remove(key)
+                        var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
                 elif data_sample[key].map(type).value_counts().index[0] == float:
                     data_sample[key] = data_sample[key].astype(np.float32).values
                     feats_max_min[key]["dtype"] = np.float32
                     floats.append(key)
                     if key in cats:
                         cats.remove(key)
+                        var_df1['categorical_vars'] = copy.deepcopy(cats)
                     elif key in discrete_strings:
                         discrete_strings.remove(key)
+                        var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
                 elif data_sample[key].map(type).value_counts().index[0] == bool:
                     data_sample[key] = data_sample[key].astype(bool).values
                     feats_max_min[key]["dtype"] = "bool"
                     bools.append(key)
                     if key in cats:
                         cats.remove(key)
+                        var_df1['categorical_vars'] = copy.deepcopy(cats)
                     elif key in discrete_strings:
                         discrete_strings.remove(key)
+                        var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
             #### This is not a mistake - you have to test it again. That way we make sure type is safe
             if data_sample[key].dtype in ['object'] or str(data_sample[key].dtype) == 'category':
                 if data_sample[key].map(type).value_counts().index[0] == object or data_sample[key].map(type).value_counts().index[0] == str:
@@ -642,7 +652,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     elif key in discrete_strings:
                         discrete_strings.remove(key)
                         var_df1['discrete_string_vars'] = discrete_strings
-                    print('    %s is detected as an NLP variable' %key)
+                    print('%s is detected and will be treated as an NLP variable' %key)
                     if key not in var_df1['nlp_vars']:
                         var_df1['nlp_vars'].append(key)
                     #### Now let's calculate some statistics on this NLP variable ###
@@ -687,6 +697,11 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                 print("  {!r:25s}: {}".format('    dtype', feats_max_min[key]["dtype"]))
     if not print_features:
         print('Number of variables in dataset is too numerous to print...skipping print')
+    ##### Save the variable changes back to the variable type dictionary ##
+    var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
+    var_df1['categorical_vars'] = copy.deepcopy(cats)
+    var_df1['cols_delete'] = ignore_variables
+
     ##### Make some changes to integer variables to select those with less than certain category limits ##
     ints = [ x for x in all_ints if feats_max_min[x]['size_of_vocab'] > cat_limit and x not in floats]
 
@@ -1044,7 +1059,7 @@ def classify_dtypes_using_TF2(data_sample, idcols, verbose=0):
                         feats_max_min[key]['size_of_vocab'] = len(int_vocab)
                     elif feats_max_min[key]['dtype'] in [tf.string]:
                         if tf.reduce_mean(tf.strings.length(feature_batch[key])).numpy() >= nlp_char_limit:
-                            print('%s is detected as an NLP variable')
+                            print('%s is detected and will be treated as an NLP variable')
                             nlps.append(key)
                         else:
                             cats.append(key)

@@ -68,7 +68,9 @@ import pickle
 
 ##### Suppress all TF2 and TF1.x warnings ###################
 try:
-    tf.logging.set_verbosity(tf.logging.ERROR)
+    tf2logger = tf.get_logger()
+    tf2logger.warning('Silencing TF2.x warnings')
+    tf2logger.root.removeHandler(tf2logger.root.handlers)
 except:
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 ############################################################################################
@@ -142,8 +144,8 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
         data_dim = int(data_size*cols_len)
     #### These can be standard for every keras option that you use layers ######
     kernel_initializer = check_keras_options(keras_options, 'kernel_initializer', 'glorot_uniform')
-    activation='relu'    
-    
+    activation='relu'
+
     ##############  S E T T I N G    U P  DEEP_WIDE, DEEP_CROSS, FAST MODELS    ########################
     cats = var_df['categorical_vars']  ### these are low cardinality vars - you can one-hot encode them ##
     high_string_vars = var_df['discrete_string_vars']  ## discrete_string_vars are high cardinality vars ## embed them!
@@ -155,12 +157,12 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
     lats = var_df['lat_vars']
     lons = var_df['lon_vars']
     floats = left_subtract(floats, lats+lons)
-    
+
     FEATURE_NAMES = bools + cats + high_string_vars + int_cats + ints + floats
     NUMERIC_FEATURE_NAMES = int_cats + ints
     FLOATS = floats + bools
     CATEGORICAL_FEATURE_NAMES = cats + high_string_vars
-    
+
     vocab_dict = defaultdict(list)
     cats_copy = copy.deepcopy(CATEGORICAL_FEATURE_NAMES+NUMERIC_FEATURE_NAMES)
     if len(cats_copy) > 0:
@@ -173,7 +175,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
             vocab_dict[each_float] = cat_vocab_dict[each_float]['vocab_min_var']
 
     ######################   set some defaults for model parameters here ##############
-    keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options, 
+    keras_options, model_options, num_predicts, output_activation = get_model_defaults(keras_options,
                                                                     model_options, targets)
     ###### This is where you compile the model after it is built ###############
     num_classes = model_options["num_classes"]
@@ -213,19 +215,33 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
     print('    Recommended hidden layers (with units in each Dense Layer)  = (%d, %d, %d)\n' %(
                                 dense_layer1,dense_layer2,dense_layer3))
     fast_models = ['fast']
-    fast_models1 = ['deep_and_wide','deep_wide','wide_deep', 
+    fast_models1 = ['deep_and_wide','deep_wide','wide_deep',
                                 'wide_and_deep','deep wide', 'wide deep', 'fast1']
     fast_models2 = ['deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
-    nlp_models = ['bert', 'use', 'text']
+    nlp_models = ['bert', 'use', 'text', 'nlp']
     #### The Deep and Wide Model is a bit more complicated. So it needs some changes in inputs! ######
     prebuilt_models = ['basic', 'simple', 'default','simple_dnn','sample model',
                         'deep', 'big_deep', 'big deep', 'giant_deep', 'giant deep',
-                        'cnn1', 'cnn','cnn2'] 
+                        'cnn1', 'cnn','cnn2']
     ######   Just do a simple check for auto models here ####################
+    preds = cat_vocab_dict["predictors_in_train"]
+    NON_NLP_VARS = left_subtract(preds, nlps)
     if keras_model_type.lower() in fast_models+fast_models1+prebuilt_models+fast_models2+nlp_models:
-        all_inputs = nlp_inputs + meta_inputs
+        if len(NON_NLP_VARS) == 0:
+            ## there are no non-NLP vars in dataset then just use NLP outputs Only
+            all_inputs = nlp_inputs
+            meta_outputs = nlp_outputs
+            model_body = Sequential([layers.Dense(dense_layer3, activation='relu')])
+            model_body = add_outputs_to_model_body(model_body, meta_outputs)
+            model_body = get_compiled_model(all_inputs, model_body, output_activation, num_predicts,
+                                    modeltype, optimizer, val_loss, val_metrics, cols_len, targets)
+            print('    %s model loaded and compiled successfully...' %keras_model_type)
+            print(model_body.summary())
+            return model_body, keras_options
+        else:
+            all_inputs = nlp_inputs + meta_inputs
     else:
-        ### this means it's an auto model and you create one here 
+        ### this means it's an auto model and you create one here
         print('    creating %s model body...' %keras_model_type)
         #num_layers = check_keras_options(keras_options, 'num_layers', 1)
         model_body = tf.keras.Sequential([])
@@ -284,9 +300,9 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                 ###############################################################################################
                 # In a Wide & Deep model, the wide part of the model is a linear model, while the deep
                 # part of the model is a multi-layer feed-forward network. We use the sparse representation
-                # of the input features in the wide part of the model and the dense representation of the 
+                # of the input features in the wide part of the model and the dense representation of the
                 # input features for the deep part of the model.
-                # VERY IMPORTANT TO NOTE that every input features contributes to both parts of the model with 
+                # VERY IMPORTANT TO NOTE that every input features contributes to both parts of the model with
                 # different representations.
                 ###############################################################################################
                 dropout_rate = 0.1
@@ -315,8 +331,8 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                 print('    Created deep and wide %s model, ...' %keras_model_type)
             elif keras_model_type.lower() in fast_models2:
                 ###############################################################################################
-                # In a Deep & Cross model, the deep part of this model is the same as the deep part 
-                # created in the previous model. The key idea of the cross part is to apply explicit 
+                # In a Deep & Cross model, the deep part of this model is the same as the deep part
+                # created in the previous model. The key idea of the cross part is to apply explicit
                 # feature crossing in an efficient way, where the degree of cross features grows with layer depth.
                 ###############################################################################################
                 dropout_rate = 0.1
@@ -384,7 +400,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
         #### This final outputs is the one that is taken into final dense layer and compiled
         print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
     #############  You need to compile the non-auto models here ###############
-    model_body = get_compiled_model(all_inputs, model_body, output_activation, num_predicts, 
+    model_body = get_compiled_model(all_inputs, model_body, output_activation, num_predicts,
                             modeltype, optimizer, val_loss, val_metrics, cols_len, targets)
     print('    %s model loaded and compiled successfully...' %keras_model_type)
     if cols_len > 100:
@@ -393,4 +409,3 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
         print(model_body.summary())
     return model_body, keras_options
 ###############################################################################
-

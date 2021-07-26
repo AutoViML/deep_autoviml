@@ -117,11 +117,11 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
     nlp_col_names = []
     nlp_columns = var_df['nlp_vars']
     nlp_columns =  list(set(nlp_columns))
-    fast_models = ['fast','deep_and_wide','deep_wide','wide_deep', 
+    fast_models = ['fast','deep_and_wide','deep_wide','wide_deep',
                     'wide_and_deep','deep wide', 'wide deep', 'fast1',
                     'deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
 
-    lst = [24, 32, 48, 64, 96, 128, 256]
+    lst = [8, 16, 24, 32, 48, 64, 96, 128, 256]
     #### max_tokens_zip calculate the max number of unique words in a vocabulary ####
     max_tokens_zip = defaultdict(int)
     #### seq_tokens_zip calculates the max sequence length in a vocabulary ####
@@ -142,7 +142,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
             vocab_size = cat_vocab_dict[each_name]['size_of_vocab']
             vocab_train_small += cat_vocab_dict[each_name]['vocab']
             vocab_train_small = np.unique(vocab_train_small)
-            best_embedding_size = closest(lst, vocab_size//2000)
+            best_embedding_size = closest(lst, vocab_size//4000)
             print('    recommended embedding_size = %s' %best_embedding_size)
             input_embedding_size = check_model_options(model_options, "embedding_size", best_embedding_size)
             if input_embedding_size != best_embedding_size:
@@ -161,11 +161,11 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
     ### the vocab_train_small holds the entire vocab of train_small data set!
     max_vocab_size = len(vocab_train_small) + 10
     print('Max vocab size = %s' %max_vocab_size)
-    
+
     ###### Let us set up the defauls for embedding size and max tokens to process each column
     NLP_VARS  = copy.deepcopy(nlp_columns)
     max_features = max_vocab_size ## this is the size of vocab of the whole corpus
-    embedding_dim = best_embedding_size ## this is the vector size 
+    embedding_dim = best_embedding_size ## this is the vector size
     sequence_length = maximum_sequence_length ## this is the length of each sentence consisting of words
 
     #### Now perform NLP preproprocessing for each nlp_column ######

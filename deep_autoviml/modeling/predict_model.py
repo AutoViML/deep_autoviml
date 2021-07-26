@@ -339,6 +339,7 @@ def predict(model_or_model_path, project_name, test_dataset,
         test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name,
                                 cat_vocab_dict=cat_vocab_dict, verbose=verbose)
         ### You have to load only the NLP or text variables into dataset. otherwise, it will fail during predict
+        batch_size = cat_vocab_dict2["batch_size"]
         if NLP_VARS:
             if keras_model_type.lower() in ['nlp', 'text']:
                 test_ds = test_ds.map(process_NLP_features)
@@ -349,7 +350,6 @@ def predict(model_or_model_path, project_name, test_dataset,
                 print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
         else:
             print('No NLP vars in data set. No preprocessing done.')
-        batch_size = cat_vocab_dict2["batch_size"]
         DS_LEN = cat_vocab_dict2["DS_LEN"]
         print("test data size = ",DS_LEN, ', batch_size = ',batch_size)
     elif isinstance(test_dataset, pd.DataFrame) or isinstance(test_dataset, pd.Series):
