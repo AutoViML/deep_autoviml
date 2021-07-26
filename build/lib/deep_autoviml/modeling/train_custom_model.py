@@ -336,7 +336,6 @@ class MyTuner(Tuner):
         model_body, optimizer = build_model_storm(hp, batch_limit, batch_nums)
 
         ##### This is the simplest way to convert a sequential model to functional model!
-
         if regular_body:
             storm_outputs = add_outputs_to_model_body(model_body, meta_outputs)
         else:
@@ -476,11 +475,10 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     train the model and evaluate it on valid_ds. It will return a keras model fully
     trained on the full batched_data finally and train history.
     """
-    
     inputs = nlp_inputs + meta_inputs
     nlps = var_df["nlp_vars"]
-    lats = var_df["lat_vars"]
-    lons = var_df["lon_vars"]
+    lats = var_df["lats"]
+    lons = var_df["lons"]
     if nlp_inputs:
         nlp_flag = True
     else:
@@ -560,11 +558,11 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     regular_body = False
     if len(lats+lons) == 0:
         if len(NON_NLP_VARS) == 0:
-            regular_body = False
+            regular_body = True
         else:
             regular_body = False
     else:
-        regular_body = True
+        regular_body = True            
     ############################################################################
 
     ### check the defaults for the following!
