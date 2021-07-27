@@ -185,6 +185,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
                 bert_model_name = 'BERT_given_by_user_input'
                 tfhub_handle_preprocess = "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3"
         else:
+            bert_model_name = "BERT Uncased Small"
             tfhub_handle_preprocess = "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3"
             tfhub_handle_encoder = 'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-512_A-8/2'
         preprocessor = hub.KerasLayer(tfhub_handle_preprocess, name='BERT_preprocessing')
@@ -201,12 +202,20 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
                 bert_model_name = 'Universal_Sentence_Encoder_given_as_input'
                 tfhub_handle_preprocess = "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3"
         else:
+            bert_model_name = "Universal Sentence Encoder"
             tfhub_handle_preprocess = "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3"
             tfhub_handle_encoder = 'https://tfhub.dev/google/universal-sentence-encoder-cmlm/en-base/1'
         preprocessor = hub.KerasLayer(tfhub_handle_preprocess, name='USE_preprocessing')
         encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=False, name='USE_encoder')
         print(f'    {bert_model_name} selected: {tfhub_handle_encoder}')
         print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')
+    elif keras_model_type.lower() in ["nnlm"]:
+        bert_model_name = "NNLM 50 with Normalization"
+        tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
+        hub_layer = hub.KerasLayer(tfhub_handle_encoder,
+                       input_shape=[],
+                       dtype=tf.string, trainable=False, name="NNLM50_encoder")
+        print(f'    {bert_model_name} selected from: {tfhub_handle_encoder}')
     elif keras_model_type.lower() in fast_models:
         #### For fast models you just use Vectorization and Embedding that's all #######
         # Use the text vectorization layer to normalize, split, and map strings to
@@ -228,11 +237,16 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
     else:
         ####  This is for auto model option. You can ignore their models in tfhub in that case
         #### If they give the default NLP or text as input, then we would use a default model.
-        bert_model_name = 'Swivel_20_model'
-        tfhub_handle_encoder = "https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1"
-        hub_layer = hub.KerasLayer(tfhub_handle_encoder, output_shape=[20],
+        #bert_model_name = 'Swivel_20_model'
+        bert_model_name = "NNLM 50 with Normalization"
+        #tfhub_handle_encoder = "https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1"
+        tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
+        #hub_layer = hub.KerasLayer(tfhub_handle_encoder, output_shape=[20],
+        #               input_shape=[],
+        #               dtype=tf.string, trainable=False, name="Swivel_encoder")
+        hub_layer = hub.KerasLayer(tfhub_handle_encoder,
                        input_shape=[],
-                       dtype=tf.string, trainable=False, name="Swivel_encoder")
+                       dtype=tf.string, trainable=False, name="NNLM50_encoder")
         print(f'    {bert_model_name} selected from: {tfhub_handle_encoder}')
 
     #### Next, we add an NLP layer to map those vocab indices into a space of dimensionality
@@ -259,8 +273,12 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
             x = vectorize_layer(nlp_input)
             x = layers.Embedding(max_features+1, embedding_dim, input_length=sequence_length, name=nlp_column+'_embedding')(x)
             x = Flatten()(x)
+        elif keras_model_type.lower() in ['nnlm','nlnm']:
+            ### this is for AUTO models. You use NNLM or NLNM to embed NLP columns fast ####
+            nlp_input = tf.keras.Input(shape=(), dtype=tf.string, name=nlp_column)
+            x = hub_layer(nlp_input)
         else:
-            ### this is for auto model option. You use Swivel to make NLP columns faster. ####
+            ### this is for AUTO models. You use Swivel to embed NLP columns fast ####
             nlp_input = tf.keras.Input(shape=(), dtype=tf.string, name=nlp_column)
             x = hub_layer(nlp_input)
         ###  Now we combine all inputs and outputs in one place here ###########

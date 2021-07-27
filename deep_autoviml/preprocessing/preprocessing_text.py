@@ -100,7 +100,7 @@ def preprocessing_text(train_ds, keras_model_type, model_options):
             feature_extractor_layer = hub.KerasLayer(tf_hub_model, output_shape=[50],
                                  input_shape=[], dtype=tf.string, trainable=True)
             units = 32
-            print('Using NNLM-50D model from TensorFlow Hub')
+            print('    Using NNLM-50D model from TensorFlow Hub')
         tf.random.set_seed(111)
         model = tf.keras.Sequential([
                   feature_extractor_layer,

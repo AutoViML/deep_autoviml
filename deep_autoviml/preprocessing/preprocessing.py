@@ -235,7 +235,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     ##### You need to send in the ouput from embedding layer to this sequence of layers ####
     nlp_outputs = []
     if not isinstance(embedding, list):
-        if keras_model_type.lower() in ['bert','nlp','text', 'use', "auto"]:
+        if keras_model_type.lower() in ['bert','nlp','text', 'use',"nnlm",  "auto"]:
             ###### This is where you define the NLP Embedded Layers ########
             #x = layers.Dense(64, activation='relu')(embedding)
             #x = layers.Dense(32, activation='relu')(x)
