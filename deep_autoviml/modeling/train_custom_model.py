@@ -476,7 +476,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     train the model and evaluate it on valid_ds. It will return a keras model fully
     trained on the full batched_data finally and train history.
     """
-    
+
     inputs = nlp_inputs + meta_inputs
     nlps = var_df["nlp_vars"]
     lats = var_df["lat_vars"]
@@ -555,16 +555,10 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
                             val_loss, num_predicts, output_activation))
     ####  just use modeltype for printing that's all ###
     modeltype = cat_vocab_dict['modeltype']
-
     ### set some flags for choosing the right model buy here ###################
-    regular_body = False
-    if len(lats+lons) == 0:
-        if len(NON_NLP_VARS) == 0:
-            regular_body = False
-        else:
-            regular_body = False
-    else:
-        regular_body = True
+    regular_body = True
+    if isinstance(meta_outputs, list):
+        regular_body = False
     ############################################################################
 
     ### check the defaults for the following!

@@ -181,6 +181,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     This handy function loads a file from a local or remote machine provided the filename and path are given.
     It loads the file(s) into a Tensorflow Dataset using the make_csv_dataset function from Tensorflow 2.0
     """
+    train_datafile = copy.deepcopy(train_datafile)
     http_url = False
     if find_words_in_list(['http'], [train_datafile]):
         print('http urls file: will be loaded into pandas and then into tensorflow datasets')
@@ -944,6 +945,7 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     """
     shuffle_flag = False
     cat_vocab_dict = defaultdict(list)
+    train_data_or_file = copy.deepcopy(train_data_or_file)
     maxrows = 10000 ### the number of maximum rows read by pandas to sample data ##
     ### Since you cannot deal with a very large dataset in pandas, let's look into how big the file is
     try:
