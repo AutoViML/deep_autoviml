@@ -540,161 +540,160 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     floats = []
     preds_copy = copy.deepcopy(preds)
     for key in preds_copy:
-        data_types = len(data_sample[key].map(type).value_counts())
-        if data_types > 1:
-            print('\nDATA CLEANING ALERT: Dropping %s since it has %s mixed data types.' %(key, data_types))
-            print('    Transform variable to single data type and re-run. Continuing...')
-            ignore_variables.append(key)
-            preds.remove(key)
-            feats_max_min['predictors_in_train'] = preds
-            var_df1['cols_delete'] = copy.deepcopy(ignore_variables)
-            if key in cats:
-                cats.remove(key)
-                var_df1['categorical_vars'] = copy.deepcopy(cats)
-            elif key in discrete_strings:
-                discrete_strings.remove(key)
-                var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
-        elif len(data_sample[key].map(type).value_counts()) == 1:
-            if data_sample[key].dtype in ['object'] or str(data_sample[key].dtype) == 'category':
-                if data_sample[key].map(type).value_counts().index[0] == object or data_sample[key].map(type).value_counts().index[0] == str:
-                    feats_max_min[key]["dtype"] = "string"
-                elif data_sample[key].map(type).value_counts().index[0] == int:
-                    data_sample[key] = data_sample[key].astype(np.int32).values
-                    feats_max_min[key]["dtype"] = np.int32
-                    all_ints.append(key)
-                    if key in cats:
-                        cats.remove(key)
-                        var_df1['categorical_vars'] = copy.deepcopy(cats)
-                    elif key in discrete_strings:
-                        discrete_strings.remove(key)
-                        var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
-                elif data_sample[key].map(type).value_counts().index[0] == float:
-                    data_sample[key] = data_sample[key].astype(np.float32).values
-                    feats_max_min[key]["dtype"] = np.float32
-                    floats.append(key)
-                    if key in cats:
-                        cats.remove(key)
-                        var_df1['categorical_vars'] = copy.deepcopy(cats)
-                    elif key in discrete_strings:
-                        discrete_strings.remove(key)
-                        var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
-                elif data_sample[key].map(type).value_counts().index[0] == bool:
-                    data_sample[key] = data_sample[key].astype(bool).values
-                    feats_max_min[key]["dtype"] = "bool"
-                    bools.append(key)
-                    if key in cats:
-                        cats.remove(key)
-                        var_df1['categorical_vars'] = copy.deepcopy(cats)
-                    elif key in discrete_strings:
-                        discrete_strings.remove(key)
-                        var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
-            #### This is not a mistake - you have to test it again. That way we make sure type is safe
-            if data_sample[key].dtype in ['object'] or str(data_sample[key].dtype) == 'category':
-                if data_sample[key].map(type).value_counts().index[0] == object or data_sample[key].map(type).value_counts().index[0] == str:
-                    feats_max_min[key]["dtype"] = "string"
-            elif data_sample[key].dtype in ['bool']:
+        if data_sample[key].dtype in ['object'] or str(data_sample[key].dtype) == 'category':
+            if type('str') in data_sample[key].map(type).value_counts().index:
+                feats_max_min[key]["dtype"] = "string"
+            elif data_sample[key].map(type).value_counts().index[0] == int:
+                data_sample[key] = data_sample[key].astype(np.int32).values
+                feats_max_min[key]["dtype"] = np.int32
+                all_ints.append(key)
+                if key in cats:
+                    cats.remove(key)
+                    var_df1['categorical_vars'] = copy.deepcopy(cats)
+                elif key in discrete_strings:
+                    discrete_strings.remove(key)
+                    var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
+            elif data_sample[key].map(type).value_counts().index[0] == float:
+                data_sample[key] = data_sample[key].astype(np.float32).values
+                feats_max_min[key]["dtype"] = np.float32
+                floats.append(key)
+                if key in cats:
+                    cats.remove(key)
+                    var_df1['categorical_vars'] = copy.deepcopy(cats)
+                elif key in discrete_strings:
+                    discrete_strings.remove(key)
+                    var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
+            elif data_sample[key].map(type).value_counts().index[0] == bool:
+                data_sample[key] = data_sample[key].astype(bool).values
                 feats_max_min[key]["dtype"] = "bool"
                 bools.append(key)
                 if key in cats:
                     cats.remove(key)
-            elif str(data_sample[key].dtype).split("[")[0] in ['datetime64','datetime32','datetime16']:
+                    var_df1['categorical_vars'] = copy.deepcopy(cats)
+                elif key in discrete_strings:
+                    discrete_strings.remove(key)
+                    var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
+        #### This is not a mistake - you have to test it again. That way we make sure type is safe
+        if data_sample[key].dtype in ['object'] or str(data_sample[key].dtype) == 'category':
+            if data_sample[key].map(type).value_counts().index[0] == object or data_sample[key].map(type).value_counts().index[0] == str:
                 feats_max_min[key]["dtype"] = "string"
-            elif data_sample[key].dtype in [np.int16, np.int32, np.int64]:
-                if key in convert_cols:
-                    feats_max_min[key]["dtype"] = np.float32
-                    floats.append(key)
-                else:
-                    feats_max_min[key]["dtype"] = np.int32
-            else:
-                floats.append(key)
+        elif data_sample[key].dtype in ['bool']:
+            feats_max_min[key]["dtype"] = "bool"
+            bools.append(key)
+            if key in cats:
+                cats.remove(key)
+        elif str(data_sample[key].dtype).split("[")[0] in ['datetime64','datetime32','datetime16']:
+            feats_max_min[key]["dtype"] = "string"
+        elif data_sample[key].dtype in [np.int16, np.int32, np.int64]:
+            if key in convert_cols:
                 feats_max_min[key]["dtype"] = np.float32
-            if feats_max_min[key]['dtype'] in [np.int16, np.int32, np.int64,
-                                    np.float16, np.float32, np.float64]:
-                ##### This is for integer and float variables #######
-                if key in lats+lons:
-                    ### For lats and lons you need the vocab to create bins using pd.qcut ####
+                floats.append(key)
+            else:
+                feats_max_min[key]["dtype"] = np.int32
+        else:
+            floats.append(key)
+            feats_max_min[key]["dtype"] = np.float32
+        if feats_max_min[key]['dtype'] in [np.int16, np.int32, np.int64,
+                                np.float16, np.float32, np.float64]:
+            ##### This is for integer and float variables #######
+            if key in lats+lons:
+                ### For lats and lons you need the vocab to create bins using pd.qcut ####
+                vocab = data_sample[key].unique()
+                feats_max_min[key]["vocab"] = vocab
+                feats_max_min[key]['size_of_vocab'] = len(vocab)
+                feats_max_min[key]["max"] = max(data_sample[key].values)
+                feats_max_min[key]["min"] = min(data_sample[key].values)
+            else:
+                if feats_max_min[key]['dtype'] in [np.int16, np.int32, np.int64]:
                     vocab = data_sample[key].unique()
                     feats_max_min[key]["vocab"] = vocab
                     feats_max_min[key]['size_of_vocab'] = len(vocab)
-                    feats_max_min[key]["max"] = max(data_sample[key].values)
-                    feats_max_min[key]["min"] = min(data_sample[key].values)
                 else:
-                    if feats_max_min[key]['dtype'] in [np.int16, np.int32, np.int64]:
-                        vocab = data_sample[key].unique()
-                        feats_max_min[key]["vocab"] = vocab
-                        feats_max_min[key]['size_of_vocab'] = len(vocab)
-                    else:
-                        ### For the rest of the numeric variables, you just need mean and variance ###
-                        vocab = data_sample[key].unique()
-                        feats_max_min[key]["vocab_min_var"] = [data_sample[key].mean(), data_sample[key].var()]
-                        feats_max_min[key]["vocab"] = vocab
-                        feats_max_min[key]['size_of_vocab'] = len(vocab)
-                feats_max_min[key]["max"] = max(data_sample[key].values)
-                feats_max_min[key]["min"] = min(data_sample[key].values)
-            elif feats_max_min[key]['dtype'] in ['bool']:
-                ### we are going to convert boolean to float type #####
-                vocab = data_sample[key].unique()
-                full_array = data_sample[key].values
-                full_array = np.array([0.0 if type(x) == float else float(x) for x in full_array])
-                ### Don't change the next line even though it appears wrong. I have tested and it works!
-                vocab = [0.0 if type(x) == float else float(x) for x in vocab]
-                feats_max_min[key]["vocab_min_var"] = [full_array.mean(), full_array.var()]
-                feats_max_min[key]["vocab"] = vocab
-                feats_max_min[key]['size_of_vocab'] = len(vocab)
-            elif feats_max_min[key]['dtype'] in ['string']:
-                if np.mean(data_sample[key].fillna("missing").map(len)) >= nlp_char_limit:
-                    ### This is for NLP variables. You want to remove duplicates #####
-                    if key in dates:
-                        continue
-                    elif key in cats:
-                        cats.remove(key)
-                        var_df1['categorical_vars'] = cats
-                    elif key in discrete_strings:
-                        discrete_strings.remove(key)
-                        var_df1['discrete_string_vars'] = discrete_strings
-                    print('%s is detected and will be treated as an NLP variable' %key)
-                    if key not in var_df1['nlp_vars']:
-                        var_df1['nlp_vars'].append(key)
-                    #### Now let's calculate some statistics on this NLP variable ###
-                    num_rows_in_data = model_options['DS_LEN']
-                    vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast))
-                    vocab = np.unique(vocab).tolist()
-                    feats_max_min[key]["vocab"] = vocab
-                    try:
-                        feats_max_min[key]['seq_length'] = int(data_sample[key].fillna("missing").map(len).max())
-                        num_words_in_each_row = data_sample[key].fillna("missing").map(lambda x: len(x.split(" "))).mean()
-                        feats_max_min[key]['size_of_vocab'] = int(num_rows_in_data*num_words_in_each_row)
-                    except:
-                        feats_max_min[key]['seq_length'] = len(vocab) // num_rows_in_data
-                        feats_max_min[key]['size_of_vocab'] = len(vocab)
-                else:
-                    ### This is for string variables ########
-                    ####  Now we select features if they are present in the data set ###
-                    num_rows_in_data = model_options['DS_LEN']
-                    if data_sample[key].isnull().sum() > 0:
-                        vocab = data_sample[key].fillna("missing").unique().tolist()
-                    else:
-                        vocab = data_sample[key].unique().tolist()
-                    vocab = np.unique(vocab).tolist()
-                    #vocab = ['missing' if type(x) != str  else x for x in vocab]
+                    ### For the rest of the numeric variables, you just need mean and variance ###
+                    vocab = data_sample[key].unique()
+                    feats_max_min[key]["vocab_min_var"] = [data_sample[key].mean(), data_sample[key].var()]
                     feats_max_min[key]["vocab"] = vocab
                     feats_max_min[key]['size_of_vocab'] = len(vocab)
+            feats_max_min[key]["max"] = max(data_sample[key].values)
+            feats_max_min[key]["min"] = min(data_sample[key].values)
+        elif feats_max_min[key]['dtype'] in ['bool']:
+            ### we are going to convert boolean to float type #####
+            vocab = data_sample[key].unique()
+            full_array = data_sample[key].values
+            full_array = np.array([0.0 if type(x) == float else float(x) for x in full_array])
+            ### Don't change the next line even though it appears wrong. I have tested and it works!
+            vocab = [0.0 if type(x) == float else float(x) for x in vocab]
+            feats_max_min[key]["vocab_min_var"] = [full_array.mean(), full_array.var()]
+            feats_max_min[key]["vocab"] = vocab
+            feats_max_min[key]['size_of_vocab'] = len(vocab)
+        elif feats_max_min[key]['dtype'] in ['string']:
+            data_types = len(data_sample[key].fillna("missing").map(type).value_counts())
+            if data_types > 1:
+                print('\nDATA CLEANING ALERT: Dropping %s since it has %s mixed data types.' %(key, data_types))
+                print('    Transform variable to single data type and re-run. Continuing...')
+                ignore_variables.append(key)
+                preds.remove(key)
+                feats_max_min['predictors_in_train'] = preds
+                var_df1['cols_delete'] = copy.deepcopy(ignore_variables)
+                if key in cats:
+                    cats.remove(key)
+                    var_df1['categorical_vars'] = copy.deepcopy(cats)
+                elif key in discrete_strings:
+                    discrete_strings.remove(key)
+                    var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
+            if np.mean(data_sample[key].fillna("missing").map(len)) >= nlp_char_limit:
+                ### This is for NLP variables. You want to remove duplicates #####
+                if key in dates:
+                    continue
+                elif key in cats:
+                    cats.remove(key)
+                    var_df1['categorical_vars'] = cats
+                elif key in discrete_strings:
+                    discrete_strings.remove(key)
+                    var_df1['discrete_string_vars'] = discrete_strings
+                print('%s is detected and will be treated as an NLP variable' %key)
+                if key not in var_df1['nlp_vars']:
+                    var_df1['nlp_vars'].append(key)
+                #### Now let's calculate some statistics on this NLP variable ###
+                num_rows_in_data = model_options['DS_LEN']
+                vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast))
+                vocab = np.unique(vocab).tolist()
+                feats_max_min[key]["vocab"] = vocab
+                try:
+                    feats_max_min[key]['seq_length'] = int(data_sample[key].fillna("missing").map(len).max())
+                    num_words_in_each_row = data_sample[key].fillna("missing").map(lambda x: len(x.split(" "))).mean()
+                    feats_max_min[key]['size_of_vocab'] = int(num_rows_in_data*num_words_in_each_row)
+                except:
                     feats_max_min[key]['seq_length'] = len(vocab) // num_rows_in_data
+                    feats_max_min[key]['size_of_vocab'] = len(vocab)
             else:
-                ####  Now we treat bool and other variable types ###
-                #feats_max_min[key]["vocab"] = data_sample[key].unique()
-                vocab = data_sample[key].unique()
-                #### just leave this as is - it works for other data types
-                vocab = ['missing' if type(x) == str  else x for x in vocab]
+                ### This is for string variables ########
+                ####  Now we select features if they are present in the data set ###
+                num_rows_in_data = model_options['DS_LEN']
+                if data_sample[key].isnull().sum() > 0:
+                    vocab = data_sample[key].fillna("missing").unique().tolist()
+                else:
+                    vocab = data_sample[key].unique().tolist()
+                vocab = np.unique(vocab).tolist()
+                #vocab = ['missing' if type(x) != str  else x for x in vocab]
                 feats_max_min[key]["vocab"] = vocab
                 feats_max_min[key]['size_of_vocab'] = len(vocab)
-                #feats_max_min[key]['size_of_vocab'] = len(feats_max_min[key]["vocab"])
-            if print_features and verbose > 1:
-                print("  {!r:20s}: {}".format('    sample words from vocab', key, data_sample[key].values[:4]))
-                print("  {!r:25s}: {}".format('    size of vocab', feats_max_min[key]["size_of_vocab"]))
-                print("  {!r:25s}: {}".format('    max', feats_max_min[key]["max"]))
-                print("  {!r:25s}: {}".format('    min', feats_max_min[key]["min"]))
-                print("  {!r:25s}: {}".format('    dtype', feats_max_min[key]["dtype"]))
+                feats_max_min[key]['seq_length'] = len(vocab) // num_rows_in_data
+        else:
+            ####  Now we treat bool and other variable types ###
+            #feats_max_min[key]["vocab"] = data_sample[key].unique()
+            vocab = data_sample[key].unique()
+            #### just leave this as is - it works for other data types
+            vocab = ['missing' if type(x) == str  else x for x in vocab]
+            feats_max_min[key]["vocab"] = vocab
+            feats_max_min[key]['size_of_vocab'] = len(vocab)
+            #feats_max_min[key]['size_of_vocab'] = len(feats_max_min[key]["vocab"])
+        if print_features and verbose > 1:
+            print("  {!r:20s}: {}".format('    sample words from vocab', key, data_sample[key].values[:4]))
+            print("  {!r:25s}: {}".format('    size of vocab', feats_max_min[key]["size_of_vocab"]))
+            print("  {!r:25s}: {}".format('    max', feats_max_min[key]["max"]))
+            print("  {!r:25s}: {}".format('    min', feats_max_min[key]["min"]))
+            print("  {!r:25s}: {}".format('    dtype', feats_max_min[key]["dtype"]))
     if not print_features:
         print('Number of variables in dataset is too numerous to print...skipping print')
     ##### Save the variable changes back to the variable type dictionary ##
@@ -716,11 +715,24 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     var_df1['bools'] = bools
     #### It is better to have a baseline number for the size of the dataset here ########
     feats_max_min['DS_LEN'] = len(data_sample)
+    feats_max_min["predictors_in_train"] = preds
+    print('    after data cleaning, number of predictors used in modeling = %s' %len(preds))
     ### check if cat_vocab_dict has cat_feature_cross_flag in it ###
     if "cat_feature_cross_flag" in model_options.keys():
-        ### Since they have asked to do cat feature crossing, then do it ####
-        model_options["cat_feature_cross_flag"] = cat_feature_cross_flag
-        print('performing feature crossing for %s variables' %cat_feature_cross_flag)
+        ### If they mistakenly type it as cat_feature_cross_flag then use it ####
+        if model_options["cat_feature_cross_flag"]:
+            model_options["cat_feat_cross_flag"] = cat_feature_cross_flag
+            print('performing feature crossing for %s variables' %cat_feature_cross_flag)
+        else:
+            model_options["cat_feat_cross_flag"] = ""
+            print('Not performing feature crossing for categorical nor integer variables' )
+    elif "cat_feat_cross_flag" in model_options.keys():
+        if model_options["cat_feat_cross_flag"]:
+            model_options["cat_feat_cross_flag"] = cat_feature_cross_flag
+            print('performing feature crossing for %s variables' %cat_feature_cross_flag)
+        else:
+            model_options["cat_feat_cross_flag"] = ""
+            print('Not performing feature crossing for categorical nor integer variables' )
     else:
         ### If there is no input for cat_feature_cross_flag, then don't do it ###
         cat_feature_cross_flag = ""
@@ -1140,14 +1152,15 @@ def fast_classify_features(df):
                 len(bincols), len(catcols), len(highcols), len(numcols)))
     ###   Check if worth doing cat_feature_cross_flag on this dataset ###
     int_dict['floats'] = float_list
-    print('Distribution of floats: floats = %d' %len(float_list))
-    print('Data Transformation Advisory:')
+    print('Distribution of floats:')
+    print('    number float variables = %d' %len(float_list))
     cat_feature_cross_flag = []
     if len(str_dict['bincols']+str_dict['catcols']) > 2 and len(str_dict['bincols']+str_dict['catcols']) <= 10:
         cat_feature_cross_flag.append("cat")
     if len(int_dict['bincols']+int_dict['catcols']) > 2 and len(int_dict['bincols']+int_dict['catcols']) <= 10:
         cat_feature_cross_flag.append("num")
     if cat_feature_cross_flag:
+        print('Data Transformation Advisory:')
         if "cat" in cat_feature_cross_flag:
             cat_feature_cross_flag = "cat"
             print('    performing categorical feature crosses: changed cat_feat_cross_flag to "cat"')
@@ -1158,8 +1171,9 @@ def fast_classify_features(df):
             cat_feature_cross_flag = "both"
             print('    performing both integer and cat feature crosses: changed cat_feat_cross_flag to "both" ')
     else:
+        print('No data transformations needed in this dataset')
         cat_feature_cross_flag = ""
     if len(int_dict['veryhighcats']) > 0:
-        print('    transformed %s from integer to float' %int_dict['veryhighcats'])
+        print('    we transformed %s from integer to float' %int_dict['veryhighcats'])
     return str_dict, int_dict, cat_feature_cross_flag
 ###################################################################################################

@@ -710,7 +710,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
         ### Set the learning rate for the best optimizer here ######
         print('\nSetting best optimizer %s its best learning_rate = %s' %(hpq_optimizer, optimizer_lr))
         K.set_value(best_optimizer.learning_rate, optimizer_lr)
-
+        
         ##### This is the simplest way to convert a sequential model to functional model!
         if regular_body:
             storm_outputs = add_outputs_to_model_body(best_model, meta_outputs)

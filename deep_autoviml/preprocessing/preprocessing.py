@@ -37,6 +37,7 @@ from deep_autoviml.data_load.classify_features import find_remove_duplicates
 # Utils
 from deep_autoviml.utilities.utilities import get_model_defaults
 from deep_autoviml.utilities.utilities import get_hidden_layers
+from deep_autoviml.utilities.utilities import check_model_options
 
 ############################################################################################
 # TensorFlow ≥2.4 is required
@@ -101,7 +102,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     num_labels = model_options["num_labels"]
     modeltype = model_options["modeltype"]
     embedding_size = model_options["embedding_size"]
-    cat_feat_cross_flag = model_options["cat_feat_cross_flag"]
+    cat_feat_cross_flag = check_model_options(model_options,"cat_feat_cross_flag", False)
     targets = cat_vocab_dict["target_variables"]
     preds = cat_vocab_dict["predictors_in_train"]
     ############  This is where you get all the classified features ########
@@ -223,12 +224,13 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                 #### If there are NLP vars in dataset, you must combine the nlp_outputs ##
                 if len(nlps) > 0:
                     merged = [wide, deep, embedding]
+                    print('    %s combined wide, deep and nlp outputs successfully...' %keras_model_type)
                 else:
                     merged = [wide, deep]
                 # = layers.Bidirectional(layers.LSTM(dense_layer1, dropout=0.3, recurrent_dropout=0.3,
                 #                                    return_sequences=False, batch_size=batch_size,
                 #                                    kernel_regularizer=regularizers.l2(0.01)))(x)
-                print('    %s model loaded and compiled successfully...' %keras_model_type)
+                    print('    %s combined wide and deep  successfully...' %keras_model_type)
                 return nlp_inputs, meta_inputs, merged, embedding
     else:
         meta_inputs = []

@@ -961,7 +961,10 @@ def add_outputs_to_auto_model_body(model_body, meta_outputs, nlp_flag=False):
             final_outputs = each_layer(deep)
         else:
             final_outputs = each_layer(final_outputs)
-    model_body = layers.concatenate([wide, final_outputs], name='auto_concatenate_layer')
+    if nlp_flag:
+        model_body = layers.concatenate([nlp_outputs, wide, final_outputs], name='auto_concatenate_layer')
+    else:
+        model_body = layers.concatenate([wide, final_outputs], name='auto_concatenate_layer')
     return model_body
 #################################################################################
 def add_outputs_to_model_body(model_body, meta_outputs):
@@ -992,6 +995,16 @@ def check_keras_options(keras_options, name, default):
     try:
         if keras_options[name]:
             value = keras_options[name]
+        else:
+            value = default
+    except:
+        value = default
+    return value
+#####################################################################################
+def check_model_options(model_options, name, default):
+    try:
+        if model_options[name]:
+            value = model_options[name]
         else:
             value = default
     except:

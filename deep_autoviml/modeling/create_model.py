@@ -36,6 +36,7 @@ from deep_autoviml.modeling.train_custom_model import return_optimizer
 # Utils
 from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_uncompiled_model
 from deep_autoviml.utilities.utilities import get_model_defaults, check_keras_options
+from deep_autoviml.utilities.utilities import check_model_options
 from deep_autoviml.utilities.utilities import get_compiled_model, add_outputs_to_model_body
 from deep_autoviml.utilities.utilities import get_hidden_layers
 ############################################################################################

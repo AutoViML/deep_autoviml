@@ -117,7 +117,9 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
     nlp_col_names = []
     nlp_columns = var_df['nlp_vars']
     nlp_columns =  list(set(nlp_columns))
-    fast_models = ['fast','deep_and_wide','deep_wide','wide_deep',
+    fast_models = ['fast']
+
+    fast_models1 = ['deep_and_wide','deep_wide','wide_deep',
                     'wide_and_deep','deep wide', 'wide deep', 'fast1',
                     'deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
 
@@ -141,7 +143,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
             print('    sequence length = %s' %seq_tokens_zip[each_name])
             vocab_size = cat_vocab_dict[each_name]['size_of_vocab']
             vocab_train_small += cat_vocab_dict[each_name]['vocab']
-            vocab_train_small = np.unique(vocab_train_small)
+            vocab_train_small = np.unique(vocab_train_small).tolist()
             best_embedding_size = closest(lst, vocab_size//4000)
             print('    recommended embedding_size = %s' %best_embedding_size)
             input_embedding_size = check_model_options(model_options, "embedding_size", best_embedding_size)
@@ -209,7 +211,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=False, name='USE_encoder')
         print(f'    {bert_model_name} selected: {tfhub_handle_encoder}')
         print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')
-    elif keras_model_type.lower() in ["nnlm"]:
+    elif keras_model_type.lower() in fast_models1:
         bert_model_name = "NNLM 50 with Normalization"
         tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
         hub_layer = hub.KerasLayer(tfhub_handle_encoder,
@@ -248,13 +250,10 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
                        input_shape=[],
                        dtype=tf.string, trainable=False, name="NNLM50_encoder")
         print(f'    {bert_model_name} selected from: {tfhub_handle_encoder}')
-
+    
     #### Next, we add an NLP layer to map those vocab indices into a space of dimensionality
     #### Vocabulary size defines how many unique words you think might be in that training data
     ### Sequence length defines how we should convert each word into a sequence of integers of fixed length
-    max_features = vocab_size = max_tokens_zip[nlp_column]
-    sequence_length = maximum_sequence_length
-    embedding_dim = embed_tokens_zip[nlp_column]
 
     #### Now let us process all NLP columns by using embeddings from Keras ####
     ###### A string input for each string column ###############################
@@ -273,7 +272,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
             x = vectorize_layer(nlp_input)
             x = layers.Embedding(max_features+1, embedding_dim, input_length=sequence_length, name=nlp_column+'_embedding')(x)
             x = Flatten()(x)
-        elif keras_model_type.lower() in ['nnlm','nlnm']:
+        elif keras_model_type.lower() in fast_models1:
             ### this is for AUTO models. You use NNLM or NLNM to embed NLP columns fast ####
             nlp_input = tf.keras.Input(shape=(), dtype=tf.string, name=nlp_column)
             x = hub_layer(nlp_input)
