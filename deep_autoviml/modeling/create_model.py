@@ -38,7 +38,8 @@ from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_uncompile
 from deep_autoviml.utilities.utilities import get_model_defaults, check_keras_options
 from deep_autoviml.utilities.utilities import check_model_options
 from deep_autoviml.utilities.utilities import get_compiled_model, add_outputs_to_model_body
-from deep_autoviml.utilities.utilities import get_hidden_layers
+from deep_autoviml.utilities.utilities import get_hidden_layers, add_outputs_to_auto_model_body
+
 ############################################################################################
 # TensorFlow ≥2.4 is required
 import tensorflow as tf
@@ -146,6 +147,10 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
     #### These can be standard for every keras option that you use layers ######
     kernel_initializer = check_keras_options(keras_options, 'kernel_initializer', 'glorot_uniform')
     activation='relu'
+    if nlp_inputs:
+        nlp_flag = True
+    else:
+        nlp_flag = False
 
     ##############  S E T T I N G    U P  DEEP_WIDE, DEEP_CROSS, FAST MODELS    ########################
     cats = var_df['categorical_vars']  ### these are low cardinality vars - you can one-hot encode them ##
@@ -275,7 +280,10 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
             ###### You have to do this for all prebuilt models ####################
             if keras_model_type.lower() in prebuilt_models:
                 print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
-                model_body = add_outputs_to_model_body(model_body, meta_outputs)
+                if not isinstance(meta_outputs, list):
+                    model_body = add_outputs_to_model_body(model_body, meta_outputs)
+                else:
+                    model_body = add_outputs_to_auto_model_body(model_body, meta_outputs, nlp_flag)
                 #### This final outputs is the one that is taken into final dense layer and compiled
                 print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
             if keras_model_type.lower() in fast_models:
@@ -375,7 +383,10 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                     model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
                                               activity_regularizer=tf.keras.regularizers.l2(0.01)))
                 print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
-                model_body = add_outputs_to_model_body(model_body, meta_outputs)
+                if not isinstance(meta_outputs, list):
+                    model_body = add_outputs_to_model_body(model_body, meta_outputs)
+                else:
+                    model_body = add_outputs_to_auto_model_body(model_body, meta_outputs, nlp_flag)
                 #### This final outputs is the one that is taken into final dense layer and compiled
         else:
             try:
@@ -389,7 +400,10 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                 model_body = Sequential([layers.Dense(dense_layer1, activation='relu')])
             ############   This is what you need to add to pre-built model body shells ###
             print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
-            model_body = add_outputs_to_model_body(model_body, meta_outputs)
+            if not isinstance(meta_outputs, list):
+                model_body = add_outputs_to_model_body(model_body, meta_outputs)
+            else:
+                model_body = add_outputs_to_auto_model_body(model_body, meta_outputs, nlp_flag)
             #### This final outputs is the one that is taken into final dense layer and compiled
             print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
     else:
@@ -397,7 +411,10 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
         model_body = use_my_model
         ############   This is what you need to add to pre-built model body shells ###
         print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
-        model_body = add_outputs_to_model_body(model_body, meta_outputs)
+        if not isinstance(meta_outputs, list):
+            model_body = add_outputs_to_model_body(model_body, meta_outputs)
+        else:
+            model_body = add_outputs_to_auto_model_body(model_body, meta_outputs, nlp_flag)
         #### This final outputs is the one that is taken into final dense layer and compiled
         print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
     #############  You need to compile the non-auto models here ###############

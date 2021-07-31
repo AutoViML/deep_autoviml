@@ -806,12 +806,13 @@ def get_model_defaults(keras_options, model_options, targets):
         num_predicts = 1*num_labels
         if num_labels <= 1:
             val_loss = check_keras_options(keras_options,'loss', reg_loss)
+            val_metric = 'rmse'
         else:
             val_loss = []
             for i in range(num_labels):
                 val_loss.append(reg_loss)
+            val_metric = 'loss'
         ####### If you change the val_metrics above, you must also change its name here ####
-        val_metric = 'rmse'
         output_activation = 'linear' ### use "relu" or "softplus" if you want positive values as output
     elif modeltype == 'Classification':
         ##### This is for Binary Classification Problems

@@ -932,6 +932,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
 
     ######## Check for NaN in predictions ###############################
     if check_for_nan_in_array(y_probas):
+        pdb.set_trace()
         y_probas = pd.DataFrame(y_probas).fillna(0).values
     elif check_for_nan_in_array(y_test_preds):
         y_test_preds = pd.DataFrame(y_test_preds).fillna(0).values.ravel()

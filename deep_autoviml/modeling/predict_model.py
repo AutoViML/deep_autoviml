@@ -424,102 +424,31 @@ def predict(model_or_model_path, project_name, test_dataset,
     print('    number of steps needed to predict: %d' %num_steps)
     y_test_preds_list = []
     targets = cat_vocab_dict2['target_variables']
-    ########  This is where we start predictions on test data set ##############
-    try:
-        y_probas = model.predict(test_ds, steps=num_steps)[:DS_LEN,:]
-        if len(targets) == 1:
-            y_test_preds_list.append(y_probas)
-        else:
-            y_test_preds_list = copy.deepcopy(y_probas)
-    except Exception as error:
-        print('Could not predict using given model and inputs.\nError: %s\n Please check your inputs and try again.' %error)
-        return y_test_preds_list
-
     ##### Now you need to save the predictions ###
     modeltype = cat_vocab_dict2['modeltype']
+    num_labels = cat_vocab_dict2['num_labels']
+    num_classes = cat_vocab_dict2['num_classes']    
+    ####### save the predictions only upto input size ###
+    ########  This is where we start predictions on test data set ##############
+    try:
+        y_probas = model.predict(test_ds, steps=num_steps)
+    except:
+        print('predictions from model erroring. Check your model and test data and retry again.')
+        return
+    ######  Now convert the model predictions into classes #########
+    try:
+        y_test_preds_list = convert_predictions_from_model(y_probas, cat_vocab_dict2, DS_LEN)
+    except:
+        print('Converting model predictions into classes or other forms is erroring. Convert it yourself.')
+        return y_probas
 
-    if len(targets) == 1:
-        if modeltype != 'Regression':
-            y_test_preds = y_probas.argmax(axis=1)
-        else:
-            y_test_preds = y_probas.ravel()
-    else:
-        if modeltype != 'Regression':
-            #### This is for multi-label binary or multi-class problems ##
-            for each_t in range(len(targets)):
-                if each_t == 0:
-                    y_test_preds = y_probas[each_t].argmax(axis=1).astype(int)
-                else:
-                    y_test_preds = np.c_[y_test_preds, y_probas[each_t].argmax(axis=1).astype(int)]
-        else:
-            ### This is for Multi-Label Regression ###
-            for each_t in range(len(targets)):
-                if each_t == 0:
-                    y_test_preds = y_probas[each_t].mean(axis=1)
-                else:
-                    y_test_preds = np.c_[y_test_preds, y_probas[each_t].mean(axis=1)]
-
-    ##### Now you have to convert the output to original classes and labels ####
-
-    num_labels = cat_vocab_dict['num_labels']
-    num_classes = cat_vocab_dict['num_classes']
-    if num_labels <= 1:
-        #### This is for Single-Label Problems only ################################
-        if modeltype == 'Regression':
-            y_pred = copy.deepcopy(y_test_preds)
-        else:
-            labels = cat_vocab_dict['original_classes']
-            if cat_vocab_dict['target_transformed']:
-                target_names = cat_vocab_dict['transformed_classes']
-                target_le = cat_vocab_dict['target_le']
-                y_pred = y_probas.argmax(axis=1)
-                y_pred = target_le.inverse_transform(y_pred)
-            else:
-                y_pred = y_probas.argmax(axis=1)
-    else:
-        if modeltype == 'Regression':
-            #### This is for Multi-Label Regression ################################
-            y_pred = copy.deepcopy(y_test_preds)
-        else:
-            #### This is for Multi-Label Classification ################################
-            try:
-                for i, each_target in enumerate(targets):
-                    labels = cat_vocab_dict[each_target+'_original_classes']
-                    if cat_vocab_dict['target_transformed']:
-                        ###### Use a nice classification matrix printing module here #########
-                        target_names = cat_vocab_dict[each_target+'_transformed_classes']
-                        target_le = cat_vocab_dict['target_le'][i]
-                        y_pred_trans = y_probas[i].argmax(axis=1)
-                        y_pred_trans = target_le.inverse_transform(y_pred_trans)
-                        if i == 0:
-                            y_pred = copy.deepcopy(y_pred_trans)
-                        else:
-                            y_pred = np.c_[y_pred, y_pred_trans]
-                    else:
-                        y_pred_trans = y_probas[i].argmax(axis=1)
-                        if i == 0:
-                            y_pred = copy.deepcopy(y_pred_trans)
-                        else:
-                            y_pred = np.c_[y_pred, y_pred_trans]
-            except:
-                print('Error in inverse transforming predictions...')
-                y_pred = y_test_preds
-
-    #### save the predictions only upto input size ###
-    if num_labels <= 1:
-        y_test_preds = y_pred[:DS_LEN]
-    else:
-        y_test_preds = y_pred[:DS_LEN,:]
-
-    ###### Now collect the predictions if there are more than one target ###
-    y_test_preds_list.append(y_test_preds)
 
     #####  We now show how many items are in the output  ###################
     print('Returning model predictions in form of a list...of length %d' %len(y_test_preds_list))
     print('Time taken in mins for predictions = %0.0f' %((time.time()-start_time2)/60))
     return y_test_preds_list
 ############################################################################################
-def convert_predictions_from_model(y_probas, cat_vocab_dict):
+def convert_predictions_from_model(y_probas, cat_vocab_dict, DS_LEN):
     y_test_preds_list = []
     target = cat_vocab_dict['target_variables']
     modeltype = cat_vocab_dict["modeltype"]
@@ -535,19 +464,23 @@ def convert_predictions_from_model(y_probas, cat_vocab_dict):
             print('    Sample predictions before inverse_transform: %s' %y_test_preds[:5])
             if cat_vocab_dict["target_transformed"]:
                 try:
-                    y_test_preds_t = cat_vocab_dict['target_le'].inverse_transform(y_test_preds)
-                    print('    Sample predictions after inverse_transform: %s' %y_test_preds_t[:5])
+                    y_test_preds = cat_vocab_dict['target_le'].inverse_transform(y_test_preds)
+                    print('    Sample predictions after inverse_transform: %s' %y_test_preds[:5])
+                    y_test_preds_t = y_test_preds[:DS_LEN]
                     y_test_preds_list.append(y_test_preds_t)
                 except:
                     print('    Inverse transform erroring. Continuing...')
-                    y_test_preds_list.append(y_test_preds)
+                    y_test_preds_t = y_test_preds[:DS_LEN]
+                    y_test_preds_list.append(y_test_preds_t)
             else:
                 print('    Sample predictions after transform: %s' %y_test_preds[:5])
-                y_test_preds_list.append(y_test_preds)
+                y_test_preds_t = y_test_preds[:DS_LEN]
+                y_test_preds_list.append(y_test_preds_t)
         else:
             #### This is for Single Label regression problems ######
             y_test_preds = y_probas.ravel()
-            y_test_preds_list.append(y_test_preds)
+            y_test_preds_t = y_test_preds[:DS_LEN]
+            y_test_preds_list.append(y_test_preds_t)
     else:
         if modeltype == 'Regression':
             y_test_preds_list.append(y_probas)
@@ -557,24 +490,45 @@ def convert_predictions_from_model(y_probas, cat_vocab_dict):
                         y_test_preds = y_probas[each_t].mean(axis=1)
                 else:
                         y_test_preds = np.c_[y_test_preds, y_probas[each_t].mean(axis=1)]
-                y_test_preds_list.append(y_test_preds)
+                y_test_preds_t = y_test_preds[:DS_LEN]
+                y_test_preds_list.append(y_test_preds_t)
         else:
+            y_preds = []
             #### This is Multi-Label Classification problems ######
             y_test_preds_list.append(y_probas)
-            print('Multi-Label Predictions shape:%s' %(y_probas.shape,))
+            ### in Multi-Label predictions, output is a list if loading test datafile or dataframe ##
+            if isinstance(y_probas, list):
+                print('Multi-Label Predictions has %s outputs' %len(y_probas))
+            else:
+                print('Multi-Label Predictions shape:%s' %(y_probas.shape,))
             for each_t in range(len(y_probas)):
-                y_test_preds_t = y_probas[each_t].argmax(axis=1)
-                print('    Sample predictions for label: %s before transform: %s' %(each_t, y_test_preds_t[:5]))
+                y_test_preds = y_probas[each_t].argmax(axis=1)
+                print('    Sample predictions for label: %s before transform: %s' %(each_t, y_test_preds[:5]))
                 if cat_vocab_dict["target_transformed"]:
                     try:
-                        y_test_preds_t = cat_vocab_dict[each_target]['target_le'].inverse_transform(
-                                                y_test_preds_t)
-                        print('    Sample predictions after inverse_transform: %s' %y_test_preds_t[:5])
+                        y_test_preds = cat_vocab_dict[each_target]['target_le'].inverse_transform(
+                                                y_test_preds)
+                        print('    Sample predictions after inverse_transform: %s' %y_test_preds[:5])
+                        if each_t == 0:
+                            y_preds = y_test_preds
+                        else:
+                            y_preds = np.c_[y_preds, y_test_preds]
+                        y_test_preds_t = y_preds[:DS_LEN,:]
                         y_test_preds_list.append(y_test_preds_t)
                     except:
                         print('    Inverse transform erroring. Continuing...')
+                        if each_t == 0:
+                            y_preds = y_test_preds
+                        else:
+                            y_preds = np.c_[y_preds, y_test_preds]
+                        y_test_preds_t = y_preds[:DS_LEN]
                         y_test_preds_list.append(y_test_preds_t)
                 else:
+                    if each_t == 0:
+                        y_preds = y_test_preds
+                    else:
+                        y_preds = np.c_[y_preds, y_test_preds]
+                    y_test_preds_t = y_preds[:DS_LEN]
                     y_test_preds_list.append(y_test_preds_t)
     return y_test_preds_list
 ###########################################################################################

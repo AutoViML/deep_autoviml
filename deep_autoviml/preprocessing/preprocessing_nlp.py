@@ -85,7 +85,7 @@ def left_subtract(l1,l2):
             lst.append(i)
     return lst
 ##############################################################################################
-
+import os
 ###########################################################################################
 # We remove punctuations and HTMLs from tweets. This is done in a function,
 # so that it can be passed as a parameter to the TextVectorization object.
@@ -178,6 +178,10 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         tf_hub = True
     ##### This is where we use different pre-trained models to create word and sentence embeddings ##
     if keras_model_type.lower() in ['bert']:
+        print('Loading %s model this will take time...' %keras_model_type)
+        if os.name == 'nt':
+            tfhub_path = os.path.join(keras_model_type, 'tf_cache')
+            os.environ['TFHUB_CACHE_DIR'] = tfhub_path
         if tf_hub:
             tfhub_handle_encoder = model_options['tf_hub_model']
             try:
@@ -195,28 +199,33 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         print(f'    {bert_model_name} selected: {tfhub_handle_encoder}')
         print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')
     elif keras_model_type.lower() in ["use"]:
+        print('Loading %s model this will take time...' %keras_model_type)
+        if os.name == 'nt':
+            tfhub_path = os.path.join(keras_model_type, 'tf_cache')
+            os.environ['TFHUB_CACHE_DIR'] = tfhub_path
         if tf_hub:
+            bert_model_name = "USE given"
             tfhub_handle_encoder = model_options['tf_hub_model']
-            try:
-                bert_model_name = map_hub_to_name[tfhub_handle_encoder]
-                tfhub_handle_preprocess = map_name_to_preprocess[bert_model_name]
-            except:
-                bert_model_name = 'Universal_Sentence_Encoder_given_as_input'
-                tfhub_handle_preprocess = "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3"
         else:
-            bert_model_name = "Universal Sentence Encoder"
-            tfhub_handle_preprocess = "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3"
-            tfhub_handle_encoder = 'https://tfhub.dev/google/universal-sentence-encoder-cmlm/en-base/1'
-        preprocessor = hub.KerasLayer(tfhub_handle_preprocess, name='USE_preprocessing')
-        encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=False, name='USE_encoder')
+            bert_model_name = "Universal Sentence Encoder4"
+            tfhub_handle_encoder = "https://tfhub.dev/google/universal-sentence-encoder/4"
+        encoder = hub.KerasLayer(tfhub_handle_encoder, 
+                       input_shape=[],
+                       dtype=tf.string, 
+                        trainable=True, name='USE4_encoder')
         print(f'    {bert_model_name} selected: {tfhub_handle_encoder}')
-        print(f'    Preprocessor auto-selected: {tfhub_handle_preprocess}')
     elif keras_model_type.lower() in fast_models1:
-        bert_model_name = "NNLM 50 with Normalization"
-        tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
+        bert_model_name = "fast NNLM 50 with Normalization"
+        if os.name == 'nt':
+            tfhub_path = os.path.join(keras_model_type, 'tf_cache')
+            os.environ['TFHUB_CACHE_DIR'] = tfhub_path
+            tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
+        else:
+            tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
         hub_layer = hub.KerasLayer(tfhub_handle_encoder,
                        input_shape=[],
-                       dtype=tf.string, trainable=False, name="NNLM50_encoder")
+                       dtype=tf.string, 
+                       trainable=False, name="NNLM50_encoder")
         print(f'    {bert_model_name} selected from: {tfhub_handle_encoder}')
     elif keras_model_type.lower() in fast_models:
         #### For fast models you just use Vectorization and Embedding that's all #######
@@ -240,9 +249,14 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         ####  This is for auto model option. You can ignore their models in tfhub in that case
         #### If they give the default NLP or text as input, then we would use a default model.
         #bert_model_name = 'Swivel_20_model'
-        bert_model_name = "NNLM 50 with Normalization"
+        bert_model_name = "Auto NNLM 50 with Normalization"
         #tfhub_handle_encoder = "https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1"
-        tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
+        if os.name == 'nt':
+            tfhub_path = os.path.join(keras_model_type, 'tf_cache')
+            os.environ['TFHUB_CACHE_DIR'] = tfhub_path
+            tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
+        else:
+            tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
         #hub_layer = hub.KerasLayer(tfhub_handle_encoder, output_shape=[20],
         #               input_shape=[],
         #               dtype=tf.string, trainable=False, name="Swivel_encoder")
@@ -266,7 +280,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         elif keras_model_type.lower() in ["use"]:
             nlp_input = tf.keras.layers.Input(shape=(), dtype=tf.string, name=nlp_column)
             ### You need to do some special pre-processing if it is a BERT model
-            x = encoder(preprocessor(nlp_input))["default"]
+            x = encoder(nlp_input)
         elif keras_model_type.lower() in fast_models:
             nlp_input = tf.keras.Input(shape=(), dtype=tf.string, name=nlp_column)
             x = vectorize_layer(nlp_input)
