@@ -566,7 +566,9 @@ def predict_images(test_image_dir, model_or_model_path, cat_vocab_dict, keras_mo
                           image_size=(img_height, img_width),
                           batch_size=batch_size)
             y_probas = model_loaded.predict(test_ds)
-            pred_label = convert_predictions_from_model(y_probas, cat_vocab_dict)
+            ### DS_LEN for image directories rarely exceeds 10000 so just set this as default ##
+            DS_LEN = 10000
+            pred_label = convert_predictions_from_model(y_probas, cat_vocab_dict, DS_LEN)
             return pred_label
     else:
         print('Error: test_image_dir should be either a directory containining test folder or a single JPG or PNG image file')
@@ -601,7 +603,7 @@ def predict_text(test_text_dir, model_or_model_path, cat_vocab_dict, keras_model
             #########  See if you can predict here if not return the null result #####
             print('    number of steps needed to predict: %d' %num_steps)
             y_probas = model_loaded.predict(test_ds, steps=num_steps)
-            pred_label = convert_predictions_from_model(y_probas, cat_vocab_dict)
+            pred_label = convert_predictions_from_model(y_probas, cat_vocab_dict, DS_LEN)
             return pred_label
         else:
             try:
@@ -613,7 +615,12 @@ def predict_text(test_text_dir, model_or_model_path, cat_vocab_dict, keras_model
                           seed=111,
                           batch_size=batch_size)
             y_probas = model_loaded.predict(test_ds)
-            pred_label = convert_predictions_from_model(y_probas, cat_vocab_dict)
+            try:
+                DS_LEN = cat_vocab_dict['DS_LEN']
+            except:
+                ### just set up a default number 10,000
+                DS_LEN =  10000
+            pred_label = convert_predictions_from_model(y_probas, cat_vocab_dict, DS_LEN)
             return pred_label
     else:
         print('Error: test_text_dir should be either a directory containining test folder or a single .txt file')
