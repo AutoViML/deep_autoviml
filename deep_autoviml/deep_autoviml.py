@@ -246,7 +246,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                                             project_name, save_model_flag)
         print(deep_model.summary())
         return deep_model, cat_vocab_dict
-    elif keras_model_type.lower() in ['text', 'nlp', 'nnlm', 'nlnm', 'text classification', "text_classification"]:
+    elif keras_model_type.lower() in ['text', 'text classification', "text_classification"]:
         ###############   Now do special image processing here ###################################
         with my_strategy.scope():
             text_alt = True ### This means you use the text directory option

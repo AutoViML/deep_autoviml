@@ -180,7 +180,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     ##################  All other Features are Proprocessed Here  ################
     fast_models = ['fast','deep_and_wide','deep_wide','wide_deep',
                     'wide_and_deep','deep wide', 'wide deep', 'fast1',
-                    'deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
+                    'deep_and_cross', 'deep_cross', 'deep cross', 'fast2',"text"]
     ##############################################################################
     meta_outputs = []
     print('Preprocessing non-NLP layers for %s Keras model...' %keras_model_type)

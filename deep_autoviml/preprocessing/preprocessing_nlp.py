@@ -227,6 +227,19 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
                        dtype=tf.string, 
                        trainable=False, name="NNLM50_encoder")
         print(f'    {bert_model_name} selected from: {tfhub_handle_encoder}')
+    elif keras_model_type.lower() in ["nlp"]:
+        bert_model_name = "Swivel-20"
+        if os.name == 'nt':
+            tfhub_path = os.path.join(keras_model_type, 'tf_cache')
+            os.environ['TFHUB_CACHE_DIR'] = tfhub_path
+            tfhub_handle_encoder = 'https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1'
+        else:
+            tfhub_handle_encoder = 'https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1'
+        hub_layer = hub.KerasLayer(tfhub_handle_encoder,
+                       input_shape=[],
+                       dtype=tf.string, 
+                       trainable=False, name="Swivel20_encoder")
+        print(f'    {bert_model_name} selected from: {tfhub_handle_encoder}')
     elif keras_model_type.lower() in fast_models:
         #### For fast models you just use Vectorization and Embedding that's all #######
         # Use the text vectorization layer to normalize, split, and map strings to

@@ -656,7 +656,10 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     var_df1['nlp_vars'].append(key)
                 #### Now let's calculate some statistics on this NLP variable ###
                 num_rows_in_data = model_options['DS_LEN']
-                vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast))
+                try:
+                    vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast))
+                except:
+                    vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast).values)
                 vocab = np.unique(vocab).tolist()
                 feats_max_min[key]["vocab"] = vocab
                 try:
