@@ -108,8 +108,12 @@ def classify_features(dfte, depVar, model_options={}, verbose=0):
     else:
         orig_preds = [x for x in list(dfte) if x not in [depVar]]
     #################    CLASSIFY  COLUMNS   HERE    ######################
+    preds_copy_copy = copy.deepcopy(orig_preds)
+    for key in preds_copy_copy:
+        if len(dfte[key].map(type).value_counts()) > 1:
+            print('Alert! %s has %d mixed data types: %s ' %(key,len(dfte[key].map(type).value_counts()),
+                                                dfte[key].map(type).value_counts().index))
     var_df = classify_columns(dfte[orig_preds], model_options, verbose)
-
     #####       Classify Columns   ################
     IDcols = var_df['id_vars']
     nlp_vars = var_df['nlp_vars']
@@ -641,47 +645,48 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                 elif key in discrete_strings:
                     discrete_strings.remove(key)
                     var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
-            if np.mean(data_sample[key].fillna("missing").map(len)) >= nlp_char_limit:
-                ### This is for NLP variables. You want to remove duplicates #####
-                if key in dates:
-                    continue
-                elif key in cats:
-                    cats.remove(key)
-                    var_df1['categorical_vars'] = cats
-                elif key in discrete_strings:
-                    discrete_strings.remove(key)
-                    var_df1['discrete_string_vars'] = discrete_strings
-                print('%s is detected and will be treated as an NLP variable' %key)
-                if key not in var_df1['nlp_vars']:
-                    var_df1['nlp_vars'].append(key)
-                #### Now let's calculate some statistics on this NLP variable ###
-                num_rows_in_data = model_options['DS_LEN']
-                try:
-                    vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast))
-                except:
-                    vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast).values)
-                vocab = np.unique(vocab).tolist()
-                feats_max_min[key]["vocab"] = vocab
-                try:
-                    feats_max_min[key]['seq_length'] = int(data_sample[key].fillna("missing").map(len).max())
-                    num_words_in_each_row = data_sample[key].fillna("missing").map(lambda x: len(x.split(" "))).mean()
-                    feats_max_min[key]['size_of_vocab'] = int(num_rows_in_data*num_words_in_each_row)
-                except:
-                    feats_max_min[key]['seq_length'] = len(vocab) // num_rows_in_data
-                    feats_max_min[key]['size_of_vocab'] = len(vocab)
-            else:
-                ### This is for string variables ########
-                ####  Now we select features if they are present in the data set ###
-                num_rows_in_data = model_options['DS_LEN']
-                if data_sample[key].isnull().sum() > 0:
-                    vocab = data_sample[key].fillna("missing").unique().tolist()
+            if not key in ignore_variables:
+                if np.mean(data_sample[key].fillna("missing").map(len)) >= nlp_char_limit:
+                    ### This is for NLP variables. You want to remove duplicates #####
+                    if key in dates:
+                        continue
+                    elif key in cats:
+                        cats.remove(key)
+                        var_df1['categorical_vars'] = cats
+                    elif key in discrete_strings:
+                        discrete_strings.remove(key)
+                        var_df1['discrete_string_vars'] = discrete_strings
+                    print('%s is detected and will be treated as an NLP variable' %key)
+                    if key not in var_df1['nlp_vars']:
+                        var_df1['nlp_vars'].append(key)
+                    #### Now let's calculate some statistics on this NLP variable ###
+                    num_rows_in_data = model_options['DS_LEN']
+                    try:
+                        vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast))
+                    except:
+                        vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast).values)
+                    vocab = np.unique(vocab).tolist()
+                    feats_max_min[key]["vocab"] = vocab
+                    try:
+                        feats_max_min[key]['seq_length'] = int(data_sample[key].fillna("missing").map(len).max())
+                        num_words_in_each_row = data_sample[key].fillna("missing").map(lambda x: len(x.split(" "))).mean()
+                        feats_max_min[key]['size_of_vocab'] = int(num_rows_in_data*num_words_in_each_row)
+                    except:
+                        feats_max_min[key]['seq_length'] = len(vocab) // num_rows_in_data
+                        feats_max_min[key]['size_of_vocab'] = len(vocab)
                 else:
-                    vocab = data_sample[key].unique().tolist()
-                vocab = np.unique(vocab).tolist()
-                #vocab = ['missing' if type(x) != str  else x for x in vocab]
-                feats_max_min[key]["vocab"] = vocab
-                feats_max_min[key]['size_of_vocab'] = len(vocab)
-                feats_max_min[key]['seq_length'] = len(vocab) // num_rows_in_data
+                    ### This is for string variables ########
+                    ####  Now we select features if they are present in the data set ###
+                    num_rows_in_data = model_options['DS_LEN']
+                    if data_sample[key].isnull().sum() > 0:
+                        vocab = data_sample[key].fillna("missing").unique().tolist()
+                    else:
+                        vocab = data_sample[key].unique().tolist()
+                    vocab = np.unique(vocab).tolist()
+                    #vocab = ['missing' if type(x) != str  else x for x in vocab]
+                    feats_max_min[key]["vocab"] = vocab
+                    feats_max_min[key]['size_of_vocab'] = len(vocab)
+                    feats_max_min[key]['seq_length'] = len(vocab) // num_rows_in_data
         else:
             ####  Now we treat bool and other variable types ###
             #feats_max_min[key]["vocab"] = data_sample[key].unique()
