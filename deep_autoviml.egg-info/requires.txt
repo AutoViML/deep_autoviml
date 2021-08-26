@@ -1,0 +1,11 @@
+ipython
+jupyter
+tensorflow>=2.4.1
+pandas
+matplotlib
+numpy
+scikit-learn>=0.23.1
+regex
+emoji
+storm-tuner>=0.0.8
+xlrd
