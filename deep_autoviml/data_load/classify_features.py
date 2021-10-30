@@ -661,6 +661,11 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                         var_df1['nlp_vars'].append(key)
                     #### Now let's calculate some statistics on this NLP variable ###
                     num_rows_in_data = model_options['DS_LEN']
+                    if data_sample.shape[0]*data_sample[key].map(len).mean()/1e6 > 1 or data_sample[key].memory_usage(deep=True)/1e6 > 100:
+                        ## number of unique words in a document may be only 10% of the total num of words
+                        ### If this number exceeds 1, it means there are 1 million words in that document
+                        ### Immediately cap the vocab size to 300,000 - don't measure its vocab!!
+                        data_sample = data_sample.sample(frac=0.1, random_state=0)
                     try:
                         vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast))
                     except:

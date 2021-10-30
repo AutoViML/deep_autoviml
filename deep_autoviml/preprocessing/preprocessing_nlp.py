@@ -123,34 +123,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
                     'wide_and_deep','deep wide', 'wide deep', 'fast1',
                     'deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
 
-    lst = [8, 16, 24, 32, 48, 64, 96, 128, 256]
-    #### max_tokens_zip calculate the max number of unique words in a vocabulary ####
-    max_tokens_zip = defaultdict(int)
-    #### seq_tokens_zip calculates the max sequence length in a vocabulary ####
-    seq_tokens_zip = defaultdict(int)
-    #### embed_tokens_zip calculates the embedding dimension for each nlp_column ####
-    embed_tokens_zip = defaultdict(int)
-    nlps_copy = copy.deepcopy(nlp_columns)
-    seq_lengths = []
-    vocab_train_small = []
-    if len(nlps_copy) > 0:
-        for each_name in nlps_copy:
-            print('For nlp column = %s' %each_name)
-            max_tokens_zip[each_name] = cat_vocab_dict[each_name]['size_of_vocab']
-            print('    size of vocabulary = %s' %max_tokens_zip[each_name])
-            seq_tokens_zip[each_name] = cat_vocab_dict[each_name]['seq_length']
-            seq_lengths.append(seq_tokens_zip[each_name])
-            print('    sequence length = %s' %seq_tokens_zip[each_name])
-            vocab_size = cat_vocab_dict[each_name]['size_of_vocab']
-            vocab_train_small += cat_vocab_dict[each_name]['vocab']
-            vocab_train_small = np.unique(vocab_train_small).tolist()
-            best_embedding_size = closest(lst, vocab_size//4000)
-            print('    recommended embedding_size = %s' %best_embedding_size)
-            input_embedding_size = check_model_options(model_options, "embedding_size", best_embedding_size)
-            if input_embedding_size != best_embedding_size:
-                print('    input embedding size given as %d. Overriding recommended embedding_size...' %input_embedding_size)
-                best_embedding_size = input_embedding_size
-            embed_tokens_zip[each_name] = best_embedding_size
+    max_tokens_zip, seq_tokens_zip, embed_tokens_zip, vocab_train_small = aggregate_nlp_dictionaries(nlp_columns, cat_vocab_dict, model_options)
 
     if len(nlp_columns) == 1:
         nlp_column = nlp_columns[0]
@@ -158,10 +131,12 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
         nlp_column = 'combined_nlp_text' ### this is when there are multiple nlp columns ##
 
     ### Find the best sizes for various dimensions here ###########
+    seq_lengths = list(seq_tokens_zip.values())
     maximum_sequence_length = max(seq_lengths)
     ## ideally you should create an unduplicated list of vocabs here and find its size
     ### the vocab_train_small holds the entire vocab of train_small data set!
     max_vocab_size = len(vocab_train_small) + 10
+    best_embedding_size = max(list(embed_tokens_zip.values()))
     print('Max vocab size = %s' %max_vocab_size)
 
     ###### Let us set up the defauls for embedding size and max tokens to process each column
@@ -299,6 +274,11 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
             x = vectorize_layer(nlp_input)
             x = layers.Embedding(max_features+1, embedding_dim, input_length=sequence_length, name=nlp_column+'_embedding')(x)
             x = Flatten()(x)
+        elif keras_model_type.lower() in ["nlp"]:
+            ### this is for NLP models. You use Swivel to embed NLP columns fast ####
+            for each_nlp in nlp_columns:
+                nlp_input = tf.keras.Input(shape=(), dtype=tf.string, name=each_nlp)
+                nlp_inputs.append(nlp_input)
         elif keras_model_type.lower() in fast_models1:
             ### this is for AUTO models. You use NNLM or NLNM to embed NLP columns fast ####
             nlp_input = tf.keras.Input(shape=(), dtype=tf.string, name=nlp_column)
@@ -380,3 +360,41 @@ def encode_NLP_column(train_ds, nlp_column, nlp_input, vocab_size, sequence_leng
     #print(f"    {nlp_column} vocab size = {vocab_size}, sequence_length={sequence_length}")
     return nlp_vectorized
 ################################################################################################
+def aggregate_nlp_dictionaries(nlp_columns, cat_vocab_dict, model_options):
+    """
+    This function aggregates all the dictionaries you need for nlp processing.
+    Just send in a list of nlp variables and a small data sample and it will compute all
+    the seq lengths, embedding_dims and vocabs for each nlp variable in the input list.
+    """
+    lst = [8, 16, 24, 32, 48, 64, 96, 128, 256]
+    #### max_tokens_zip calculate the max number of unique words in a vocabulary ####
+    max_tokens_zip = defaultdict(int)
+    #### seq_tokens_zip calculates the max sequence length in a vocabulary ####
+    seq_tokens_zip = defaultdict(int)
+    #### embed_tokens_zip calculates the embedding dimension for each nlp_column ####
+    embed_tokens_zip = defaultdict(int)
+    #### This carries the 
+    nlps_copy = copy.deepcopy(nlp_columns)
+    seq_lengths = []
+    vocab_train_small = []
+    if len(nlps_copy) > 0:
+        vocab_train_small = []
+        for each_name in nlps_copy:
+            print('Creating aggregate_nlp_dictionaries for nlp column = %s' %each_name)
+            max_tokens_zip[each_name] = cat_vocab_dict[each_name]['size_of_vocab']
+            print('    size of vocabulary = %s' %max_tokens_zip[each_name])
+            seq_tokens_zip[each_name] = cat_vocab_dict[each_name]['seq_length']
+            seq_lengths.append(seq_tokens_zip[each_name])
+            print('    sequence length = %s' %seq_tokens_zip[each_name])
+            vocab_size = cat_vocab_dict[each_name]['size_of_vocab']
+            vocab_train_small += cat_vocab_dict[each_name]['vocab']
+            vocab_train_small = np.unique(vocab_train_small).tolist()
+            best_embedding_size = closest(lst, vocab_size//4000)
+            print('    recommended embedding_size = %s' %best_embedding_size)
+            input_embedding_size = check_model_options(model_options, "embedding_size", best_embedding_size)
+            if input_embedding_size != best_embedding_size:
+                print('    input embedding size given as %d. Overriding recommended embedding_size...' %input_embedding_size)
+                best_embedding_size = input_embedding_size
+            embed_tokens_zip[each_name] = best_embedding_size
+    return max_tokens_zip, seq_tokens_zip, embed_tokens_zip, vocab_train_small
+##################################################################################################

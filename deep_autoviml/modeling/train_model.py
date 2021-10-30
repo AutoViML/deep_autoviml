@@ -426,6 +426,6 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
 ######################################################################################
 from itertools import cycle
 def get_save_folder(save_dir):
-    run_id = time.strftime("model_%Y_%m_%d-%H_%M_%S")
+    run_id = time.strftime("model_%Y_%m_%d_%H_%M_%S")
     return os.path.join(save_dir, run_id)
 ######################################################################################

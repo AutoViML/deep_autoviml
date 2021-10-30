@@ -224,7 +224,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
     fast_models1 = ['deep_and_wide','deep_wide','wide_deep',
                                 'wide_and_deep','deep wide', 'wide deep', 'fast1']
     fast_models2 = ['deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
-    nlp_models = ['bert', 'use', 'text', 'nlp']
+    nlp_models = ['bert', 'use', 'text', 'mixed_nlp']
     #### The Deep and Wide Model is a bit more complicated. So it needs some changes in inputs! ######
     prebuilt_models = ['basic', 'simple', 'default','simple_dnn','sample model',
                         'deep', 'big_deep', 'big deep', 'giant_deep', 'giant deep',

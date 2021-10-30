@@ -425,20 +425,16 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     deep_model = model_body
 
     if dft.shape[1] <= 100 :
-        plot_filename = 'deep_autoviml_'+project_name+'_'+keras_model_type+'_model_before.png'
-        try:
-            tf.keras.utils.plot_model(model = deep_model, to_file=plot_filename, dpi=72,
-                            show_layer_names=True, rankdir="LR", show_shapes=True)
+        plot_filename = save_model_architecture(deep_model, project_name, keras_model_type, cat_vocab_dict,
+                         chart_name="model_before")
+        if plot_filename != "":
             display(Image(retina=True, filename=plot_filename))
-            print('Model plot saved in file: %s' %plot_filename)
-        except:
-            print('Model plot not saved due to error. Continuing...')
     print("""
 #################################################################################
 ###########     T R A I N I N G    K E R A S   M O D E L   H E R E      #########
 #################################################################################
     """)
-    if keras_model_type.lower() == 'auto':
+    if keras_model_type.lower() in ['auto','mixed_nlp']:
         print('Building and training an automatic model using %s Tuner...' %model_options['tuner'])
         deep_model, cat_vocab_dict = train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs,
                                          batched_data, target, keras_model_type, keras_options,
@@ -449,18 +445,42 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         deep_model, cat_vocab_dict = train_model(deep_model, batched_data, target, keras_model_type,
                         keras_options, model_options, var_df, cat_vocab_dict, project_name, save_model_flag, verbose)
     ##########    E N D    O F    S T R A T E G Y    S C O P E   #############
-
     ##### Plot the model again after you have done model search #############
     if dft.shape[1] <= 100 :
-        plot_filename = 'deep_autoviml_'+project_name+'_'+keras_model_type+'_model_after.png'
-        try:
-            tf.keras.utils.plot_model(model = deep_model, to_file=plot_filename, dpi=72,
-                            show_layer_names=True, rankdir="LR", show_shapes=True)
+        plot_filename = save_model_architecture(deep_model, project_name, keras_model_type, cat_vocab_dict,
+                        chart_name="model_after")
+        if plot_filename != "":
             display(Image(retina=True, filename=plot_filename))
-            print('Model plot saved in file: %s' %plot_filename)
-        except:
-            print('Model plot not saved due to error. Continuing...')
-
     distributed_values = (deep_model, cat_vocab_dict)
     return distributed_values
 ############################################################################################
+def save_model_architecture(model, project_name, keras_model_type, cat_vocab_dict, chart_name="model_before"):
+    """
+    This function saves the model architecture in a PNG file in the artifacts sub-folder of project_name folder
+    """
+    if isinstance(project_name,str):
+        if project_name == '':
+            project_name = "deep_autoviml"
+    else:
+        print('Project name must be a string and helps create a folder to store model.')
+        project_name = "deep_autoviml"
+    save_model_path = os.path.join(project_name,keras_model_type)
+    if chart_name != 'model_before':
+        save_model_path = cat_vocab_dict['saved_model_path']
+    #plot_filename = project_name+'_'+keras_model_type+chart_name+'.png'
+    if not os.path.exists(save_model_path):
+        os.makedirs(save_model_path)
+    save_artifacts_path = os.path.join(save_model_path, "artifacts")
+    try:
+        if not os.path.exists(save_artifacts_path):
+            os.makedirs(save_artifacts_path)
+        plot_filename = os.path.join(save_artifacts_path,chart_name)+".png"
+        print('\nSaving model architecture after training in %s...will take time...' %plot_filename)
+        tf.keras.utils.plot_model(model = model, to_file=plot_filename, dpi=72,
+                        show_layer_names=True, rankdir="LR", show_shapes=True)
+        print('Model plot saved in file: %s' %plot_filename)
+    except:
+        print('Model plot not saved due to error. Continuing...')
+        plot_filename = ""
+    return plot_filename
+#########################################################################################################

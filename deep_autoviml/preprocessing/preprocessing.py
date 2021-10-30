@@ -28,11 +28,13 @@ from collections import defaultdict
 ############################################################################################
 # data pipelines and feature engg here
 from deep_autoviml.preprocessing.preprocessing_tabular import preprocessing_tabular
-from deep_autoviml.preprocessing.preprocessing_nlp import preprocessing_nlp
+from deep_autoviml.preprocessing.preprocessing_nlp import preprocessing_nlp, aggregate_nlp_dictionaries
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_auto_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import create_fast_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_all_inputs, create_all_inputs
 from deep_autoviml.data_load.classify_features import find_remove_duplicates
+from deep_autoviml.preprocessing.preprocessing_tabular import encode_nlp_inputs, create_nlp_inputs
+
 
 # Utils
 from deep_autoviml.utilities.utilities import get_model_defaults
@@ -168,12 +170,13 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     nlp_inputs = []
     nlp_names = []
     if len(nlps) > 0:
-        print('Starting NLP string column layer preprocessing...')
-        nlp_inputs, embedding, nlp_names = preprocessing_nlp(train_ds, model_options,
-                                                var_df, cat_vocab_dict,
-                                                keras_model_type, verbose)
-        ### we call nlp_outputs as embedding in this section of the program ####
-        print('    NLP Preprocessing completed.')
+        if not keras_model_type.lower() in ['mixed_nlp']:
+            print('Starting NLP string column layer preprocessing...')
+            nlp_inputs, embedding, nlp_names = preprocessing_nlp(train_ds, model_options,
+                                                    var_df, cat_vocab_dict,
+                                                    keras_model_type, verbose)
+            ### we call nlp_outputs as embedding in this section of the program ####
+            print('    NLP Preprocessing completed.')
     else:
         embedding = []
         print('There are no NLP variables in this dataset for preprocessing...')
@@ -223,7 +226,16 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                 meta_inputs = list(inputs.values()) ### convert input layers to a list
                 #### If there are NLP vars in dataset, you must combine the nlp_outputs ##
                 if len(nlps) > 0:
-                    merged = [wide, deep, embedding]
+                    print('Starting NLP string column layer preprocessing...')
+                    nlp_inputs = create_nlp_inputs(nlps)
+                    max_tokens_zip, seq_tokens_zip, embed_tokens_zip, vocab_train_small = aggregate_nlp_dictionaries(nlps, cat_vocab_dict, model_options)
+                    nlp_encoded = encode_nlp_inputs(nlp_inputs, cat_vocab_dict)
+                    ### we call nlp_outputs as embedding in this section of the program ####
+                    if keras_model_type.lower() in ['mixed_nlp']:
+                        ### You don't have to have separate embeddings if you already have encoded NLP
+                        embedding = []
+                    print('    NLP Preprocessing completed.')
+                    merged = [wide, deep, nlp_encoded]
                     print('    %s combined wide, deep and nlp outputs successfully...' %keras_model_type)
                 else:
                     merged = [wide, deep]
@@ -231,13 +243,14 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                 #                                    return_sequences=False, batch_size=batch_size,
                 #                                    kernel_regularizer=regularizers.l2(0.01)))(x)
                     print('    %s combined wide and deep  successfully...' %keras_model_type)
+                nlp_inputs = list(nlp_inputs.values())
                 return nlp_inputs, meta_inputs, merged, embedding
     else:
         meta_inputs = []
     ##### You need to send in the ouput from embedding layer to this sequence of layers ####
     nlp_outputs = []
     if not isinstance(embedding, list):
-        if keras_model_type.lower() in ['bert','nlp','text', 'use',"nnlm",  "auto"]:
+        if keras_model_type.lower() in ['bert','mixed_nlp','text', 'use',"nnlm",  "auto"]:
             ###### This is where you define the NLP Embedded Layers ########
             #x = layers.Dense(64, activation='relu')(embedding)
             #x = layers.Dense(32, activation='relu')(x)

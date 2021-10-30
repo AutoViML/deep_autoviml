@@ -1329,6 +1329,41 @@ def encode_fast_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FE
 ######  This code is a modified version of keras.io documentation code examples ##########
 ######   https://keras.io/examples/structured_data/wide_deep_cross_networks/    ##########
 ##########################################################################################
+def closest(lst, K):
+    """
+    Find a number in list lst that is closest to the value K.
+    """
+    return lst[min(range(len(lst)), key = lambda i: abs(lst[i]-K))]
+##############################################################################################
+def create_nlp_inputs(nlp_vars):
+    inputs = {}
+    for feature_name in nlp_vars:
+            inputs[feature_name] = layers.Input(
+                name=feature_name, shape=(1,), dtype=tf.string
+            )
+    return inputs
+#################################################################################
+def encode_nlp_inputs(inputs, CATEGORICAL_FEATURES_WITH_VOCABULARY):
+    layerlist = []
+    list_embedding_sizes = [8, 16, 24, 32, 48, 64, 96, 128, 256]
+    for feature_name in inputs:
+        vocabulary = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name]['vocab']
+        extra_oov = 3
+        vocab_size = int(math.sqrt(len(vocabulary)))
+        best_embedding_size = closest(list_embedding_sizes, vocab_size//4000)
+        encoded_feature = inputs[feature_name]
+        embedding = layers.Embedding(
+            input_dim=len(vocabulary)+extra_oov, output_dim=best_embedding_size)
+        # Convert the index values to embedding representations.
+        encoded_feature = embedding(encoded_feature)
+        encoded_feature = Flatten()(encoded_feature)
+        layerlist.append(encoded_feature)
+    ##### This is where are float encoded features are combined ###
+    all_features = layers.concatenate(layerlist)
+    #all_features = layers.Concatenate(axis = -1)(layerlist)
+    #all_features = Flatten()(all_features)
+    return all_features
+#################################################################################
 def create_fast_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS):
     inputs = {}
     for feature_name in FEATURE_NAMES:

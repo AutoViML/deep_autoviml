@@ -360,6 +360,7 @@ class MyTuner(Tuner):
         valid_ds = valid_ds.prefetch(batch_size)#.repeat(5)
         steps = 20
         storm_epochs = 5
+        pdb.set_trace()
         history = comp_model.fit(train_ds, epochs=storm_epochs, #steps_per_epoch=steps,# batch_size=batch_size,
                             validation_data=valid_ds, #validation_steps=steps,
                             callbacks=callbacks_list, shuffle=True, class_weight=class_weights,
@@ -591,7 +592,6 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     ###   V E R Y    I M P O R T A N T  S T E P   B E F O R E   M O D E L   F I T  ###
     ##################################################################################
     shuffle_size = 100000
-
     if num_labels <= 1:
         y_test = np.concatenate(list(heldout_ds.map(lambda x,y: y).as_numpy_iterator()))
         print('Single-Label: Heldout data shape: %s' %(y_test.shape,))
@@ -932,7 +932,6 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
 
     ######## Check for NaN in predictions ###############################
     if check_for_nan_in_array(y_probas):
-        pdb.set_trace()
         y_probas = pd.DataFrame(y_probas).fillna(0).values
     elif check_for_nan_in_array(y_test_preds):
         y_test_preds = pd.DataFrame(y_test_preds).fillna(0).values.ravel()
