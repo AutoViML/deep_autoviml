@@ -97,14 +97,14 @@ from .modeling.create_model import create_model
 from .models import basic, deep, big_deep, giant_deep, cnn1, cnn2
 from .modeling.train_model import train_model
 from .modeling.train_custom_model import train_custom_model, return_optimizer
-from .modeling.predict_model import predict, predict_images
+from .modeling.predict_model import predict, predict_images, predict_text
 from .modeling.train_image_model import train_image_model
 from .modeling.train_text_model import train_text_model
 
 # Utils
 from .utilities.utilities import print_one_row_from_tf_dataset
 from .utilities.utilities import print_one_row_from_tf_label
-from .utilities.utilities import get_compiled_model, add_inputs_outputs_to_model_body
+from .utilities.utilities import get_compiled_model
 from .utilities.utilities import check_if_GPU_exists, plot_history
 
 #############################################################################################
@@ -175,7 +175,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             'mode': default = it will choose automatically based on modeltype
             "lr_scheduler": default = "onecycle" but you can choose from any below:
                     ##  ["scheduler", 'onecycle', 'rlr' (reduce LR on plateau), 'decay']
-            "early_stopping": default = False. You can change it to True.
+            "early_stopping": default = True. You can change it to False.
             "class_weight": {}: you can send in class weights for imbalanced classes as a dictionary.
     model_options: dictionary:  you can send in any deep autoviml model option you
                     want to change using this dictionary.
@@ -254,7 +254,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 print('    text directory given as %s' %model_options['text_directory'])
                 text_dir = model_options["text_directory"]
             else:
-                print("    No text directory given. Using train data given in %s..." %train_data_or_file)
+                print("    No text directory given. Using train data given as input..." )
                 text_alt = False ## this means you use the text file given
             ################   T E X T    C L A S S I F I C A T I O N   #########
             if text_alt:
@@ -269,7 +269,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 #### Use the text file given and split it into train and valid_ds ####
                 dft, model_options, full_ds, var_df, cat_vocab_dict, keras_options = load_train_data(
                                     train_data_or_file, target, project_name, keras_options,
-                                    model_options, verbose=verbose)
+                                    model_options, keras_model_type, verbose=verbose)
                 print('Loaded text classification file or dataframe using input given:')
                 ############## Split train into train and validation datasets here ###############
                 recover = lambda x,y: y
@@ -278,7 +278,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 train_ds = full_ds.enumerate().filter(is_train).map(recover)
             ###################  P R E P R O C E S S    T E X T   #########################
             try:
-                deep_model = preprocessing_text(train_ds, model_options)
+                deep_model = preprocessing_text(train_ds, keras_model_type, model_options)
             except:
                 print('    Error in text preprocessing: check your model_options and try again.')
                 return
@@ -310,7 +310,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     keras_options_defaults['monitor'] = ""
     keras_options_defaults['mode'] = ""
     keras_options_defaults["lr_scheduler"] = ""
-    keras_options_defaults["early_stopping"] = ""
+    keras_options_defaults["early_stopping"] = True
     keras_options_defaults["class_weight"] = {}
 
     list_of_keras_options = ["batchsize", "activation", "save_weights_only", "use_bias",
@@ -359,8 +359,10 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 print('    %s : %s' %(key, model_options_copy[key]))
                 model_options[key] = model_options_copy[key]
 
-    if keras_model_type.lower() in ['fast', 'fast1', 'fast2']:
-        print('Max Trials is 10 for faster processing. Please increase max_trials if you want more accuracy...')
+    fast_models = ['deep_and_wide','deep_wide','wide_deep', 'wide_and_deep','deep wide',
+            'wide deep', 'fast','fast1', 'fast2', 'deep_and_cross', 'deep cross', 'deep and cross']
+    if keras_model_type.lower() in fast_models:
+        print('max_trials set to 10 for fast models. Please increase it if you want better performance...')
         model_options["max_trials"] = 10
     else:
         if model_options["max_trials"] <= 20:
@@ -375,7 +377,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         """)
     dft, model_options, batched_data, var_df, cat_vocab_dict, keras_options = load_train_data(
                                     train_data_or_file, target, project_name, keras_options,
-                                    model_options, verbose=verbose)
+                                    model_options, keras_model_type, verbose=verbose)
 
     try:
         data_size = cat_vocab_dict['DS_LEN']
@@ -413,8 +415,6 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 #################################################################################
         ''')
     ######### this is where you get the model body either by yourself or sent as input ##
-    fast_models = ['deep_and_wide','deep_wide','wide_deep', 'wide_and_deep','deep wide',
-            'wide deep', 'fast','fast1', 'fast2', 'deep_and_cross', 'deep cross', 'deep and cross']
     ##### This takes care of providing multi-output predictions! ######
     model_body, keras_options =  create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs,
                                         nlp_outputs, keras_options, var_df, keras_model_type,

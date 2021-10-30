@@ -1,3 +1,4 @@
+.req.swp
 LICENSE
 README.md
 code-of-conduct.md
@@ -22,9 +23,6 @@ deep_autoviml.egg-info/SOURCES.txt
 deep_autoviml.egg-info/dependency_links.txt
 deep_autoviml.egg-info/requires.txt
 deep_autoviml.egg-info/top_level.txt
-deep_autoviml/__pycache__/__init__.cpython-38.pyc
-deep_autoviml/__pycache__/__version__.cpython-38.pyc
-deep_autoviml/__pycache__/deep_autoviml.cpython-38.pyc
 deep_autoviml/data_load/classify_features.py
 deep_autoviml/data_load/extract.py
 deep_autoviml/data_load/__pycache__/classify_features.cpython-38.pyc
