@@ -243,7 +243,8 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                 #                                    return_sequences=False, batch_size=batch_size,
                 #                                    kernel_regularizer=regularizers.l2(0.01)))(x)
                     print('    %s combined wide and deep  successfully...' %keras_model_type)
-                nlp_inputs = list(nlp_inputs.values())
+                if len(nlps) > 0:
+                    nlp_inputs = list(nlp_inputs.values())
                 return nlp_inputs, meta_inputs, merged, embedding
     else:
         meta_inputs = []

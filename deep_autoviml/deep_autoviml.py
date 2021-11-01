@@ -464,12 +464,15 @@ def save_model_architecture(model, project_name, keras_model_type, cat_vocab_dic
     else:
         print('Project name must be a string and helps create a folder to store model.')
         project_name = "deep_autoviml"
-    save_model_path = os.path.join(project_name,keras_model_type)
     if chart_name != 'model_before':
         save_model_path = cat_vocab_dict['saved_model_path']
-    #plot_filename = project_name+'_'+keras_model_type+chart_name+'.png'
+    else:
+        save_model_path = os.path.join(project_name,keras_model_type)
+    if not isinstance(save_model_path, str):
+        save_model_path = os.path.join(project_name,keras_model_type)
     if not os.path.exists(save_model_path):
         os.makedirs(save_model_path)
+    save_model_path = get_save_folder(save_model_path)
     save_artifacts_path = os.path.join(save_model_path, "artifacts")
     try:
         if not os.path.exists(save_artifacts_path):
@@ -484,3 +487,7 @@ def save_model_architecture(model, project_name, keras_model_type, cat_vocab_dic
         plot_filename = ""
     return plot_filename
 #########################################################################################################
+def get_save_folder(save_dir):
+    run_id = time.strftime("model_%Y_%m_%d-%H_%M_%S")
+    return os.path.join(save_dir, run_id)
+######################################################################################

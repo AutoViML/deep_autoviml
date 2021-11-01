@@ -360,7 +360,6 @@ class MyTuner(Tuner):
         valid_ds = valid_ds.prefetch(batch_size)#.repeat(5)
         steps = 20
         storm_epochs = 5
-        pdb.set_trace()
         history = comp_model.fit(train_ds, epochs=storm_epochs, #steps_per_epoch=steps,# batch_size=batch_size,
                             validation_data=valid_ds, #validation_steps=steps,
                             callbacks=callbacks_list, shuffle=True, class_weight=class_weights,
