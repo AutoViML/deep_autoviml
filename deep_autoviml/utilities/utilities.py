@@ -65,7 +65,7 @@ def check_if_GPU_exists(verbose=0):
     if logical_gpus:
         # Restrict TensorFlow to only use the first GPU
         if verbose:
-            print("Num GPUs Available: ", len(logical_gpus))
+            print("GPUs found in this device...: ")
             print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU")
         if len(logical_gpus) > 1:
             device = "gpus"
@@ -86,13 +86,13 @@ def check_if_GPU_exists(verbose=0):
             print(e)
     elif tpus:
         device = "tpu"
+        print("GPUs found in this device...: ")
         if verbose:
             print("Listing all TPU devices: ")
             for tpu in tpus:
                 print(tpu)
     else:
-        if verbose:
-            print('    Only CPU found on this device')
+        print('Only CPU found on this device')
         device = "cpu"
     #### Set Strategy ##########
     if device == "tpu":
@@ -791,163 +791,6 @@ def predict_plot_images(model, test_ds, classes):
 
         plt.axis("off")
 #######################################################################################
-def get_model_defaults(keras_options, model_options, targets):
-    num_classes = model_options["num_classes"]
-    num_labels = model_options["num_labels"]
-    modeltype = model_options["modeltype"]
-    patience = check_keras_options(keras_options, "patience", 10)
-    use_bias = check_keras_options(keras_options, 'use_bias', True)
-    optimizer = check_keras_options(keras_options,'optimizer', Adam(lr=0.01, beta_1=0.9, beta_2=0.999))
-    if modeltype == 'Regression':
-        reg_loss = check_keras_options(keras_options,'loss','mae') ### you can use tf.keras.losses.Huber() instead
-        #val_metrics = [check_keras_options(keras_options,'metrics',keras.metrics.RootMeanSquaredError(name='rmse'))]
-        METRICS = [keras.metrics.MeanAbsoluteError(name='mae'), keras.metrics.RootMeanSquaredError(name='rmse'),]
-        val_metrics = check_keras_options(keras_options,'metrics',METRICS)
-        num_predicts = 1*num_labels
-        if num_labels <= 1:
-            val_loss = check_keras_options(keras_options,'loss', reg_loss)
-            val_metric = 'rmse'
-        else:
-            val_loss = []
-            for i in range(num_labels):
-                val_loss.append(reg_loss)
-            val_metric = 'loss'
-        ####### If you change the val_metrics above, you must also change its name here ####
-        output_activation = 'linear' ### use "relu" or "softplus" if you want positive values as output
-    elif modeltype == 'Classification':
-        ##### This is for Binary Classification Problems
-        #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
-        #val_metrics = [check_keras_options(keras_options,'metrics','AUC')]
-        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
-        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        val_loss = check_keras_options(keras_options,'loss', cat_loss)
-        bal_acc = BalancedSparseCategoricalAccuracy()
-        val_metrics = check_keras_options(keras_options,'metrics',bal_acc)
-        if num_labels <= 1:
-            num_predicts = int(num_classes*num_labels)
-        else:
-            #### This is for multi-label problems wihere number of classes will be a list
-            num_predicts = num_classes
-        output_activation = "sigmoid"
-        ####### If you change the val_metrics above, you must also change its name here ####
-        val_metric = 'balanced_sparse_categorical_accuracy'
-    else:
-        #### this is for multi-class problems ####
-        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
-        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
-        if num_labels <= 1:
-            num_predicts = int(num_classes*num_labels)
-            val_loss = check_keras_options(keras_options,'loss', cat_loss)
-            bal_acc = BalancedSparseCategoricalAccuracy()
-            val_metrics = check_keras_options(keras_options, 'metrics', bal_acc)
-        else:
-            #### This is for multi-label problems wihere number of classes will be a list
-            num_predicts = num_classes
-            val_loss = []
-            for i in range(num_labels):
-                val_loss.append(cat_loss)
-            bal_acc = BalancedSparseCategoricalAccuracy()
-            val_metrics = check_keras_options(keras_options, 'metrics', bal_acc)
-        output_activation = 'softmax'
-        ####### If you change the val_metrics above, you must also change its name here ####
-        val_metric = 'balanced_sparse_categorical_accuracy'
-    ##############  Suggested number of neurons in each layer ##################
-    if modeltype == 'Regression':
-        val_monitor = check_keras_options(keras_options, 'monitor', 'val_'+val_metric)
-        val_mode = check_keras_options(keras_options,'mode', 'min')
-    elif modeltype == 'Classification':
-        ##### This is for Binary Classification Problems
-        if num_labels <= 1:
-            val_monitor = check_keras_options(keras_options,'monitor', 'val_'+val_metric)
-            val_mode = check_keras_options(keras_options,'mode', 'max')
-        else:
-            val_metric = 'balanced_sparse_categorical_accuracy'
-            ### you cannot combine multiple metrics here unless you write a new function.
-            target_A = targets[0]
-            val_monitor = 'val_loss' ### this combines all losses and is best to minimize
-            val_mode = check_keras_options(keras_options,'mode', 'min')
-        #val_monitor = check_keras_options(keras_options,'monitor', 'val_auc')
-        #val_monitor = check_keras_options(keras_options,'monitor', 'val_accuracy')
-    else:
-        #### this is for multi-class problems
-        if num_labels <= 1:
-            val_monitor = check_keras_options(keras_options,'monitor', 'val_'+val_metric)
-            val_mode = check_keras_options(keras_options, 'mode', 'max')
-        else:
-            val_metric = 'balanced_sparse_categorical_accuracy'
-            ### you cannot combine multiple metrics here unless you write a new function.
-            target_A = targets[0]
-            val_monitor = 'val_loss'
-            val_mode = check_keras_options(keras_options,'mode', 'min')
-        #val_monitor = check_keras_options(keras_options, 'monitor','val_accuracy')
-    ##############################################################################
-    keras_options["mode"] = val_mode
-    keras_options["monitor"] = val_monitor
-    keras_options["metrics"] = val_metrics
-    keras_options['loss'] = val_loss
-    keras_options["patience"] = patience
-    keras_options['use_bias'] = use_bias
-    keras_options['optimizer'] = optimizer
-    return keras_options, model_options, num_predicts, output_activation
-###############################################################################
-def get_uncompiled_model(inputs, result, output_activation,
-                    num_predicts, modeltype, cols_len, targets):
-    ### The next 3 steps are most important! Don't mess with them!
-    #model_preprocessing = Model(inputs, meta_outputs)
-    #preprocessed_inputs = model_preprocessing(inputs)
-    #result = model_body(preprocessed_inputs)
-    ##### now you can add the final layer here #########
-    multi_label_predictions = defaultdict(list)
-    if isinstance(num_predicts, int):
-        key = 'predictions'
-        if modeltype == 'Regression':
-            ### this will be just 1 in regression ####
-            if num_predicts > 1:
-                for each_label in range(num_predicts):
-                    value = layers.Dense(1, activation=output_activation,
-                            name=targets[each_label])(result)
-                    multi_label_predictions[key].append(value)
-            else:
-                value = layers.Dense(1, activation=output_activation,
-                        name=targets[0])(result)
-                multi_label_predictions[key].append(value)
-        else:
-            ### this will be number of classes in classification ###
-            value = layers.Dense(num_predicts, activation=output_activation,
-                                name=targets[0])(result)
-            multi_label_predictions[key].append(value)
-    else:
-        #### This will be for multi-label, multi-class predictions only ###
-        for each_label in range(len(num_predicts)):
-            key = 'predictions'
-            if modeltype == 'Regression':
-                ### this will be just 1 in regression ####
-                value = layers.Dense(1, activation=output_activation,
-                        name=targets[0])(result)
-            else:
-                ### this will be number of classes in classification ###
-                value = layers.Dense(num_predicts[each_label], activation=output_activation,
-                                    name=targets[each_label])(result)
-            multi_label_predictions[key].append(value)
-    outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
-    ##### Set the inputs and outputs of the model here
-
-    uncompiled_model = Model(inputs=inputs, outputs=outputs)
-    return uncompiled_model
-
-#####################################################################################
-def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, modeltype,
-                       optimizer, val_loss, val_metrics, cols_len, targets):
-    model = get_uncompiled_model(inputs, meta_outputs, output_activation,
-                        num_predicts, modeltype, cols_len, targets)
-    model.compile(
-        optimizer=optimizer,
-        loss=val_loss,
-        metrics=val_metrics,
-    )
-    return model
-###############################################################################
 def add_outputs_to_auto_model_body(model_body, meta_outputs, nlp_flag=False):
     """
     This is specially for "auto" model types only. It requires special handling.
@@ -977,21 +820,6 @@ def add_outputs_to_model_body(model_body, meta_outputs):
             final_outputs = each_layer(final_outputs)
     return final_outputs
 ###############################################################################
-class BalancedSparseCategoricalAccuracy(keras.metrics.SparseCategoricalAccuracy):
-    def __init__(self, name='balanced_sparse_categorical_accuracy', dtype=None):
-        super().__init__(name, dtype=dtype)
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        y_flat = y_true
-        if y_true.shape.ndims == y_pred.shape.ndims:
-            y_flat = tf.squeeze(y_flat, axis=[-1])
-        y_true_int = tf.cast(y_flat, tf.int32)
-
-        cls_counts = tf.math.bincount(y_true_int)
-        cls_counts = tf.math.reciprocal_no_nan(tf.cast(cls_counts, self.dtype))
-        weight = tf.gather(cls_counts, y_true_int)
-        return super().update_state(y_true, y_pred, sample_weight=weight)
-#####################################################################################
 def check_keras_options(keras_options, name, default):
     try:
         if keras_options[name]:
@@ -1028,16 +856,16 @@ def decay(epoch):
     return LEARNING_RATE - 0.0099 * (0.75 ** (1 + epoch/2))
 #######################################################################################
 import os
-def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_only, steps=100):
+def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_only, steps=100,
+                    save_dir='./deep_autoviml'):
     """
     ####################################################################################
     #####    LEARNING RATE SCHEDULING : Setup Learning Rate Multiple Ways #########
     ####################################################################################
     """
     keras.backend.clear_session()
-    logdir = "deep_autoviml"
     callbacks_dict = {}
-    tensorboard_logpath = os.path.join(logdir,"mylogs")
+    tensorboard_logpath = os.path.join(save_dir,"mylogs")
     print('Tensorboard log directory can be found at: %s' %tensorboard_logpath)
 
     cp = keras.callbacks.ModelCheckpoint("deep_autoviml", save_best_only=True,
@@ -1059,7 +887,7 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
     lr_decay_cb = keras.callbacks.LearningRateScheduler(decay)
 
     es = keras.callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
-                        verbose=1, mode=val_mode, baseline=None, restore_best_weights=True)
+                        verbose=1, mode=val_mode, baseline=None, restore_best_weights=False)
 
     tb = keras.callbacks.TensorBoard(log_dir=tensorboard_logpath,
                          histogram_freq=0,
@@ -1241,3 +1069,47 @@ def print_one_text_from_dataset(raw_train_ds, class_names):
     print("Label 0 corresponds to", class_names[0])
     print("Label 1 corresponds to", class_names[1])
 #########################################################################################
+import pickle
+def save_model_artifacts(deep_model, cat_vocab_dict, var_df, save_model_path, 
+                        save_model_flag, model_options):
+    """
+    This saves the model if the save_model_flag os set to True.
+    However it also saves the model artifacts such as cat_vocab_dict and var_df also.
+    """
+    if save_model_flag:
+        try:
+            print('\nSaving model...this will take time...')
+            if model_options["save_model_format"]:
+                deep_model.save(save_model_path, save_format=model_options["save_model_format"])
+                print('     deep model saved in %s directory in %s format' %(
+                                save_model_path, model_options["save_model_format"]))
+            else:
+                deep_model.save(save_model_path)
+                print('     deep model saved in %s directory in .pb format' %save_model_path)
+            cat_vocab_dict['saved_model_path'] = save_model_path
+            cat_vocab_dict['save_model_format'] = model_options["save_model_format"]
+        except:
+            print('Erroring: Model not saved')
+    else:
+        cat_vocab_dict['saved_model_path'] = save_model_path
+        print('\nModel not being saved since save_model_flag set to False...')
+
+    #### make sure you save the cat_vocab_dict to use later during predictions
+    save_artifacts_path = os.path.join(save_model_path, "artifacts")
+    try:
+        pickle_path = os.path.join(save_artifacts_path,"cat_vocab_dict")+".pickle"
+        print('\nSaving vocab dictionary using pickle...will take time...' )
+        with open(pickle_path, "wb") as fileopen:
+            fileopen.write(pickle.dumps(cat_vocab_dict))
+        print('    Saved pickle file in %s' %pickle_path)
+    except:
+        print('Unable to save cat_vocab_dict - please save or pickle it yourself.')
+    ####### make sure you save the variable definitions file ###########
+    try:
+        pickle_path = os.path.join(save_artifacts_path,"var_df")+".pickle"
+        print('\nSaving variable definitions file using pickle...will take time...' )
+        with open(pickle_path, "wb") as fileopen:
+            fileopen.write(pickle.dumps(var_df))
+        print('    Saved pickle file in %s' %pickle_path)
+    except:
+        print('Unable to save cat_vocab_dict - please save or pickle it yourself.')

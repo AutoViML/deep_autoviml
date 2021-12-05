@@ -55,6 +55,7 @@ from deep_autoviml.utilities.utilities import plot_regression_residuals
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
 from deep_autoviml.utilities.utilities import save_valid_predictions, print_classification_header
 from deep_autoviml.utilities.utilities import get_callbacks, get_chosen_callback
+from deep_autoviml.utilities.utilities import save_model_artifacts
 from deep_autoviml.modeling.create_model import check_keras_options
 
 #####################################################################################
@@ -109,6 +110,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     ####  just use modeltype for printing that's all ###
     start_time = time.time()
     ### check the defaults for the following!
+    save_model_path = model_options['save_model_path']
     save_weights_only = check_keras_options(keras_options, "save_weights_only", False)
     data_size = check_keras_options(keras_options, 'data_size', 10000)
     batch_size = check_keras_options(keras_options, 'batchsize', 64)
@@ -149,7 +151,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
         print('    Recommended: Increase patience for "onecycle" scheduler')
         patience = patience * 1.0
     callbacks_dict, tb_logpath = get_callbacks(val_mode, val_monitor, patience, learning_rate, 
-                            save_weights_only, onecycle_steps)
+                            save_weights_only, onecycle_steps, save_model_path)
 
     if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
         if early_stopping:
@@ -205,7 +207,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     print('    Model training completed. Following metrics available: %s' %history.history.keys())
     try:
         ##### this is where it stopped - you have toi subtract patience from it
-        stopped_epoch = int(pd.DataFrame(history.history).shape[0] - patience )
+        stopped_epoch = max(5,int(pd.DataFrame(history.history).shape[0] - patience))
     except:
         stopped_epoch = 100
 
@@ -219,58 +221,9 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     #######        S A V E the model here using save_model_name      #################
     ##################################################################################
     
-    if isinstance(project_name,str):
-        if project_name == '':
-            project_name = "deep_autoviml"
-    else:
-        print('Project name must be a string and helps create a folder to store model.')
-        project_name = "deep_autoviml"
-    save_model_path = os.path.join(project_name,keras_model_type)
-    save_model_path = get_save_folder(save_model_path)
-    cat_vocab_dict['project_name'] = project_name
-
-    if save_model_flag:
-        try:
-            print('\nSaving model in %s now...this will take time...' %save_model_path)
-            if not os.path.exists(save_model_path):
-                os.makedirs(save_model_path)
-            if model_options["save_model_format"]:
-                deep_model.save(save_model_path, save_format=model_options["save_model_format"])
-                print('     deep model saved in %s directory in %s format' %(
-                                save_model_path, model_options["save_model_format"]))
-            else:
-                deep_model.save(save_model_path)
-                print('     deep model saved in %s directory in .pb format' %save_model_path)
-            cat_vocab_dict['saved_model_path'] = save_model_path
-            cat_vocab_dict['save_model_format'] = model_options["save_model_format"]
-        except:
-            print('Erroring: Model not saved')
-    else:
-        print('\nModel not being saved since save_model_flag set to False...')
-
-    #### make sure you save the cat_vocab_dict to use later during predictions
-    save_artifacts_path = os.path.join(save_model_path, "artifacts")
-    try:
-        if not os.path.exists(save_artifacts_path):
-            os.makedirs(save_artifacts_path)
-        pickle_path = os.path.join(save_artifacts_path,"cat_vocab_dict")+".pickle"
-        print('\nSaving vocab dictionary using pickle in %s...will take time...' %pickle_path)
-        with open(pickle_path, "wb") as fileopen:
-            fileopen.write(pickle.dumps(cat_vocab_dict))
-        print('    Saved pickle file in %s' %pickle_path)
-    except:
-        print('Unable to save cat_vocab_dict - please pickle it yourself.')
-    ####### make sure you save the variable definitions file ###########
-    try:
-        if not os.path.exists(save_artifacts_path):
-            os.makedirs(save_artifacts_path)
-        pickle_path = os.path.join(save_artifacts_path,"var_df")+".pickle"
-        print('\nSaving variable definitions file using pickle in %s...will take time...' %pickle_path)
-        with open(pickle_path, "wb") as fileopen:
-            fileopen.write(pickle.dumps(var_df))
-        print('    Saved pickle file in %s' %pickle_path)
-    except:
-        print('Unable to save cat_vocab_dict - please pickle it yourself.')
+    save_model_artifacts(deep_model, cat_vocab_dict, var_df, save_model_path, 
+                        save_model_flag, model_options)
+    print() ### just create an extra line after saving that is all 
     
     #################################################################################
     ########     P R E D I C T   O N   H E L D   O U T  D A T A   H E R E      ######
@@ -423,9 +376,4 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     print('    completed. Time taken (in mins) = %0.0f' %((time.time()-start_time)/100))
 
     return deep_model, cat_vocab_dict
-######################################################################################
-from itertools import cycle
-def get_save_folder(save_dir):
-    run_id = time.strftime("model_%Y_%m_%d_%H_%M_%S")
-    return os.path.join(save_dir, run_id)
 ######################################################################################

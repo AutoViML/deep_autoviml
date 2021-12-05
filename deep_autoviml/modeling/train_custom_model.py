@@ -52,17 +52,20 @@ from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
 #####################################################################################
+from deep_autoviml.modeling.create_model import get_model_defaults, get_compiled_model, return_optimizer
+
 # Utils
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
 from deep_autoviml.utilities.utilities import plot_regression_residuals
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
-from deep_autoviml.utilities.utilities import get_compiled_model, add_outputs_to_model_body
+from deep_autoviml.utilities.utilities import add_outputs_to_model_body
 from deep_autoviml.utilities.utilities import add_outputs_to_auto_model_body
 from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_chosen_callback
 from deep_autoviml.utilities.utilities import save_valid_predictions, get_callbacks
 from deep_autoviml.utilities.utilities import print_classification_header
-from deep_autoviml.utilities.utilities import get_model_defaults, check_keras_options
+from deep_autoviml.utilities.utilities import check_keras_options
+from deep_autoviml.utilities.utilities import save_model_artifacts
 
 from deep_autoviml.data_load.extract import find_batch_size
 from deep_autoviml.modeling.one_cycle import OneCycleScheduler
@@ -171,7 +174,7 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
                 kernel_size,
                 name="opt_dense_"+str(i), use_bias=use_bias,
                 kernel_initializer=kernel_initializer,
-                kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                #kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
             )
         )
         model.add(Activation(activation_fn,name="opt_activation_"+str(i)))
@@ -257,7 +260,8 @@ def build_model_storm(hp, *args):
                             use_bias=use_bias,
                             kernel_initializer = kernel_initializer,
                             name="storm_dense_0",
-                            kernel_regularizer=keras.regularizers.l2(weight_decay)))
+                            #kernel_regularizer=keras.regularizers.l2(weight_decay)
+                            ))
 
     model_body.add(Activation(activation_fn,name="activation_0"))
 
@@ -289,7 +293,8 @@ def build_model_storm(hp, *args):
         model_body.add(Dense(kernel_size, name="storm_dense_"+str(x+1),
                             use_bias=use_bias,
                             kernel_initializer = kernel_initializer,
-                            kernel_regularizer=keras.regularizers.l2(weight_decay)))
+                            #kernel_regularizer=keras.regularizers.l2(weight_decay)
+                            ))
 
         model_body.add(Activation(activation_fn, name="activation_"+str(x+10)))
 
@@ -306,6 +311,7 @@ def build_model_storm(hp, *args):
 
     selected_optimizer = hp.Param('optimizer', ["Adam", "AdaMax", "Adagrad", "SGD", "RMSprop", "Nadam", 'nesterov'],
                                   ordered=False)
+    
     optimizer = return_optimizer_trials(hp, selected_optimizer)
 
     return model_body, optimizer
@@ -347,10 +353,14 @@ class MyTuner(Tuner):
 
         ###### This is where you compile the model after it is built ###############
         #### Add a final layer for outputs during compiled model phase #############
+        
         comp_model = get_compiled_model(inputs, storm_outputs, output_activation, num_predicts,
                             modeltype, optimizer, val_loss, val_metrics, cols_len, targets)
 
-        #print('    Custom model compiled successfully. Training model next...')
+        #opt = comp_model.optimizer
+        #for var in opt.variables():
+        #    var.assign(tf.zeros_like(var))
+        print('    Custom model compiled successfully. Training model next...')
         shuffle_size = 1000000
         #batch_size = hp.Param('batch_size', [64, 128, 256], ordered=True)
         train_ds = train_ds.unbatch().batch(batch_size)
@@ -360,6 +370,7 @@ class MyTuner(Tuner):
         valid_ds = valid_ds.prefetch(batch_size)#.repeat(5)
         steps = 20
         storm_epochs = 5
+        
         history = comp_model.fit(train_ds, epochs=storm_epochs, #steps_per_epoch=steps,# batch_size=batch_size,
                             validation_data=valid_ds, #validation_steps=steps,
                             callbacks=callbacks_list, shuffle=True, class_weight=class_weights,
@@ -414,7 +425,7 @@ def return_optimizer_trials(hp, hpq_optimizer):
     elif hpq_optimizer.lower() in ['adamax']:
         best_optimizer = keras.optimizers.Adamax(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
                          beta_1=0.9, beta_2=0.999)
-    elif hpq_optimizer.lower() in 'adagrad':
+    elif hpq_optimizer.lower() in ['adagrad']:
         best_optimizer = keras.optimizers.Adagrad(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]))
     elif hpq_optimizer.lower() in ['rmsprop']:
         best_optimizer = keras.optimizers.RMSprop(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
@@ -423,41 +434,9 @@ def return_optimizer_trials(hp, hpq_optimizer):
         best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
     else:
         best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9)
+    
     return best_optimizer
 #####################################################################################
-def return_optimizer(hpq_optimizer):
-    """
-    This returns the keras optimizer with proper inputs if you send the string.
-    hpq_optimizer: input string that stands for an optimizer such as "Adam", etc.
-    """
-    learning_rate_set = 5e-2
-    ##### These are the various optimizers we use ################################
-    momentum = keras.optimizers.SGD(lr=learning_rate_set, momentum=0.9)
-    nesterov = keras.optimizers.SGD(lr=learning_rate_set, momentum=0.9, nesterov=True)
-    adagrad = keras.optimizers.Adagrad(lr=learning_rate_set)
-    rmsprop = keras.optimizers.RMSprop(lr=learning_rate_set, rho=0.9)
-    adam = keras.optimizers.Adam(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
-    adamax = keras.optimizers.Adamax(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
-    nadam = keras.optimizers.Nadam(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
-    best_optimizer = ''
-    #############################################################################
-    #### This could be turned into a dictionary but for now leave is as is for readability ##
-    if hpq_optimizer == 'Adam':
-        best_optimizer = adam
-    elif hpq_optimizer == 'SGD':
-        best_optimizer = momentum
-    elif hpq_optimizer == 'Nadam':
-        best_optimizer = nadam
-    elif hpq_optimizer == 'AdaMax':
-        best_optimizer = adamax
-    elif hpq_optimizer == 'Adagrad':
-        best_optimizer = adagrad
-    elif hpq_optimizer == 'RMSprop':
-        best_optimizer = rmsprop
-    else:
-        best_optimizer = nesterov
-    return best_optimizer
-##########################################################################################
 from tensorflow.keras import backend as K
 import tensorflow
 import gc
@@ -476,7 +455,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     train the model and evaluate it on valid_ds. It will return a keras model fully
     trained on the full batched_data finally and train history.
     """
-
+    save_model_path = model_options['save_model_path']
     inputs = nlp_inputs + meta_inputs
     nlps = var_df["nlp_vars"]
     lats = var_df["lat_vars"]
@@ -568,7 +547,8 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     print('    val mode = %s, val monitor = %s, patience = %s' %(val_mode, val_monitor, patience))
 
     callbacks_dict, tb_logpath = get_callbacks(val_mode, val_monitor, patience,
-                                    learning_rate, save_weights_only, onecycle_steps)
+                                    learning_rate, save_weights_only, 
+                                    onecycle_steps, save_model_path)
     chosen_callback = get_chosen_callback(callbacks_dict, keras_options)
     if not keras_options["lr_scheduler"]:
         print('    chosen keras LR scheduler = default')
@@ -641,14 +621,12 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     ########     P E R FO R M     T U N I N G    H E R E  ######################
     ############################################################################
     tune_mode = 'min'
+    trials_saved_path = os.path.join(save_model_path, "trials")
     if num_labels > 1 and modeltype != 'Regression':
         tune_mode = 'max'
     else:
         tune_mode = val_mode
     if tuner.lower() == "storm":
-        trials_saved_path = os.path.join(project_name,keras_model_type)
-        if not os.path.exists(trials_saved_path):
-            os.makedirs(trials_saved_path)
         ########   S T O R M   T U N E R   D E F I N E D     H E R E ###########
         randomization_factor = 0.50
         tuner = MyTuner(project_dir=trials_saved_path,
@@ -708,6 +686,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
         ### Sometimes the learning rate is below zero - so reset it here!
         ### Set the learning rate for the best optimizer here ######
         print('\nSetting best optimizer %s its best learning_rate = %s' %(hpq_optimizer, optimizer_lr))
+        best_optimizer = return_optimizer(hpq_optimizer)
         K.set_value(best_optimizer.learning_rate, optimizer_lr)
         
         ##### This is the simplest way to convert a sequential model to functional model!
@@ -852,7 +831,8 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
 
     ###   Once the best learning rate is chosen the model is ready to be trained on full data
     try:
-        stopped_epoch = int(pd.DataFrame(history.history).shape[0] - patience) ## this is where it stopped
+         ## this is where it stopped
+        stopped_epoch = max(5, int(pd.DataFrame(history.history).shape[0] - patience))
     except:
         stopped_epoch = 100
     print('    Stopped epoch = %s' %stopped_epoch)
@@ -1025,34 +1005,8 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     #######        S A V E the model here using save_model_name      #################
     ##################################################################################
 
-    if isinstance(project_name,str):
-        if project_name == '':
-            project_name = "deep_autoviml"
-    else:
-        print('Project name must be a string and helps create a folder to store model.')
-        project_name = "deep_autoviml"
-    save_model_path = os.path.join(project_name,keras_model_type)
-    save_model_path = get_save_folder(save_model_path)
-    cat_vocab_dict['project_name'] = project_name
-
-    if save_model_flag:
-        try:
-            print('\nSaving model in %s now...this will take time...' %save_model_path)
-            if not os.path.exists(save_model_path):
-                os.makedirs(save_model_path)
-            if model_options["save_model_format"]:
-                deep_model.save(save_model_path, save_format=model_options["save_model_format"])
-                print('     deep model saved in %s directory in %s format' %(
-                                save_model_path, model_options["save_model_format"]))
-            else:
-                deep_model.save(save_model_path, save_traces=True)
-                print('     deep model saved in %s directory in .pb format' %save_model_path)
-            cat_vocab_dict['saved_model_path'] = save_model_path
-            cat_vocab_dict['save_model_format'] = model_options["save_model_format"]
-        except:
-            print('Erroring. Model not saved.')
-    else:
-        print('\nModel not being saved since save_model_flag set to False...')
+    save_model_artifacts(deep_model, cat_vocab_dict, var_df, save_model_path, 
+                    save_model_flag, model_options)
 
     #############################################################################
     #####     C L E A R      S E S S I O N     B E F O R E   C L O S I N G   ####
@@ -1066,30 +1020,6 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     reset_keras()
     tf.keras.backend.reset_uids()
 
-    #### make sure you save the cat_vocab_dict to use later during predictions
-    save_artifacts_path = os.path.join(save_model_path, "artifacts")
-    try:
-        if not os.path.exists(save_artifacts_path):
-            os.makedirs(save_artifacts_path)
-        pickle_path = os.path.join(save_artifacts_path,"cat_vocab_dict")+".pickle"
-        print('\nSaving vocab dictionary using pickle in %s...will take time...' %pickle_path)
-        with open(pickle_path, "wb") as fileopen:
-            fileopen.write(pickle.dumps(cat_vocab_dict))
-        print('    Saved pickle file in %s' %pickle_path)
-    except:
-        print('Unable to save cat_vocab_dict - please pickle it yourself.')
-    ####### make sure you save the variable definitions file ###########
-    try:
-        if not os.path.exists(save_artifacts_path):
-            os.makedirs(save_artifacts_path)
-        pickle_path = os.path.join(save_artifacts_path,"var_df")+".pickle"
-        print('\nSaving variable definitions file using pickle in %s...will take time...' %pickle_path)
-        with open(pickle_path, "wb") as fileopen:
-            fileopen.write(pickle.dumps(var_df))
-        print('    Saved pickle file in %s' %pickle_path)
-    except:
-        print('Unable to save cat_vocab_dict - please pickle it yourself.')
-
     print('\nDeep_Auto_ViML completed. Total time taken = %0.0f (in mins)' %((time.time()-start_time)/60))
 
     return deep_model, cat_vocab_dict
@@ -1099,7 +1029,8 @@ def return_model_body(keras_options):
     model_body = tf.keras.Sequential([])
     for l_ in range(num_layers):
         model_body.add(layers.Dense(64, activation='relu', kernel_initializer="lecun_normal",
-                                    activity_regularizer=tf.keras.regularizers.l2(0.01)))
+                                    #activity_regularizer=tf.keras.regularizers.l2(0.01)
+                                    ))
     return model_body
 ########################################################################################
 def check_for_nan_in_array(array_in):
@@ -1110,7 +1041,4 @@ def check_for_nan_in_array(array_in):
     array_nan = np.isnan(array_sum)
     return array_nan
 ########################################################################################
-def get_save_folder(save_dir):
-    run_id = time.strftime("model_%Y_%m_%d-%H_%M_%S")
-    return os.path.join(save_dir, run_id)
-######################################################################################
+

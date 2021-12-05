@@ -31,13 +31,12 @@ from deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_fast_inputs, create_fast_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_all_inputs, create_all_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_num_inputs, encode_auto_inputs
-from deep_autoviml.modeling.train_custom_model import return_optimizer
 
 # Utils
-from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_uncompiled_model
-from deep_autoviml.utilities.utilities import get_model_defaults, check_keras_options
-from deep_autoviml.utilities.utilities import check_model_options
-from deep_autoviml.utilities.utilities import get_compiled_model, add_outputs_to_model_body
+from deep_autoviml.utilities.utilities import check_if_GPU_exists
+#from deep_autoviml.utilities.utilities import get_model_defaults, get_compiled_model, get_uncompiled_model
+from deep_autoviml.utilities.utilities import check_model_options, check_keras_options
+from deep_autoviml.utilities.utilities import add_outputs_to_model_body
 from deep_autoviml.utilities.utilities import get_hidden_layers, add_outputs_to_auto_model_body
 
 ############################################################################################
@@ -202,7 +201,9 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
         print('    loss fn = %s    number of outputs = %s, output_activation = %s' %(
                             val_loss, num_labels, output_activation))
     try:
-        optimizer = return_optimizer(keras_options['optimizer'])
+        #optimizer = return_optimizer(keras_options['optimizer'])
+        ### you should use only string names for optimizers if strategy.scope is used
+        optimizer = keras_options['optimizer']
     except:
         #####   set some default optimizers here for model parameters here ##
         if not keras_options['optimizer']:
@@ -381,7 +382,8 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                 model_body = tf.keras.Sequential([])
                 for l_ in range(num_layers):
                     model_body.add(layers.Dense(dense_layer1, activation='selu', kernel_initializer="lecun_normal",
-                                              activity_regularizer=tf.keras.regularizers.l2(0.01)))
+                                              #activity_regularizer=tf.keras.regularizers.l2(0.01)
+                                              ))
                 print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
                 if not isinstance(meta_outputs, list):
                     model_body = add_outputs_to_model_body(model_body, meta_outputs)
@@ -426,4 +428,221 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
     else:
         print(model_body.summary())
     return model_body, keras_options
+###############################################################################
+class BalancedSparseCategoricalAccuracy(keras.metrics.SparseCategoricalAccuracy):
+    def __init__(self, name='balanced_sparse_categorical_accuracy', dtype=None):
+        super().__init__(name, dtype=dtype)
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_flat = y_true
+        if y_true.shape.ndims == y_pred.shape.ndims:
+            y_flat = tf.squeeze(y_flat, axis=[-1])
+        y_true_int = tf.cast(y_flat, tf.int32)
+
+        cls_counts = tf.math.bincount(y_true_int)
+        cls_counts = tf.math.reciprocal_no_nan(tf.cast(cls_counts, self.dtype))
+        weight = tf.gather(cls_counts, y_true_int)
+        return super().update_state(y_true, y_pred, sample_weight=weight)
+###############################################################################
+def return_optimizer(hpq_optimizer):
+    """
+    This returns the keras optimizer with proper inputs if you send the string.
+    hpq_optimizer: input string that stands for an optimizer such as "Adam", etc.
+    """
+    learning_rate_set = 5e-2
+    ##### These are the various optimizers we use ################################
+    momentum = keras.optimizers.SGD(lr=learning_rate_set, momentum=0.9)
+    nesterov = keras.optimizers.SGD(lr=learning_rate_set, momentum=0.9, nesterov=True)
+    adagrad = keras.optimizers.Adagrad(lr=learning_rate_set)
+    rmsprop = keras.optimizers.RMSprop(lr=learning_rate_set, rho=0.9)
+    adam = keras.optimizers.Adam(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
+    adamax = keras.optimizers.Adamax(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
+    nadam = keras.optimizers.Nadam(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
+    best_optimizer = ''
+    #############################################################################
+    #### This could be turned into a dictionary but for now leave is as is for readability ##
+    if hpq_optimizer.lower() == 'adam':
+        best_optimizer = adam
+    elif hpq_optimizer.lower() == 'sgd':
+        best_optimizer = momentum
+    elif hpq_optimizer.lower() == 'nadam':
+        best_optimizer = nadam
+    elif hpq_optimizer.lower() == 'adamax':
+        best_optimizer = adamax
+    elif hpq_optimizer.lower() == 'adagrad':
+        best_optimizer = adagrad
+    elif hpq_optimizer.lower() == 'rmsprop':
+        best_optimizer = rmsprop
+    else:
+        best_optimizer = nesterov
+    return best_optimizer
+##########################################################################################
+def get_model_defaults(keras_options, model_options, targets):
+    num_classes = model_options["num_classes"]
+    num_labels = model_options["num_labels"]
+    modeltype = model_options["modeltype"]
+    patience = check_keras_options(keras_options, "patience", 10)
+    use_bias = check_keras_options(keras_options, 'use_bias', True)
+    optimizer = check_keras_options(keras_options,'optimizer', Adam(lr=0.01, beta_1=0.9, beta_2=0.999))
+    if modeltype == 'Regression':
+        reg_loss = check_keras_options(keras_options,'loss','mse') ### you can use tf.keras.losses.Huber() instead
+        #val_metrics = [check_keras_options(keras_options,'metrics',keras.metrics.RootMeanSquaredError(name='rmse'))]
+        #METRICS = [keras.metrics.MeanAbsoluteError(name='mae'), keras.metrics.RootMeanSquaredError(name='rmse'),]
+        #METRICS = [keras.metrics.MeanSquaredError(name="mean_squared_error", dtype=None)]
+        METRICS = ['mean_squared_error']
+        val_metrics = check_keras_options(keras_options,'metrics',METRICS)
+        num_predicts = 1*num_labels
+        if num_labels <= 1:
+            val_loss = check_keras_options(keras_options,'loss', reg_loss)
+            val_metric = val_metrics[0]
+        else:
+            val_loss = []
+            for i in range(num_labels):
+                val_loss.append(reg_loss)
+            val_metric = 'loss'
+        ####### If you change the val_metrics above, you must also change its name here ####
+        val_metric = val_metrics[0]
+        output_activation = 'linear' ### use "relu" or "softplus" if you want positive values as output
+    elif modeltype == 'Classification':
+        ##### This is for Binary Classification Problems
+        #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
+        #val_metrics = [check_keras_options(keras_options,'metrics','AUC')]
+        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
+        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        val_loss = check_keras_options(keras_options,'loss', cat_loss)
+        bal_acc = BalancedSparseCategoricalAccuracy()
+        #bal_acc = 'accuracy'
+        val_metrics = check_keras_options(keras_options,'metrics',bal_acc)
+        if num_labels <= 1:
+            num_predicts = int(num_classes*num_labels)
+        else:
+            #### This is for multi-label problems wihere number of classes will be a list
+            num_predicts = num_classes
+        output_activation = "sigmoid"
+        ####### If you change the val_metrics above, you must also change its name here ####
+        val_metric = 'balanced_sparse_categorical_accuracy'
+        #val_metric = 'accuracy'
+    else:
+        #### this is for multi-class problems ####
+        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
+        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
+        if num_labels <= 1:
+            num_predicts = int(num_classes*num_labels)
+            val_loss = check_keras_options(keras_options,'loss', cat_loss)
+            bal_acc = BalancedSparseCategoricalAccuracy()
+            #bal_acc = 'accuracy'
+            val_metrics = check_keras_options(keras_options, 'metrics', bal_acc)
+        else:
+            #### This is for multi-label problems wihere number of classes will be a list
+            num_predicts = num_classes
+            val_loss = []
+            for i in range(num_labels):
+                val_loss.append(cat_loss)
+            bal_acc = BalancedSparseCategoricalAccuracy()
+            #bal_acc = 'accuracy'
+            val_metrics = check_keras_options(keras_options, 'metrics', bal_acc)
+        output_activation = 'softmax'
+        ####### If you change the val_metrics above, you must also change its name here ####
+        val_metric = 'balanced_sparse_categorical_accuracy'
+        #val_metric = 'accuracy'
+    ##############  Suggested number of neurons in each layer ##################
+    if modeltype == 'Regression':
+        val_monitor = check_keras_options(keras_options, 'monitor', 'val_'+val_metric)
+        val_mode = check_keras_options(keras_options,'mode', 'min')
+    elif modeltype == 'Classification':
+        ##### This is for Binary Classification Problems
+        if num_labels <= 1:
+            val_monitor = check_keras_options(keras_options,'monitor', 'val_'+val_metric)
+            val_mode = check_keras_options(keras_options,'mode', 'max')
+            val_metric = 'balanced_sparse_categorical_accuracy'
+        else:
+            val_metric = 'balanced_sparse_categorical_accuracy'
+            #val_metric = 'accuracy'
+            ### you cannot combine multiple metrics here unless you write a new function.
+            target_A = targets[0]
+            val_monitor = 'val_loss' ### this combines all losses and is best to minimize
+            val_mode = check_keras_options(keras_options,'mode', 'min')
+        #val_monitor = check_keras_options(keras_options,'monitor', 'val_auc')
+        #val_monitor = check_keras_options(keras_options,'monitor', 'val_accuracy')
+    else:
+        #### this is for multi-class problems
+        if num_labels <= 1:
+            val_metric = 'balanced_sparse_categorical_accuracy'
+            val_monitor = check_keras_options(keras_options,'monitor', 'val_'+val_metric)
+            val_mode = check_keras_options(keras_options, 'mode', 'max')
+        else:
+            val_metric = 'balanced_sparse_categorical_accuracy'
+            #val_metric = 'accuracy'
+            ### you cannot combine multiple metrics here unless you write a new function.
+            target_A = targets[0]
+            val_monitor = 'val_loss'
+            val_mode = check_keras_options(keras_options,'mode', 'min')
+        #val_monitor = check_keras_options(keras_options, 'monitor','val_accuracy')
+    ##############################################################################
+    keras_options["mode"] = val_mode
+    keras_options["monitor"] = val_monitor
+    keras_options["metrics"] = val_metrics
+    keras_options['loss'] = val_loss
+    keras_options["patience"] = patience
+    keras_options['use_bias'] = use_bias
+    keras_options['optimizer'] = optimizer
+    return keras_options, model_options, num_predicts, output_activation
+###############################################################################
+def get_uncompiled_model(inputs, result, output_activation,
+                    num_predicts, modeltype, cols_len, targets):
+    ### The next 3 steps are most important! Don't mess with them!
+    #model_preprocessing = Model(inputs, meta_outputs)
+    #preprocessed_inputs = model_preprocessing(inputs)
+    #result = model_body(preprocessed_inputs)
+    ##### now you can add the final layer here #########
+    multi_label_predictions = defaultdict(list)
+    if isinstance(num_predicts, int):
+        key = 'predictions'
+        if modeltype == 'Regression':
+            ### this will be just 1 in regression ####
+            if num_predicts > 1:
+                for each_label in range(num_predicts):
+                    value = layers.Dense(1, activation=output_activation,
+                            name=targets[each_label])(result)
+                    multi_label_predictions[key].append(value)
+            else:
+                value = layers.Dense(1, activation=output_activation,
+                        name=targets[0])(result)
+                multi_label_predictions[key].append(value)
+        else:
+            ### this will be number of classes in classification ###
+            value = layers.Dense(num_predicts, activation=output_activation,
+                                name=targets[0])(result)
+            multi_label_predictions[key].append(value)
+    else:
+        #### This will be for multi-label, multi-class predictions only ###
+        for each_label in range(len(num_predicts)):
+            key = 'predictions'
+            if modeltype == 'Regression':
+                ### this will be just 1 in regression ####
+                value = layers.Dense(1, activation=output_activation,
+                        name=targets[0])(result)
+            else:
+                ### this will be number of classes in classification ###
+                value = layers.Dense(num_predicts[each_label], activation=output_activation,
+                                    name=targets[each_label])(result)
+            multi_label_predictions[key].append(value)
+    outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
+    ##### Set the inputs and outputs of the model here
+
+    uncompiled_model = Model(inputs=inputs, outputs=outputs)
+    return uncompiled_model
+
+#####################################################################################
+def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, modeltype,
+                       optimizer, val_loss, val_metrics, cols_len, targets):
+    model = get_uncompiled_model(inputs, meta_outputs, output_activation,
+                        num_predicts, modeltype, cols_len, targets)
+    model.compile(
+        optimizer=optimizer,
+        loss=val_loss,
+        metrics=val_metrics,
+    )
+    return model
 ###############################################################################

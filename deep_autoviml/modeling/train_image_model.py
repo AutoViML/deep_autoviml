@@ -57,7 +57,6 @@ from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, pri
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
 from deep_autoviml.utilities.utilities import plot_one_history_metric
-from deep_autoviml.utilities.utilities import get_compiled_model
 from deep_autoviml.utilities.utilities import check_if_GPU_exists
 from deep_autoviml.utilities.utilities import save_valid_predictions, predict_plot_images
 
@@ -95,10 +94,28 @@ from collections import defaultdict
 from tensorflow.keras import callbacks
 #############################################################################################
 def train_image_model(deep_model, train_ds, valid_ds, cat_vocab_dict, 
-                      keras_options, project_name, save_model_flag):
+                      keras_options, model_options, project_name, save_model_flag):
     epochs = check_keras_options(keras_options, "epochs", 20)
+    save_model_path = model_options['save_model_path']
+    tensorboard_logpath = os.path.join(save_model_path,"mylogs")
+    print('Tensorboard log directory can be found at: %s' %tensorboard_logpath)
+    cp = keras.callbacks.ModelCheckpoint(project_name, save_best_only=True,
+                                         save_weights_only=True, save_format='tf')
+    es = keras.callbacks.EarlyStopping(monitor=val_monitor, min_delta=0.00001, patience=patience,
+                        verbose=1, mode=val_mode, baseline=None, restore_best_weights=True)
+
+    tb = keras.callbacks.TensorBoard(log_dir=tensorboard_logpath,
+                         histogram_freq=0,
+                         write_graph=True,
+                         write_images=True,
+                         update_freq='epoch',
+                         profile_batch=2,
+                         embeddings_freq=1
+                         )
+    callbacks_list = [cp, es, tb]
     print('Training image model. This will take time...')
-    history = deep_model.fit(train_ds, epochs=epochs, validation_data=valid_ds)
+    history = deep_model.fit(train_ds, epochs=epochs, validation_data=valid_ds,
+                callbacks=callbacks_list)
     result = deep_model.evaluate(valid_ds)
     print('    Model accuracy in Image validation data: %s' %result[1])
     #plot_history(history, "accuracy", 1)
@@ -108,7 +125,7 @@ def train_image_model(deep_model, train_ds, valid_ds, cat_vocab_dict,
     plot_one_history_metric(history, "accuracy", ax1)
     classes = cat_vocab_dict["image_classes"]
     predict_plot_images(deep_model, valid_ds, classes)
-    save_model_path = os.path.join(project_name, "image_model")
+    cat_vocab_dict['project_name'] = project_name
     if save_model_flag:
         print('\nSaving model in %s now...this will take time...' %save_model_path)
         if not os.path.exists(save_model_path):

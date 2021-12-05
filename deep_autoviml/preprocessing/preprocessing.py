@@ -37,7 +37,8 @@ from deep_autoviml.preprocessing.preprocessing_tabular import encode_nlp_inputs,
 
 
 # Utils
-from deep_autoviml.utilities.utilities import get_model_defaults
+#from deep_autoviml.utilities.utilities import get_model_defaults
+from deep_autoviml.modeling.create_model import get_model_defaults
 from deep_autoviml.utilities.utilities import get_hidden_layers
 from deep_autoviml.utilities.utilities import check_model_options
 

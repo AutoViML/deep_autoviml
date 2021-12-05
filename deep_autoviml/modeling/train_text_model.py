@@ -57,7 +57,6 @@ from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, pri
 from deep_autoviml.utilities.utilities import print_classification_metrics, print_regression_model_stats
 from deep_autoviml.utilities.utilities import print_classification_model_stats, plot_history, plot_classification_results
 from deep_autoviml.utilities.utilities import plot_one_history_metric
-from deep_autoviml.utilities.utilities import get_compiled_model
 from deep_autoviml.utilities.utilities import check_if_GPU_exists
 from deep_autoviml.utilities.utilities import save_valid_predictions, predict_plot_images
 
@@ -96,10 +95,10 @@ from collections import defaultdict
 from tensorflow.keras import callbacks
 #############################################################################################
 def train_text_model(deep_model, train_ds, valid_ds, cat_vocab_dict,
-                      keras_options, project_name, save_model_flag):
+                      keras_options, model_options, project_name, save_model_flag):
     epochs = check_keras_options(keras_options, "epochs", 20)
-    logdir = project_name +'_'+ "text"
-    tensorboard_logpath = os.path.join(logdir,"mylogs")
+    save_model_path = model_options['save_model_path']
+    tensorboard_logpath = os.path.join(save_model_path,"mylogs")
     print('Tensorboard log directory can be found at: %s' %tensorboard_logpath)
     cp = keras.callbacks.ModelCheckpoint(project_name, save_best_only=True,
                                          save_weights_only=True, save_format='tf')
@@ -134,9 +133,9 @@ def train_text_model(deep_model, train_ds, valid_ds, cat_vocab_dict,
     loss, accuracy = deep_model.evaluate(valid_ds)
     print("Loss: ", loss)
     print("Accuracy: ", accuracy)
-    save_model_path = os.path.join(project_name, "text_model")
+    cat_vocab_dict['project_name'] = project_name
     if save_model_flag:
-        print('\nSaving model in %s now...this will take time...' %save_model_path)
+        print('\nSaving model. This will take time...' )
         if not os.path.exists(save_model_path):
             os.makedirs(save_model_path)
         deep_model.save(save_model_path)
