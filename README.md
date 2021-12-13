@@ -24,16 +24,24 @@
 
 ## Motivation
 ✨ deep_autoviml is a powerful new deep learning library with a very simple design goal:  ✨
->           Make it as easy as possible for novices and 
->           experts alike to experiment with and build tensorflow.keras
->           preprocessing pipelines and models in as few lines of code
->           as possible.
+```Make it easy for novices and experts to experiment and build tensorflow.keras preprocessing pipelines and models in fewest steps.```
+But just because we make it easy, does not mean you should trust everything that it does or treat it like a black box. You must still use your own judgement and intutition to make sure the results are accurate and explainable, not to mention that the model conforms to <a href='https://ai.google/principles/'>Responsbile AI principles</a>.
 
 ### Watch YouTube Video for Demo of Deep_AutoViML
 [![YouTube Demo](deep_6.jpg)](https://www.youtube.com/watch?v=IcpwNNNXsWE)
 
-deep_autoviml is a tensorflow >2.4-enabled, keras-ready, model and pipeline building utility.
-deep autoviml is meant for data engineers, data scientists and ml engineers to quickly prototype and build tensorflow 2.4.1+ models and pipelines for any data set, any size using a single line of code. It can build models for structured data, NLP and image datasets. It can also handle time series data sets. You can either choose deep_autoviml to automatically buid a custom Tensorflow model or you can "bring your own model" ("BYOM" option) model to attach keras data pipelines to your model. Additionally, you can choose any Tensorflow Hub model (TFHub) to train on your data. Just see the instructions below in <a href="#tips">"Tips for using deep_autoviml"</a></li> section.
+### What is Deep AutoViML?
+Deep AutoViML is the next version of AutoViML, a popular automl library that was developed using pandas, scikit-learn and xgboost+catboost. Deep AutoViML takes the best features of AutoViML and uses the latest generation of tensorflow and keras libraries to build a fast model and data pipeline for MLOps use cases.
+
+deep autoviml is primarily meant for sophisticated data engineers, data scientists and ML engineers to quickly prototype and build tensorflow 2.4.1+ models and pipelines for any data set, any size using a single line of code. It can build models for structured data, NLP and image datasets. It can also handle time series data sets in the future. 
+1. You can either choose deep_autoviml to automatically buid a custom Tensorflow model 
+1. Instead, you can "bring your own model" ("BYOM" option) model to attach keras data pipelines to your model.
+1. Additionally, you can choose any Tensorflow Hub model (TFHub) to custom train on your data. Just look for instructions below in <a href="#tips">"Tips for using deep_autoviml"</a> section.
+1. There are 4 ways to build your model quickly or slowly depending on your needs:
+<li>fast: a quick model that uses only dense layers (deep layers)</li>
+<li>fast1: a deep and wide model that uses both deep and wide layers </li>
+<li>fast2: a deep and cross model that crosses some variables (hence deep and cross) </li>
+<li>auto: This will try out multiple combinations of dense layers and optimize them using either Optuna or Storm-Tuner. This will take the longest time </li>
 
 ![why_deep](deep_2.jpg)
 ## InnerWorking

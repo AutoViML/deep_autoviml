@@ -456,7 +456,10 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         plot_filename = save_model_architecture(deep_model, project_name, keras_model_type, cat_vocab_dict,
                          model_options, chart_name="model_before")
         if plot_filename != "":
-            display(Image(retina=True, filename=plot_filename))
+            try:
+                display(Image(retina=True, filename=plot_filename))
+            except:
+                print('Cannot save plot. Install pydot and graphviz if you want plots saved.')
     print("""
 #################################################################################
 ###########     T R A I N I N G    K E R A S   M O D E L   H E R E      #########
@@ -478,7 +481,11 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         plot_filename = save_model_architecture(deep_model, project_name, keras_model_type, cat_vocab_dict,
                         model_options, chart_name="model_after")
         if plot_filename != "":
-            display(Image(retina=True, filename=plot_filename))
+            try:
+                display(Image(retina=True, filename=plot_filename))
+            except:
+                print('Cannot save plot. Install pydot and graphviz if you want plots saved.')
+                
     distributed_values = (deep_model, cat_vocab_dict)
     return distributed_values
 ############################################################################################
