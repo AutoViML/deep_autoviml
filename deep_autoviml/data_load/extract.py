@@ -257,6 +257,8 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     if DS_LEN > 2*maxrows:
         ### we randomly sample a small dataset to classify features
         test_size = min(0.9, (1 - (maxrows/DS_LEN))) ### make sure there is a small train size
+        if test_size <= 0:
+            test_size = 0.9
         if isinstance(target, str):
             targets = [target]
         else:
@@ -718,6 +720,8 @@ def load_train_data_frame(train_dataframe, target, keras_options, model_options,
         modeltype,  model_label, usecols = find_problem_type(train_dataframe, target, model_options, verbose)
     ### we randomly sample a small dataset to classify features
     test_size = min(0.9, (1 - (maxrows/DS_LEN))) ### make sure there is a small train size
+    if test_size <= 0:
+        test_size = 0.9
     if isinstance(target, str):
         targets = [target]
     else:

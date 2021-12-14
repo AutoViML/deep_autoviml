@@ -360,7 +360,7 @@ class MyTuner(Tuner):
         #opt = comp_model.optimizer
         #for var in opt.variables():
         #    var.assign(tf.zeros_like(var))
-        print('    Custom model compiled successfully. Training model next...')
+        #print('    Custom model compiled successfully. Training model next...')
         shuffle_size = 1000000
         #batch_size = hp.Param('batch_size', [64, 128, 256], ordered=True)
         train_ds = train_ds.unbatch().batch(batch_size)

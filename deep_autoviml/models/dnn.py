@@ -35,17 +35,14 @@ from tensorflow.keras.layers import Activation, Dense, Embedding, GlobalAverageP
 from tensorflow.keras.layers import GlobalMaxPooling1D, Dropout, Conv1D
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 ############################################################################################
-from functools import partial
-
-RegDense = partial(Dense, kernel_initializer="he_normal", kernel_regularizer=keras.regularizers.l2(0.01))
 
 model = Sequential([
     BatchNormalization(),
     Activation("elu"),
-    RegDense(64),
+    Dense(200),
     BatchNormalization(),
     Activation("elu"),
-    RegDense(64),
-    BatchNormalization(),
-    Activation("elu")
+    Dense(200),
+    Activation("elu"),
+    Dense(200),
 ]);

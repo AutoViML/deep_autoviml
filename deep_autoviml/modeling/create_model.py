@@ -27,7 +27,7 @@ np.set_printoptions(precision=3, suppress=True)
 from collections import defaultdict
 ############################################################################################
 # data pipelines and feature engg here
-from deep_autoviml.models import basic, deep, big_deep, giant_deep, cnn1, cnn2
+from deep_autoviml.models import basic, dnn, dnn_drop, giant_deep, cnn1, cnn2
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_fast_inputs, create_fast_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_all_inputs, create_all_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_num_inputs, encode_auto_inputs
@@ -227,8 +227,8 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
     fast_models2 = ['deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
     nlp_models = ['bert', 'use', 'text', 'mixed_nlp']
     #### The Deep and Wide Model is a bit more complicated. So it needs some changes in inputs! ######
-    prebuilt_models = ['basic', 'simple', 'default','simple_dnn','sample model',
-                        'deep', 'big_deep', 'big deep', 'giant_deep', 'giant deep',
+    prebuilt_models = ['basic', 'simple', 'default','dnn','reg_dnn',
+                         'dnn_drop', 'big deep', 'giant_deep', 'giant deep',
                         'cnn1', 'cnn','cnn2']
     ######   Just do a simple check for auto models here ####################
     preds = cat_vocab_dict["predictors_in_train"]
@@ -259,19 +259,22 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
     ##########################   This is for non-auto models #####################################
     if isinstance(use_my_model, str) :
         if use_my_model == "":
-            if keras_model_type.lower() in ['basic', 'simple', 'default','simple_dnn','sample model']:
+            if keras_model_type.lower() in ['basic', 'simple', 'default','sample model']:
                 ##########  Now that we have setup the layers correctly, we can build some more hidden layers
                 model_body = basic.model
-            elif keras_model_type.lower() in ['deep']:
+            elif keras_model_type.lower() in ['reg_dnn', 'deep']:
                 ##########  Now that we have setup the layers correctly, we can build some more hidden layers
-                model_body = deep.model
-            elif keras_model_type.lower() in ['big_deep', 'big deep']:
+                model_body = reg_dnn.model
+            elif keras_model_type.lower() in ['dnn', 'simple_dnn']:
+                ##########  Now that we have setup the layers correctly, we can build some more hidden layers
+                model_body = dnn.model
+            elif keras_model_type.lower() in ['dnn_drop', 'big_deep']:
                 ####################################################
-                model_body = big_deep.model
-            elif keras_model_type.lower() in ['giant_deep', 'giant deep']:
+                model_body = dnn_drop.model
+            elif keras_model_type.lower() in ['giant', 'giant_deep']:
                 ####################################################
                 model_body = giant_deep.model
-            elif keras_model_type.lower() in ['cnn1', 'cnn','cnn2']:
+            elif keras_model_type.lower() in ['cnn', 'cnn1','cnn2']:
                 ##########  Now that we have setup the layers correctly, we can build some more hidden layers
                 # Conv1D + global max pooling
                 if keras_model_type.lower() in ['cnn', 'cnn1']:

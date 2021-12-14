@@ -42,7 +42,10 @@ RegDense = partial(Dense, kernel_initializer="he_normal", kernel_regularizer=ker
 model = Sequential([
     BatchNormalization(),
     Activation("elu"),
-    RegDense(64),
+    RegDense(100),
     BatchNormalization(),
-    Activation("elu")
+    Activation("elu"),
+    RegDense(100),
+    Activation("elu"),
+    RegDense(100),
 ]);

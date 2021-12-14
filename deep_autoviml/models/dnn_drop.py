@@ -36,10 +36,16 @@ from tensorflow.keras.layers import GlobalMaxPooling1D, Dropout, Conv1D
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 ############################################################################################
 
-model = Sequential([
-    BatchNormalization(),
-    Dense(128, activation='relu'),
-    BatchNormalization(),
-    Dense(64, activation='relu'),
-    BatchNormalization(),
-]);
+model = models.Sequential([
+                        BatchNormalization(),
+						Dropout(0.5),
+                        layers.Dense(300, activation='relu', kernel_initializer='he_normal'),
+						BatchNormalization(),
+						Dropout(0.5),
+                        layers.Dense(300, activation='relu', kernel_initializer='he_normal'),
+						BatchNormalization(),
+						Dropout(0.2),
+                        layers.Dense(300, activation='relu', kernel_initializer='he_normal'),
+						BatchNormalization(),
+						Dropout(0.2),
+                        ])
