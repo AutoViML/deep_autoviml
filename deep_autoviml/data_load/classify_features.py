@@ -1172,6 +1172,7 @@ def fast_classify_features(df):
         cat_feature_cross_flag.append("cat")
     if len(int_dict['bincols']+int_dict['catcols']) > 2 and len(int_dict['bincols']+int_dict['catcols']) <= 10:
         cat_feature_cross_flag.append("num")
+    ######## This is where we advise and act on whether to do feature crosses or not #########
     if cat_feature_cross_flag:
         print('Data Transformation Advisory:')
         if "cat" in cat_feature_cross_flag:

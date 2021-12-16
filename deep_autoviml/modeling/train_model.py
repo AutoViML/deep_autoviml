@@ -64,10 +64,10 @@ from IPython.core.display import Image, display
 import pickle
 #############################################################################################
 ##### Suppress all TF2 and TF1.x warnings ###################
-try:
-    tf.logging.set_verbosity(tf.logging.ERROR)
-except:
-    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+tf2logger = tf.get_logger()
+tf2logger.warning('Silencing TF2.x warnings')
+tf2logger.root.removeHandler(tf2logger.root.handlers)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 ############################################################################################
 from tensorflow.keras.layers import Reshape, MaxPooling1D, MaxPooling2D, AveragePooling2D, AveragePooling1D
 from tensorflow.keras import Model, Sequential
@@ -188,9 +188,9 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     shuffle_size = int(data_size)
     #shuffle_size = 100000
     print('    shuffle size = %d' %shuffle_size)
-    #train_ds = train_ds.prefetch(batch_size).shuffle(shuffle_size, 
-    #                        reshuffle_each_iteration=False, seed=42)#.repeat()
-    #valid_ds = valid_ds.prefetch(batch_size)#.repeat()
+    train_ds = train_ds.cache().prefetch(batch_size).shuffle(shuffle_size, 
+                            reshuffle_each_iteration=False, seed=42)#.repeat()
+    valid_ds = valid_ds.prefetch(batch_size)#.repeat()
 
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
     for each_callback in callbacks_list:
@@ -368,7 +368,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     ###   V E R Y    I M P O R T A N T  S T E P   B E F O R E   M O D E L   F I T  ###    
     ##################################################################################
     print('\nTraining on full train dataset for %d epochs. This will take time...' %stopped_epoch)
-    full_ds = full_ds.shuffle(shuffle_size).prefetch(batch_size) #.repeat()
+    full_ds = full_ds.cache().shuffle(shuffle_size).prefetch(batch_size) #.repeat()
     #heldout_ds = heldout_ds.shuffle(shuffle_size).prefetch(batch_size)
     deep_model.fit(full_ds, epochs=stopped_epoch, #steps_per_epoch=STEPS_PER_EPOCH,
                  class_weight=class_weights, verbose=0)

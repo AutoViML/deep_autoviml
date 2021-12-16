@@ -29,6 +29,7 @@ np.set_printoptions(precision=3, suppress=True)
 # TensorFlow ≥2.4 is required
 import tensorflow as tf
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 def set_seed(seed=31415):
     np.random.seed(seed)
     tf.random.set_seed(seed)
@@ -75,12 +76,10 @@ from IPython.core.display import Image, display
 import pickle
 #############################################################################################
 ##### Suppress all TF2 and TF1.x warnings ###################
-try:
-    tf2logger = tf.get_logger()
-    tf2logger.warning('Silencing TF2.x warnings')
-    tf2logger.root.removeHandler(tf2logger.root.handlers)
-except:
-    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+tf2logger = tf.get_logger()
+tf2logger.warning('Silencing TF2.x warnings')
+tf2logger.root.removeHandler(tf2logger.root.handlers)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 ############################################################################################
 from tensorflow.keras.layers import Reshape, MaxPooling1D, MaxPooling2D, AveragePooling2D, AveragePooling1D
 from tensorflow.keras import Model, Sequential
@@ -361,8 +360,8 @@ class MyTuner(Tuner):
         #for var in opt.variables():
         #    var.assign(tf.zeros_like(var))
         #print('    Custom model compiled successfully. Training model next...')
-        shuffle_size = 1000000
-        #batch_size = hp.Param('batch_size', [64, 128, 256], ordered=True)
+        shuffle_size = 1000
+        batch_size = hp.Param('batch_size', [64, 128, 256], ordered=True)
         train_ds = train_ds.unbatch().batch(batch_size)
         train_ds = train_ds.shuffle(shuffle_size,
                         reshuffle_each_iteration=False, seed=42).prefetch(batch_size)#.repeat(5)
@@ -564,13 +563,14 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     train_ds = full_ds.enumerate().filter(is_train).map(recover)
     heldout_ds1 = valid_ds1
     ##################################################################################
+    print('    Splitting validation 20 into 10+10 percent: valid and heldout data')
     valid_ds = heldout_ds1.enumerate().filter(is_test).map(recover)
     heldout_ds = heldout_ds1.enumerate().filter(is_test).map(recover)
-    print('    Splitting validation 20 into 10+10 percent: valid and heldout data')
+    print('\nLoading model and setting params. Will take 2-3 mins. Please be patient.')
     ##################################################################################
     ###   V E R Y    I M P O R T A N T  S T E P   B E F O R E   M O D E L   F I T  ###
     ##################################################################################
-    shuffle_size = 100000
+    shuffle_size = 1000
     if num_labels <= 1:
         y_test = np.concatenate(list(heldout_ds.map(lambda x,y: y).as_numpy_iterator()))
         print('Single-Label: Heldout data shape: %s' %(y_test.shape,))
@@ -593,7 +593,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
             ### if there are no negative values, then set output as positives only
             output_activation = 'softplus'
             print('Setting output activation layer as softplus since there are no negative values')
-    #print(' Shuffle size = %d' %shuffle_size)
+    print(' Shuffle size = %d' %shuffle_size)
     train_ds = train_ds.prefetch(tf.data.AUTOTUNE).shuffle(
                             shuffle_size, reshuffle_each_iteration=False, seed=42)#.repeat()
     valid_ds = valid_ds.prefetch(tf.data.AUTOTUNE)#.repeat()

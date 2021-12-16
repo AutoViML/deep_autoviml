@@ -209,7 +209,7 @@ def load_test_data(test_data_or_file, project_name, cat_vocab_dict="",
         except:
             pass
     #### These are the input variables for which we are going to create keras.Inputs ###\
-    return data_batches, cat_vocab_dict
+    return data_batches, cat_vocab_dict, test_small
 #################################################################################################
 def lenopenreadlines(filename):
     with open(filename) as f:
@@ -336,7 +336,7 @@ def predict(model_or_model_path, project_name, test_dataset,
         return y
     ################################################################
     if isinstance(test_dataset, str):
-        test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name,
+        test_ds, cat_vocab_dict2, test_small = load_test_data(test_dataset, project_name=project_name,
                                 cat_vocab_dict=cat_vocab_dict, verbose=verbose)
         ### You have to load only the NLP or text variables into dataset. otherwise, it will fail during predict
         batch_size = cat_vocab_dict2["batch_size"]
@@ -356,7 +356,7 @@ def predict(model_or_model_path, project_name, test_dataset,
         if keras_model_type.lower() in ['nlp', 'text']:
             #### You must only load the text or nlp columns into the dataset. Otherwise, it will fail during predict.
             test_dataset = test_dataset[NLP_VARS]
-        test_ds, cat_vocab_dict2 = load_test_data(test_dataset, project_name=project_name,
+        test_ds, cat_vocab_dict2, test_small = load_test_data(test_dataset, project_name=project_name,
                                 cat_vocab_dict=cat_vocab_dict, verbose=verbose)
         batch_size = cat_vocab_dict2["batch_size"]
         DS_LEN = cat_vocab_dict2["DS_LEN"]
@@ -397,7 +397,7 @@ def predict(model_or_model_path, project_name, test_dataset,
     BOOLS = cat_vocab_dict2['bools']
     #################################################################################
     @tf.function
-    def process_boolean_features(features):
+    def process_boolean_features(features, target):
         """
         This is how you convert all your boolean features into float variables.
         The reason you have to do this is because tf.keras does not know how to handle boolean types.
@@ -406,14 +406,18 @@ def predict(model_or_model_path, project_name, test_dataset,
         for feature_name in features:
             if feature_name in BOOLS:
                 # Cast boolean feature values to string.
-                features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
-        return features
+                #features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
+                features[feature_name] = tf.dtypes.cast(features[feature_name], tf.int32)
+        return (features, target)
     ##################################################################
     try:
         test_ds = test_ds.map(process_boolean_features)
         print('Boolean column successfully processed')
     except:
         print('Error in Boolean column processing. Continuing...')
+    #################################################################################
+    ################## process next steps from here on  #############################
+    #################################################################################
     ## num_steps is needed to predict on whole dataset once ##
     try:
         num_steps = int(np.ceil(DS_LEN/batch_size))
@@ -592,7 +596,7 @@ def predict_text(test_text_dir, model_or_model_path, cat_vocab_dict, keras_model
             print('Predicted probabilities: %s' %pred_label)
         elif test_text_dir.split(".")[-1] in ["csv"]:
             print("    loading and predicting on CSV file : %s" %test_text_dir)
-            test_ds, cat_vocab_dict = load_test_data(test_text_dir, project_name, cat_vocab_dict=cat_vocab_dict,
+            test_ds, cat_vocab_dict, test_small = load_test_data(test_text_dir, project_name, cat_vocab_dict=cat_vocab_dict,
                                                              verbose=0)
             DS_LEN = cat_vocab_dict['DS_LEN']
             batch_size = cat_vocab_dict["batch_size"]

@@ -27,7 +27,7 @@ np.set_printoptions(precision=3, suppress=True)
 from collections import defaultdict
 ############################################################################################
 # data pipelines and feature engg here
-from deep_autoviml.models import basic, dnn, dnn_drop, giant_deep, cnn1, cnn2
+from deep_autoviml.models import basic, dnn, reg_dnn, dnn_drop, giant_deep, cnn1, cnn2
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_fast_inputs, create_fast_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_all_inputs, create_all_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_num_inputs, encode_auto_inputs
@@ -68,12 +68,10 @@ from IPython.core.display import Image, display
 import pickle
 
 ##### Suppress all TF2 and TF1.x warnings ###################
-try:
-    tf2logger = tf.get_logger()
-    tf2logger.warning('Silencing TF2.x warnings')
-    tf2logger.root.removeHandler(tf2logger.root.handlers)
-except:
-    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+tf2logger = tf.get_logger()
+tf2logger.warning('Silencing TF2.x warnings')
+tf2logger.root.removeHandler(tf2logger.root.handlers)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 ############################################################################################
 from tensorflow.keras.layers import Reshape, MaxPooling1D, MaxPooling2D, AveragePooling2D, AveragePooling1D
 from tensorflow.keras import Model, Sequential
@@ -228,7 +226,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
     nlp_models = ['bert', 'use', 'text', 'mixed_nlp']
     #### The Deep and Wide Model is a bit more complicated. So it needs some changes in inputs! ######
     prebuilt_models = ['basic', 'simple', 'default','dnn','reg_dnn',
-                         'dnn_drop', 'big deep', 'giant_deep', 'giant deep',
+                         'dnn_drop', 'big_deep', 'giant_deep', 'giant deep',
                         'cnn1', 'cnn','cnn2']
     ######   Just do a simple check for auto models here ####################
     preds = cat_vocab_dict["predictors_in_train"]
@@ -488,23 +486,22 @@ def get_model_defaults(keras_options, model_options, targets):
     use_bias = check_keras_options(keras_options, 'use_bias', True)
     optimizer = check_keras_options(keras_options,'optimizer', Adam(lr=0.01, beta_1=0.9, beta_2=0.999))
     if modeltype == 'Regression':
-        reg_loss = check_keras_options(keras_options,'loss','mse') ### you can use tf.keras.losses.Huber() instead
+        reg_loss = check_keras_options(keras_options,'loss','mae') ### you can use tf.keras.losses.Huber() instead
         #val_metrics = [check_keras_options(keras_options,'metrics',keras.metrics.RootMeanSquaredError(name='rmse'))]
-        #METRICS = [keras.metrics.MeanAbsoluteError(name='mae'), keras.metrics.RootMeanSquaredError(name='rmse'),]
+        METRICS = [keras.metrics.RootMeanSquaredError(name='rmse'), keras.metrics.MeanAbsoluteError(name='mae')]
         #METRICS = [keras.metrics.MeanSquaredError(name="mean_squared_error", dtype=None)]
-        METRICS = ['mean_squared_error']
+        #METRICS = ['mean_squared_error']
         val_metrics = check_keras_options(keras_options,'metrics',METRICS)
         num_predicts = 1*num_labels
         if num_labels <= 1:
             val_loss = check_keras_options(keras_options,'loss', reg_loss)
-            val_metric = val_metrics[0]
+            val_metric = 'rmse'
         else:
             val_loss = []
             for i in range(num_labels):
                 val_loss.append(reg_loss)
             val_metric = 'loss'
         ####### If you change the val_metrics above, you must also change its name here ####
-        val_metric = val_metrics[0]
         output_activation = 'linear' ### use "relu" or "softplus" if you want positive values as output
     elif modeltype == 'Classification':
         ##### This is for Binary Classification Problems

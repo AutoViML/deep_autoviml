@@ -251,8 +251,8 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     if http_url:
         maxrows = 100000 ### set it very high so that all rows are read into dataframe ###
     else:
-        maxrows = min(100000, int(0.25*DS_LEN))
-        print('Max rows loaded to classify features = %s' %maxrows)
+        maxrows = min(500000, int(0.25*DS_LEN))
+    print('Max rows that will be used to classify features = %s' %maxrows)
     ### first load a small sample of the dataframe and the entire target if it needs transform
     if DS_LEN > 2*maxrows:
         ### we randomly sample a small dataset to classify features
@@ -263,22 +263,28 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
             targets = [target]
         else:
             targets = copy.deepcopy(target)
-        nrows_limit = min(DS_LEN, 1e5) ### don't load the entire dataframe!
+        nrows_limit = int(min(DS_LEN, 1e5)) ### don't load the entire dataframe!
         print('    Since number of rows > maxrows, loading a random sample of %d rows into pandas for EDA' %nrows_limit)
         ### load a small sample of data into a pandas dataframe ##
         train_small = pd.read_csv(train_datafile, nrows=nrows_limit, sep=sep, header=header,
                         encoding=csv_encoding, compression=compression)
+        if train_small.shape[1] <= 1:
+            print('\nError in loading datafile. Please check if the separator in file is comma. If not, provide separator in model_options = {"sep":sep}')
+            return
         try:
             modeltype = model_options["modeltype"]
         except:
             modeltype, model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
+        ###### Remove samples with very few classes here ######
         if modeltype != 'Regression':
             copy_targets = copy.deepcopy(targets)
             for each_target in copy_targets:
                 ### You need to remove rows that have very class samples - that is a problem while splitting train_small
                 list_of_few_classes = train_small[each_target].value_counts()[train_small[each_target].value_counts()<=1].index.tolist()
                 train_small = train_small.loc[~(train_small[each_target].isin(list_of_few_classes))]
-            
+            ### After you drop some rows, make sure you lower the limit 
+            DS_LEN = min(train_small.shape[0], DS_LEN)
+            nrows_limit = int(min(DS_LEN, 1e5))
             train_small, _ = train_test_split(train_small, test_size=test_size, stratify=train_small[targets])
     else:
         print('    Since number of rows in file <= %d maxrows, loading entire file into pandas for EDA' %maxrows)
@@ -346,6 +352,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     ##########  Find small details about the data to help create the right model ###
 
     if modeltype == 'Classification' or modeltype == 'Multi_Classification':
+        shuffle_flag = True
         if isinstance(target, str):
             #### This is for Single-Label problems ########
             if train_small[target].dtype == 'object' or str(train_small[target].dtype).lower() == 'category':
@@ -474,6 +481,8 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     ###########  C H E C K   F O R   I N F I N I T E   V A L U E S  H E R E ####################
     ############################################################################################
     cols_with_infinity = find_columns_with_infinity(train_small)
+    if cols_with_infinity:
+        print('    ALERT! Some columns have infinite values: %s ' %cols_with_infinity)
 
     ################    T F  D A T A   D A T A S E T   L O A D I N G     H E R E ################
     ############    Create a Tensorflow Dataset using the make_csv function #####################
@@ -503,6 +512,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                                        label_name=target_name,
                                        num_epochs = num_epochs,
                                        column_defaults=column_defaults,
+                                       field_delim=sep,
                                        compression_type=compression_type,
                                        shuffle=shuffle_flag,
                                        num_parallel_reads=tf.data.experimental.AUTOTUNE)
@@ -517,7 +527,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         if label_encode_flag:
             print('    target label encoding now...')
             data_batches = data_batches.map(lambda x, y: to_ids(x, y, table))
-            print('    target label encoding completed.')
+            print('        target label encoding completed.')
     print('    train data loaded successfully.')
     drop_cols = var_df1['cols_delete']
     preds = [x for x in list(train_small) if x not in usecols+drop_cols]
@@ -657,8 +667,6 @@ def load_train_data_frame(train_dataframe, target, keras_options, model_options,
     """
     train_dataframe = copy.deepcopy(train_dataframe)
     DS_LEN = model_options['DS_LEN']
-    print('Max rows loaded to classify features = %s' %DS_LEN)
-    print('     small sample dataset from train loaded. Shape = %s' %(train_dataframe.shape,))
     #### do this for dataframes ##################
     maxrows = 100000
     try:
@@ -718,31 +726,37 @@ def load_train_data_frame(train_dataframe, target, keras_options, model_options,
     except:
         ### if modeltype is given, then do not find the model type using this function
         modeltype,  model_label, usecols = find_problem_type(train_dataframe, target, model_options, verbose)
-    ### we randomly sample a small dataset to classify features
+    ### we check if certain classes have very few data samples and remove them  ####
+    if modeltype != 'Regression':
+        find_rare_class(train_dataframe[target], verbose=1)
+    targets = copy.deepcopy(usecols) ## this turns target into a list
+    if modeltype != 'Regression':
+        for each_target in targets:
+            drop_classes = train_dataframe[each_target].value_counts().index[(train_dataframe[each_target].value_counts()<10)].tolist()
+            drop_rows = len(train_dataframe.loc[(train_dataframe[each_target].isin(drop_classes))])
+            if drop_rows:
+                print('    Dropping %s rows due to very few samples in %s classes' %(drop_rows, drop_classes))
+            train_dataframe = train_dataframe.loc[~(train_dataframe[each_target].isin(drop_classes))]
+        #### Once you drop some rows, you have to revise the DS_LEN variable to the lower amount ##
+        DS_LEN = min(train_dataframe.shape[0], DS_LEN)
+    ### Now load a small sample to classify features in data set ###############
     test_size = min(0.9, (1 - (maxrows/DS_LEN))) ### make sure there is a small train size
     if test_size <= 0:
         test_size = 0.9
-    if isinstance(target, str):
-        targets = [target]
-    else:
-        targets = copy.deepcopy(target)
-    nrows_limit = min(DS_LEN, 5e6) ### don't load the entire dataframe!
-    print('    Since number of rows > maxrows, loading a random sample of %d rows into pandas for EDA' %nrows_limit)
+    
     ### load a small sample of data into a pandas dataframe ##
-    train_small = train_dataframe.sample(n=nrows_limit, random_state=99)
-    ### If it is a classification problem, you need to stratify and select sample ###
     if modeltype != 'Regression':
-        copy_targets = copy.deepcopy(targets)
-        for each_target in copy_targets:
-            ### You need to remove rows that have very class samples - that is a problem while splitting train_small
-            list_of_few_classes = train_small[each_target].value_counts()[train_small[each_target].value_counts()<=1].index.tolist()
-            train_small = train_small.loc[~(train_small[each_target].isin(list_of_few_classes))]
-        train_small, _ = train_test_split(train_small, test_size=test_size, stratify=train_small[targets])
-
+        ### For classification problems, we need to take a stratified sample to load into data_classify
+        train_classify, _ = train_test_split(train_dataframe, test_size=test_size, stratify=train_dataframe[targets])
+        print('Max rows that will be loaded to classify features = %s' %train_classify.shape[0])
+    else:
+        train_classify = train_dataframe.sample(n=maxrows, random_state=99)
+        print('Max rows that will be loaded to classify features = %s' %maxrows)
     ###   Cat_Vocab_Dict contains all info about vocabulary in each variable and their size
     print('    Classifying variables using data sample in pandas...')   
-    train_small, var_df, cat_vocab_dict = classify_features_using_pandas(train_small, target, model_options, verbose=verbose)
-
+    _, var_df, cat_vocab_dict = classify_features_using_pandas(train_classify, target, model_options, verbose=verbose)
+    train_small = copy.deepcopy(train_dataframe)
+    del train_dataframe
     ##########    Just transfer all the values from var_df to cat_vocab_dict  ##################################
     for each_key in var_df:
         cat_vocab_dict[each_key] = var_df[each_key]
@@ -1034,6 +1048,7 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     #################################################################################
     ################## process boolean target if needed #############################
     #################################################################################
+    pdb.set_trace()
     #@tf.autograph.experimental.do_not_convert
     @tf.function
     def process_target(features, target):
@@ -1042,6 +1057,7 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     if bool in train_small[cat_vocab_dict['target_variables']].dtypes.values:
         train_ds = train_ds.map(process_target)        
     print('Boolean columns successfully processed')
+    pdb.set_trace()
     #################################################################################
     if keras_model_type.lower() in ['nlp', 'text']:
         NLP_VARS = cat_vocab_dict['predictors_in_train']
@@ -1120,6 +1136,7 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     else:
         keras_options['class_weight'] = {}
         print('    No class weights specified. Continuing...')
+    pdb.set_trace()
     return train_small, model_options, train_ds, var_df, cat_vocab_dict, keras_options
 ##########################################################################################################
 from collections import OrderedDict
