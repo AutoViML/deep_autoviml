@@ -67,10 +67,10 @@ from IPython.core.display import Image, display
 import pickle
 #############################################################################################
 ##### Suppress all TF2 and TF1.x warnings ###################
-try:
-    tf.logging.set_verbosity(tf.logging.ERROR)
-except:
-    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+tf2logger = tf.get_logger()
+tf2logger.warning('Silencing TF2.x warnings')
+tf2logger.root.removeHandler(tf2logger.root.handlers)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 ############################################################################################
 from tensorflow.keras.layers import Reshape, MaxPooling1D, MaxPooling2D, AveragePooling2D, AveragePooling1D
 from tensorflow.keras import Model, Sequential

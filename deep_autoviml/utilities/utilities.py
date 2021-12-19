@@ -53,6 +53,11 @@ from tensorflow.keras import layers
 from tensorflow.keras.models import Model, load_model
 ################################################################################
 from deep_autoviml.modeling.one_cycle import OneCycleScheduler
+##### Suppress all TF2 and TF1.x warnings ###################
+tf2logger = tf.get_logger()
+tf2logger.warning('Silencing TF2.x warnings')
+tf2logger.root.removeHandler(tf2logger.root.handlers)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 ################################################################################
 import os
