@@ -32,9 +32,12 @@ from deep_autoviml.preprocessing.preprocessing_tabular import encode_fast_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_all_inputs, create_all_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_num_inputs, encode_auto_inputs
 
+from deep_autoviml.preprocessing.preprocessing_tabular import encode_nlp_inputs, create_nlp_inputs
+from deep_autoviml.preprocessing.preprocessing_nlp import aggregate_nlp_dictionaries
+
 # Utils
 from deep_autoviml.utilities.utilities import check_if_GPU_exists
-#from deep_autoviml.utilities.utilities import get_model_defaults, get_compiled_model, get_uncompiled_model
+from deep_autoviml.utilities.utilities import get_model_defaults, get_compiled_model, get_uncompiled_model
 from deep_autoviml.utilities.utilities import check_model_options, check_keras_options
 from deep_autoviml.utilities.utilities import add_outputs_to_model_body
 from deep_autoviml.utilities.utilities import get_hidden_layers, add_outputs_to_auto_model_body
@@ -190,7 +193,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
     val_metrics = keras_options["metrics"]
     learning_rate = 5e-2
     ############################################################################
-    print('Creating a keras Function model...')
+    print('Creating a(n) %s Functional model...' %keras_model_type)
     try:
         print('    number of outputs = %s, output_activation = %s' %(
                             num_labels, output_activation))
@@ -302,11 +305,19 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                     features = layers.Dropout(dropout_rate)(features)
                 all_inputs = list(inputs.values()) ### convert input layers to a list
                 if len(nlps) > 0:
+                    print('Starting NLP string column layer preprocessing...')
+                    nlp_inputs = create_nlp_inputs(nlps)
+                    max_tokens_zip, seq_tokens_zip, embed_tokens_zip, vocab_train_small = aggregate_nlp_dictionaries(nlps, cat_vocab_dict, model_options)
+                    nlp_outputs = encode_nlp_inputs(nlp_inputs, cat_vocab_dict)
+                    ### we call nlp_outputs as embedding in this section of the program ####
+                    print('    NLP Preprocessing completed.')
+                    nlp_inputs = list(nlp_inputs.values())
                     all_inputs += nlp_inputs
                     model_body = layers.concatenate([features, nlp_outputs])
+                    print('    %s combined non-nlp and nlp outputs successfully...' %keras_model_type)
                 else:
                     model_body = features
-                print('    Created simple %s model, ...' %keras_model_type)
+                    print('    %s combined non-nlp outputs successfully...' %keras_model_type)
             elif keras_model_type.lower() in fast_models1:
                 ###############################################################################################
                 # In a Wide & Deep model, the wide part of the model is a linear model, while the deep
@@ -332,14 +343,19 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                 #### If there are NLP vars in dataset, you must combine them ##
                 all_inputs = list(inputs.values()) ### convert input layers to a list
                 if len(nlps) > 0:
+                    print('Starting NLP string column layer preprocessing...')
+                    nlp_inputs = create_nlp_inputs(nlps)
+                    max_tokens_zip, seq_tokens_zip, embed_tokens_zip, vocab_train_small = aggregate_nlp_dictionaries(nlps, cat_vocab_dict, model_options)
+                    nlp_outputs = encode_nlp_inputs(nlp_inputs, cat_vocab_dict)
+                    ### we call nlp_outputs as embedding in this section of the program ####
+                    print('    NLP Preprocessing completed.')
+                    nlp_inputs = list(nlp_inputs.values())
                     all_inputs += nlp_inputs
                     model_body = layers.concatenate([wide, deep, nlp_outputs])
+                    print('    %s combined wide, deep and nlp outputs successfully...' %keras_model_type)
                 else:
                     model_body = layers.concatenate([wide, deep])
-                ##### This is where you create the last layer to deliver predictions ####
-                #final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
-                #model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
-                print('    Created deep and wide %s model, ...' %keras_model_type)
+                    print('    %s combined wide and deep  successfully...' %keras_model_type)
             elif keras_model_type.lower() in fast_models2:
                 ###############################################################################################
                 # In a Deep & Cross model, the deep part of this model is the same as the deep part
@@ -368,14 +384,19 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                 #### If there are NLP vars in dataset, you must combine them ##
                 all_inputs = list(inputs.values()) ### convert input layers to a list
                 if len(nlps) > 0:
+                    print('Starting NLP string column layer preprocessing...')
+                    nlp_inputs = create_nlp_inputs(nlps)
+                    max_tokens_zip, seq_tokens_zip, embed_tokens_zip, vocab_train_small = aggregate_nlp_dictionaries(nlps, cat_vocab_dict, model_options)
+                    nlp_outputs = encode_nlp_inputs(nlp_inputs, cat_vocab_dict)
+                    ### we call nlp_outputs as embedding in this section of the program ####
+                    print('    NLP Preprocessing completed.')
+                    nlp_inputs = list(nlp_inputs.values())
                     all_inputs += nlp_inputs
                     model_body = layers.concatenate([cross, deep, nlp_outputs])
+                    print('    %s combined wide, deep and nlp outputs successfully...' %keras_model_type)
                 else:
                     model_body = layers.concatenate([cross, deep])
-                ##### This is where you create the last layer to deliver predictions ####
-                #final_outputs = layers.Dense(units=num_predicts, activation=output_activation)(merged)
-                #model_body = keras.Model(inputs=all_inputs, outputs=final_outputs)
-                print('    Created deep and cross %s model, ...' %keras_model_type)
+                    print('    %s combined wide and deep  successfully...' %keras_model_type)
                 ################################################################################
             elif keras_model_type.lower() in nlp_models:
                 print('    creating %s model body...' %keras_model_type)
@@ -430,21 +451,6 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
         print(model_body.summary())
     return model_body, keras_options
 ###############################################################################
-class BalancedSparseCategoricalAccuracy(keras.metrics.SparseCategoricalAccuracy):
-    def __init__(self, name='balanced_sparse_categorical_accuracy', dtype=None):
-        super().__init__(name, dtype=dtype)
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        y_flat = y_true
-        if y_true.shape.ndims == y_pred.shape.ndims:
-            y_flat = tf.squeeze(y_flat, axis=[-1])
-        y_true_int = tf.cast(y_flat, tf.int32)
-
-        cls_counts = tf.math.bincount(y_true_int)
-        cls_counts = tf.math.reciprocal_no_nan(tf.cast(cls_counts, self.dtype))
-        weight = tf.gather(cls_counts, y_true_int)
-        return super().update_state(y_true, y_pred, sample_weight=weight)
-###############################################################################
 def return_optimizer(hpq_optimizer):
     """
     This returns the keras optimizer with proper inputs if you send the string.
@@ -478,171 +484,3 @@ def return_optimizer(hpq_optimizer):
         best_optimizer = nesterov
     return best_optimizer
 ##########################################################################################
-def get_model_defaults(keras_options, model_options, targets):
-    num_classes = model_options["num_classes"]
-    num_labels = model_options["num_labels"]
-    modeltype = model_options["modeltype"]
-    patience = check_keras_options(keras_options, "patience", 10)
-    use_bias = check_keras_options(keras_options, 'use_bias', True)
-    optimizer = check_keras_options(keras_options,'optimizer', Adam(lr=0.01, beta_1=0.9, beta_2=0.999))
-    if modeltype == 'Regression':
-        reg_loss = check_keras_options(keras_options,'loss','mae') ### you can use tf.keras.losses.Huber() instead
-        #val_metrics = [check_keras_options(keras_options,'metrics',keras.metrics.RootMeanSquaredError(name='rmse'))]
-        METRICS = [keras.metrics.RootMeanSquaredError(name='rmse'), keras.metrics.MeanAbsoluteError(name='mae')]
-        #METRICS = [keras.metrics.MeanSquaredError(name="mean_squared_error", dtype=None)]
-        #METRICS = ['mean_squared_error']
-        val_metrics = check_keras_options(keras_options,'metrics',METRICS)
-        num_predicts = 1*num_labels
-        if num_labels <= 1:
-            val_loss = check_keras_options(keras_options,'loss', reg_loss)
-            val_metric = 'rmse'
-        else:
-            val_loss = []
-            for i in range(num_labels):
-                val_loss.append(reg_loss)
-            val_metric = 'loss'
-        ####### If you change the val_metrics above, you must also change its name here ####
-        output_activation = 'linear' ### use "relu" or "softplus" if you want positive values as output
-    elif modeltype == 'Classification':
-        ##### This is for Binary Classification Problems
-        #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
-        #val_metrics = [check_keras_options(keras_options,'metrics','AUC')]
-        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
-        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        val_loss = check_keras_options(keras_options,'loss', cat_loss)
-        bal_acc = BalancedSparseCategoricalAccuracy()
-        #bal_acc = 'accuracy'
-        val_metrics = check_keras_options(keras_options,'metrics',bal_acc)
-        if num_labels <= 1:
-            num_predicts = int(num_classes*num_labels)
-        else:
-            #### This is for multi-label problems wihere number of classes will be a list
-            num_predicts = num_classes
-        output_activation = "sigmoid"
-        ####### If you change the val_metrics above, you must also change its name here ####
-        val_metric = 'balanced_sparse_categorical_accuracy'
-        #val_metric = 'accuracy'
-    else:
-        #### this is for multi-class problems ####
-        cat_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        #val_loss = check_keras_options(keras_options,'loss','sparse_categorical_crossentropy')
-        #val_metrics = check_keras_options(keras_options,'metrics','accuracy')
-        if num_labels <= 1:
-            num_predicts = int(num_classes*num_labels)
-            val_loss = check_keras_options(keras_options,'loss', cat_loss)
-            bal_acc = BalancedSparseCategoricalAccuracy()
-            #bal_acc = 'accuracy'
-            val_metrics = check_keras_options(keras_options, 'metrics', bal_acc)
-        else:
-            #### This is for multi-label problems wihere number of classes will be a list
-            num_predicts = num_classes
-            val_loss = []
-            for i in range(num_labels):
-                val_loss.append(cat_loss)
-            bal_acc = BalancedSparseCategoricalAccuracy()
-            #bal_acc = 'accuracy'
-            val_metrics = check_keras_options(keras_options, 'metrics', bal_acc)
-        output_activation = 'softmax'
-        ####### If you change the val_metrics above, you must also change its name here ####
-        val_metric = 'balanced_sparse_categorical_accuracy'
-        #val_metric = 'accuracy'
-    ##############  Suggested number of neurons in each layer ##################
-    if modeltype == 'Regression':
-        val_monitor = check_keras_options(keras_options, 'monitor', 'val_'+val_metric)
-        val_mode = check_keras_options(keras_options,'mode', 'min')
-    elif modeltype == 'Classification':
-        ##### This is for Binary Classification Problems
-        if num_labels <= 1:
-            val_monitor = check_keras_options(keras_options,'monitor', 'val_'+val_metric)
-            val_mode = check_keras_options(keras_options,'mode', 'max')
-            val_metric = 'balanced_sparse_categorical_accuracy'
-        else:
-            val_metric = 'balanced_sparse_categorical_accuracy'
-            #val_metric = 'accuracy'
-            ### you cannot combine multiple metrics here unless you write a new function.
-            target_A = targets[0]
-            val_monitor = 'val_loss' ### this combines all losses and is best to minimize
-            val_mode = check_keras_options(keras_options,'mode', 'min')
-        #val_monitor = check_keras_options(keras_options,'monitor', 'val_auc')
-        #val_monitor = check_keras_options(keras_options,'monitor', 'val_accuracy')
-    else:
-        #### this is for multi-class problems
-        if num_labels <= 1:
-            val_metric = 'balanced_sparse_categorical_accuracy'
-            val_monitor = check_keras_options(keras_options,'monitor', 'val_'+val_metric)
-            val_mode = check_keras_options(keras_options, 'mode', 'max')
-        else:
-            val_metric = 'balanced_sparse_categorical_accuracy'
-            #val_metric = 'accuracy'
-            ### you cannot combine multiple metrics here unless you write a new function.
-            target_A = targets[0]
-            val_monitor = 'val_loss'
-            val_mode = check_keras_options(keras_options,'mode', 'min')
-        #val_monitor = check_keras_options(keras_options, 'monitor','val_accuracy')
-    ##############################################################################
-    keras_options["mode"] = val_mode
-    keras_options["monitor"] = val_monitor
-    keras_options["metrics"] = val_metrics
-    keras_options['loss'] = val_loss
-    keras_options["patience"] = patience
-    keras_options['use_bias'] = use_bias
-    keras_options['optimizer'] = optimizer
-    return keras_options, model_options, num_predicts, output_activation
-###############################################################################
-def get_uncompiled_model(inputs, result, output_activation,
-                    num_predicts, modeltype, cols_len, targets):
-    ### The next 3 steps are most important! Don't mess with them!
-    #model_preprocessing = Model(inputs, meta_outputs)
-    #preprocessed_inputs = model_preprocessing(inputs)
-    #result = model_body(preprocessed_inputs)
-    ##### now you can add the final layer here #########
-    multi_label_predictions = defaultdict(list)
-    if isinstance(num_predicts, int):
-        key = 'predictions'
-        if modeltype == 'Regression':
-            ### this will be just 1 in regression ####
-            if num_predicts > 1:
-                for each_label in range(num_predicts):
-                    value = layers.Dense(1, activation=output_activation,
-                            name=targets[each_label])(result)
-                    multi_label_predictions[key].append(value)
-            else:
-                value = layers.Dense(1, activation=output_activation,
-                        name=targets[0])(result)
-                multi_label_predictions[key].append(value)
-        else:
-            ### this will be number of classes in classification ###
-            value = layers.Dense(num_predicts, activation=output_activation,
-                                name=targets[0])(result)
-            multi_label_predictions[key].append(value)
-    else:
-        #### This will be for multi-label, multi-class predictions only ###
-        for each_label in range(len(num_predicts)):
-            key = 'predictions'
-            if modeltype == 'Regression':
-                ### this will be just 1 in regression ####
-                value = layers.Dense(1, activation=output_activation,
-                        name=targets[0])(result)
-            else:
-                ### this will be number of classes in classification ###
-                value = layers.Dense(num_predicts[each_label], activation=output_activation,
-                                    name=targets[each_label])(result)
-            multi_label_predictions[key].append(value)
-    outputs = multi_label_predictions[key] ### outputs will be a list of Dense layers
-    ##### Set the inputs and outputs of the model here
-
-    uncompiled_model = Model(inputs=inputs, outputs=outputs)
-    return uncompiled_model
-
-#####################################################################################
-def get_compiled_model(inputs, meta_outputs, output_activation, num_predicts, modeltype,
-                       optimizer, val_loss, val_metrics, cols_len, targets):
-    model = get_uncompiled_model(inputs, meta_outputs, output_activation,
-                        num_predicts, modeltype, cols_len, targets)
-    model.compile(
-        optimizer=optimizer,
-        loss=val_loss,
-        metrics=val_metrics,
-    )
-    return model
-###############################################################################

@@ -193,19 +193,6 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         ### Choose a default option in case it is not given
         DS_LEN = 100000
     shuffle_flag = False
-    #### Set some default values in case model options is not set ##
-    try:
-        sep = model_options["sep"]
-    except:
-        sep = ","
-    try:
-        header = model_options["header"]
-    except:
-        header = 0
-    try:
-        csv_encoding = model_options["csv_encoding"]
-    except:
-        csv_encoding = 'utf-8'
     #################################################################################
     try:
         compression = None
@@ -247,6 +234,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
             print('not able to collect files matching given pattern = %s' %train_datafile)
             return
     #################################################################################
+    model_options['compression'] = compression
     #### About 25% of the data or 10,000 rows which ever is higher is loaded #######
     if http_url:
         maxrows = 100000 ### set it very high so that all rows are read into dataframe ###
@@ -254,52 +242,32 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         maxrows = min(100000, int(0.25*DS_LEN))
         print('Max rows loaded to classify features = %s' %maxrows)
     ### first load a small sample of the dataframe and the entire target if it needs transform
-    if DS_LEN > 2*maxrows:
-        ### we randomly sample a small dataset to classify features
-        test_size = min(0.9, (1 - (maxrows/DS_LEN))) ### make sure there is a small train size
-        if test_size <= 0:
-            test_size = 0.9
-        if isinstance(target, str):
-            targets = [target]
-        else:
-            targets = copy.deepcopy(target)
-        nrows_limit = min(DS_LEN, 1e5) ### don't load the entire dataframe!
-        print('    Since number of rows > maxrows, loading a random sample of %d rows into pandas for EDA' %nrows_limit)
-        ### load a small sample of data into a pandas dataframe ##
-        train_small = pd.read_csv(train_datafile, nrows=nrows_limit, sep=sep, header=header,
-                        encoding=csv_encoding, compression=compression)
-        try:
-            modeltype = model_options["modeltype"]
-        except:
-            modeltype, model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
-        if modeltype != 'Regression':
-            copy_targets = copy.deepcopy(targets)
-            for each_target in copy_targets:
-                ### You need to remove rows that have very class samples - that is a problem while splitting train_small
-                list_of_few_classes = train_small[each_target].value_counts()[train_small[each_target].value_counts()<=1].index.tolist()
-                train_small = train_small.loc[~(train_small[each_target].isin(list_of_few_classes))]
-            
-            train_small, _ = train_test_split(train_small, test_size=test_size, stratify=train_small[targets])
+    try:
+        modeltype = model_options["modeltype"]
+    except:
+        modeltype, model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
+        model_options['modeltype'] = modeltype
+    if isinstance(target, str):
+        targets = [target]
     else:
-        print('    Since number of rows in file <= %d maxrows, loading entire file into pandas for EDA' %maxrows)
-        ### load a small sample of data into a pandas dataframe ##
+        targets = copy.deepcopy(target)
+    ######  This is where you select a small sample of a file to do classification of variables ####
+    if compression_type:
+        ### this reads the entire file and loads it into a dataset if it is a zip file  ######
         train_small = pd.read_csv(train_datafile, sep=sep, nrows=maxrows, compression=compression,
                                 header=header, encoding=csv_encoding)
-        try:
-            modeltype = model_options["modeltype"]
-        except:
-            modeltype, model_label, usecols = find_problem_type(train_small, target, model_options, verbose)
-    ### this reads the entire file and loads it into a dataset if it is a zip file  ######
-    if compression_type:
         train_small, data_batches, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_frame(
                         train_small, target, keras_options, model_options, verbose)
         #####  This might be useful for users to know whether to use feature-crosses or not ###
         return train_small, data_batches, var_df, cat_vocab_dict, keras_options, model_options
+    else:
+        ### It reads only a small dataframe if it is a regular CSV file #######
+        train_small = select_rows_from_file_or_frame(train_datafile, model_options, targets, maxrows)
     ##### Now detect modeltype if it is not given ###############
     print('     small sample dataset from train loaded. Shape = %s' %(train_small.shape,))
     #### All column names in Tensorflow should have no spaces ! So you must convert them here!
     sel_preds = ["_".join(x.split(" ")) for x in list(train_small) ]
-
+    header = model_options['header']
     if header is None:
         sel_preds = ["col_"+str(x) for x in range(train_small.shape[1])]
     else:
@@ -375,7 +343,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     ### classify variables using the small dataframe ##
     print('    Classifying variables using data sample in pandas...')
     train_small, var_df1, cat_vocab_dict = classify_features_using_pandas(train_small, target, model_options, verbose=verbose)
-
+    
     ##########    Just transfer all the values from var_df to cat_vocab_dict  ##################################
     for each_key in var_df1:
         cat_vocab_dict[each_key] = var_df1[each_key]
@@ -410,9 +378,11 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                                         include='category').columns.tolist()
     integer_cols =  train_small.select_dtypes(include='integer').columns.tolist()
     float_cols = train_small.select_dtypes(include='float').columns.tolist()
+    bool_cols = train_small.select_dtypes(include='bool').columns.tolist()
+    ### Bool_columns become string after you set their defaults since missing is default ##
     column_defaults = [-99.0 if x in float_cols else -99 if x in integer_cols else "missing"
                                 for x in list(train_small)]
-    
+    ### So we need to put back bool columns as boolean right after we load them into data_batches
     ####### Make sure you don't move this next stage. It should be after column defaults! ###
     if label_encode_flag:
         trans_output, cat_vocab_dict = transform_train_target(train_small, target, modeltype,
@@ -471,9 +441,22 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         return
 
     ############################################################################################
-    ###########  C H E C K   F O R   I N F I N I T E   V A L U E S  H E R E ####################
+    ###########  C H E C K   F O R   BOOL and I N F I N I T E   V A L U E S  H E R E ###########
     ############################################################################################
     cols_with_infinity = find_columns_with_infinity(train_small)
+    @tf.function
+    def convert_boolean_to_string(features, target):
+        """
+        This is how you convert all your boolean features into float variables.
+        The reason you have to do this is because tf.keras does not know how to handle boolean types.
+        It takes as input an ordered dict named features and returns the same in features format.
+        """
+        for feature_name in features:
+            if feature_name in bool_cols:
+                # Cast boolean feature values to string.
+                #features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
+                features[feature_name] = tf.dtypes.cast(features[feature_name], tf.string)
+        return (features, target)
 
     ################    T F  D A T A   D A T A S E T   L O A D I N G     H E R E ################
     ############    Create a Tensorflow Dataset using the make_csv function #####################
@@ -507,6 +490,9 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
                                        shuffle=shuffle_flag,
                                        num_parallel_reads=tf.data.experimental.AUTOTUNE)
         ############### Additional post-processing checkes needed - do it here  #######
+        #### here is where we need to put back boolean columns that were strings back to boolean
+        if bool_cols:
+            data_batches = data_batches.map(convert_boolean_to_string)
         ### Remove this not after testing the function below ###
         if cols_with_infinity:
             data_batches = data_batches.map(drop_non_finite_rows)
@@ -526,7 +512,7 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
     if len(drop_cols) > 0: ### drop cols that have been identified for deletion ###
         print('Dropping %s columns marked for deletion...' %drop_cols)
         train_small.drop(drop_cols,axis=1,inplace=True)
-
+    model_options['train_data_is_file'] = True
     return train_small, data_batches, var_df1, cat_vocab_dict, keras_options, model_options
 ############################################################################################
 def drop_non_finite_rows(features, targets):
@@ -718,26 +704,14 @@ def load_train_data_frame(train_dataframe, target, keras_options, model_options,
     except:
         ### if modeltype is given, then do not find the model type using this function
         modeltype,  model_label, usecols = find_problem_type(train_dataframe, target, model_options, verbose)
-    ### we randomly sample a small dataset to classify features
-    test_size = min(0.9, (1 - (maxrows/DS_LEN))) ### make sure there is a small train size
-    if test_size <= 0:
-        test_size = 0.9
+
     if isinstance(target, str):
         targets = [target]
     else:
         targets = copy.deepcopy(target)
-    nrows_limit = min(DS_LEN, 5e6) ### don't load the entire dataframe!
-    print('    Since number of rows > maxrows, loading a random sample of %d rows into pandas for EDA' %nrows_limit)
-    ### load a small sample of data into a pandas dataframe ##
-    train_small = train_dataframe.sample(n=nrows_limit, random_state=99)
-    ### If it is a classification problem, you need to stratify and select sample ###
-    if modeltype != 'Regression':
-        copy_targets = copy.deepcopy(targets)
-        for each_target in copy_targets:
-            ### You need to remove rows that have very class samples - that is a problem while splitting train_small
-            list_of_few_classes = train_small[each_target].value_counts()[train_small[each_target].value_counts()<=1].index.tolist()
-            train_small = train_small.loc[~(train_small[each_target].isin(list_of_few_classes))]
-        train_small, _ = train_test_split(train_small, test_size=test_size, stratify=train_small[targets])
+
+    #####  This is a simple function to load a small sample of data to do analysis ############
+    train_small = select_rows_from_file_or_frame(train_dataframe, model_options, targets, maxrows)
 
     ###   Cat_Vocab_Dict contains all info about vocabulary in each variable and their size
     print('    Classifying variables using data sample in pandas...')   
@@ -799,6 +773,9 @@ def load_train_data_frame(train_dataframe, target, keras_options, model_options,
     cat_vocab_dict['num_classes'] = num_classes
     cat_vocab_dict["target_transformed"] = target_transformed
 
+    #### once the dataframe has been classified, you can again change train_small to original dataframe ##
+    train_small = copy.deepcopy(train_dataframe)
+
     ####   fill missing values using this function ##############
     train_small = fill_missing_values_for_TF2(train_small, cat_vocab_dict)
 
@@ -839,14 +816,14 @@ def load_train_data_frame(train_dataframe, target, keras_options, model_options,
         batch_size = find_batch_size(DS_LEN)
         keras_options["batchsize"] = batch_size
         cat_vocab_dict['batch_size'] = batch_size
-
+    
     ##########################################################################
     #### C H E C K  F O R  I N F I N I T E   V A L U E S   H E R E ##########
     ##########################################################################
     cols_with_infinity = find_columns_with_infinity(train_small)
     if cols_with_infinity:
         train_small = drop_rows_with_infinity(train_small, cols_with_infinity, fill_value=True)
-
+    model_options['train_data_is_file'] = False
     return train_small, ds, var_df, cat_vocab_dict, keras_options, model_options
 ###############################################################################################
 def load_image_data(image_directory, project_name, keras_options, model_options,
@@ -1012,8 +989,17 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
     else:
         train_small, train_ds, var_df, cat_vocab_dict, keras_options, model_options = load_train_data_frame(train_data_or_file, target,
                                                                 keras_options, model_options, verbose)
+
     ### This is where we do all kinds of feature engineering - this needs to be in predict ####
-    BOOLS = cat_vocab_dict['bools']
+    cat_vocab_dict['bools_converted'] = False
+    if isinstance(train_data_or_file, str):
+        ### if train_data is a file, boolean vars have to be converted to strings ###
+        BOOLS = []
+        cat_vocab_dict['bools_converted'] = True
+        cat_vocab_dict['categorical_vars'] += cat_vocab_dict['bools']
+    else:
+        ### if train is a dataframe, you can leave bools as it is ###
+        BOOLS = cat_vocab_dict['bools']
     #################################################################################
     ##### F E A T U R E    E N G I N E E R I N G   H E R E              #############
     #################################################################################
@@ -1025,7 +1011,7 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
         """
         for feature_name in features:
             if feature_name in BOOLS:
-                # Cast boolean feature values to string.
+                # Cast boolean feature values to int32 only if the train_data is a dataframe ##
                 #features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
                 features[feature_name] = tf.dtypes.cast(features[feature_name], tf.int32)
         return (features, target)
@@ -1069,8 +1055,10 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
                 keepdims=False, separator=' ')
         return y
     ################################################################
-    ### You have to load only the NLP or text variables into dataset. otherwise, it will fail during predict
-    if NLP_VARS:
+    ### You have to load only the NLP or text variables into dataset. 
+    ###    otherwise, it will fail during predict. Yo still need to create input for them.
+    ###  In mixed_NLP models, you drop original NLP vars and combine them into one NLP var.
+    if NLP_VARS and keras_model_type.lower() in ['nlp','text']:
         if keras_model_type.lower() in ['nlp', 'text']:
             train_ds = train_ds.map(lambda x, y: (process_NLP_features(x), y))
             #train_ds = train_ds.unbatch().batch(batch_size)
@@ -1079,7 +1067,7 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
             train_ds = train_ds.map(lambda x, y: (combine_nlp_text(x), y))
             print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
     else:
-        print('No NLP vars in data set. No preprocessing done.')
+        print('     No special text preprocessing done for NLP vars.')
     ############################################################################
     ### You must batch it if you are creating it from a dataframe
     batch_size = cat_vocab_dict['batch_size']
@@ -1259,3 +1247,41 @@ def load_text_data(text_directory, project_name, keras_options, model_options,
     cat_vocab_dict["batch_size"] = batch_size
     return train_ds, valid_ds, cat_vocab_dict, model_options
 ###################################################################################
+def select_rows_from_file_or_frame(train_datafile, model_options, targets, nrows_limit):
+    train_datafile = copy.deepcopy(train_datafile)
+    #### Set some defaults from model options which is required ##
+    DS_LEN = model_options["DS_LEN"]
+    sep = model_options["sep"]
+    header = model_options["header"]
+    csv_encoding = model_options["csv_encoding"]
+    modeltype = model_options['modeltype']
+    compression = model_options['compression']
+    ####### we randomly sample a small dataset to classify features #####################
+    test_size = min(0.9, (1 - (nrows_limit/DS_LEN))) ### make sure there is a small train size
+    if test_size <= 0:
+        test_size = 0.9
+    print('    Since number of rows > maxrows, loading a random sample of %d rows into pandas for EDA' %nrows_limit)
+    ######  If it is a file you need to load it into a dataframe, it not leave it as is ###
+    if isinstance(train_datafile, str):
+        ###### load a small sample of data into a pandas dataframe ##
+        if DS_LEN >= 1e5:
+            train_small = pd.read_csv(train_datafile, nrows=nrows_limit, sep=sep, header=header,
+                            encoding=csv_encoding, compression=compression)
+        else:
+            train_small = pd.read_csv(train_datafile, sep=sep, header=header,
+                            encoding=csv_encoding, compression=compression)
+    else:
+        train_small = copy.deepcopy(train_datafile)
+    ####### If it is a classification problem, you need to stratify and select sample ###
+    if modeltype != 'Regression':
+        copy_targets = copy.deepcopy(targets)
+        for each_target in copy_targets:
+            ### You need to remove rows that have very class samples - that is a problem while splitting train_small
+            list_of_few_classes = train_small[each_target].value_counts()[train_small[each_target].value_counts()<=10].index.tolist()
+            train_small = train_small.loc[~(train_small[each_target].isin(list_of_few_classes))]
+        train_small, _ = train_test_split(train_small, test_size=test_size, stratify=train_small[targets])
+    else:
+        ### For Regression problems: load a small sample of data into a pandas dataframe ##
+        train_small = train_small.sample(n=nrows_limit, random_state=99)
+    return train_small
+######################################################################################

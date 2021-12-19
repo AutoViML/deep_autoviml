@@ -107,6 +107,7 @@ from .modeling.train_text_model import train_text_model
 from .utilities.utilities import print_one_row_from_tf_dataset
 from .utilities.utilities import print_one_row_from_tf_label
 from .utilities.utilities import check_if_GPU_exists, plot_history
+from .utilities.utilities import save_model_architecture
 
 #############################################################################################
 ### Split raw_train_set into train and valid data sets first
@@ -388,9 +389,9 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         model_options["max_trials"] = 10
     else:
         if model_options["max_trials"] <= 20:
-            print('Max Trials : %s. Please increase max_trials if you want to better accuracy...' %model_options["max_trials"])
+            print('Your max_trials %s is below recommended 20. Please increase max_trials if you want better accuracy or a better model' %model_options["max_trials"])
         else:
-            print('Max Trials : %s. Please lower max_trials if you want to run faster...' %model_options["max_trials"])
+            print('Your max_trials %s is above recommended 20. Please reduce max_trials if you want it to run faster...' %model_options["max_trials"])
 
     print("""
 #################################################################################
@@ -460,7 +461,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 ###########     T R A I N I N G    K E R A S   M O D E L   H E R E      #########
 #################################################################################
     """)
-
+    
     if keras_model_type.lower() not in ['auto','mixed_nlp']:
         print('Training a %s model option...' %keras_model_type)
         deep_model, cat_vocab_dict = train_model(deep_model, batched_data, target, keras_model_type,
@@ -472,34 +473,20 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                                          batched_data, target, keras_model_type, keras_options,
                                          model_options, var_df, cat_vocab_dict, project_name,
                                             save_model_flag, use_my_model, verbose)
+        if verbose >= 1:
+            print(deep_model.summary())
+    if dft.shape[1] <= 100 :
+        plot_filename = save_model_architecture(deep_model, project_name, keras_model_type, cat_vocab_dict,
+                         model_options, chart_name="model_after")
+        if plot_filename != "":
+            try:
+                display(Image(retina=True, filename=plot_filename))
+            except:
+                print('Cannot save plot. Install pydot and graphviz if you want plots saved.')
     distributed_values = (deep_model, cat_vocab_dict)
     return distributed_values
 
 ############################################################################################
-def save_model_architecture(model, project_name, keras_model_type, cat_vocab_dict, 
-                    model_options, chart_name="model_before"):
-    """
-    This function saves the model architecture in a PNG file in the artifacts sub-folder of project_name folder
-    """
-    if isinstance(project_name,str):
-        if project_name == '':
-            project_name = "deep_autoviml"
-    else:
-        print('Project name must be a string and helps create a folder to store model.')
-        project_name = "deep_autoviml"
-    save_model_path = model_options['save_model_path']
-    save_artifacts_path = os.path.join(save_model_path, "artifacts")
-    try:
-        plot_filename = os.path.join(save_artifacts_path,chart_name)+".png"
-        print('\nSaving model architecture...')
-        tf.keras.utils.plot_model(model = model, to_file=plot_filename, dpi=72,
-                        show_layer_names=True, rankdir="LR", show_shapes=True)
-        print('    model architecture saved in file: %s' %plot_filename)
-    except:
-        print('Model architecture not saved due to error. Continuing...')
-        plot_filename = ""
-    return plot_filename
-#########################################################################################################
 def get_save_folder(save_dir):
     run_id = time.strftime("model_%Y_%m_%d-%H_%M_%S")
     return os.path.join(save_dir, run_id)

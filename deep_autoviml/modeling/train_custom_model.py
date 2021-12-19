@@ -53,7 +53,8 @@ from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
 #####################################################################################
-from deep_autoviml.modeling.create_model import get_model_defaults, get_compiled_model, return_optimizer
+from deep_autoviml.modeling.create_model import return_optimizer
+from deep_autoviml.utilities.utilities import get_model_defaults, get_compiled_model
 
 # Utils
 from deep_autoviml.utilities.utilities import print_one_row_from_tf_dataset, print_one_row_from_tf_label
@@ -66,7 +67,7 @@ from deep_autoviml.utilities.utilities import check_if_GPU_exists, get_chosen_ca
 from deep_autoviml.utilities.utilities import save_valid_predictions, get_callbacks
 from deep_autoviml.utilities.utilities import print_classification_header
 from deep_autoviml.utilities.utilities import check_keras_options
-from deep_autoviml.utilities.utilities import save_model_artifacts
+from deep_autoviml.utilities.utilities import save_model_artifacts, save_model_architecture
 
 from deep_autoviml.data_load.extract import find_batch_size
 from deep_autoviml.modeling.one_cycle import OneCycleScheduler
@@ -285,6 +286,7 @@ def build_model_storm(hp, *args):
     batch_norm_flag = hp.values['use_batch_norm']
     # example of inline ordered parameter
     num_copy = copy.deepcopy(num_layers)
+    
     for x in range(num_copy):
         #### slowly reduce the kernel size after each round ####
         kernel_size = int(0.75*kernel_size)
@@ -295,7 +297,7 @@ def build_model_storm(hp, *args):
                             #kernel_regularizer=keras.regularizers.l2(weight_decay)
                             ))
 
-        model_body.add(Activation(activation_fn, name="activation_"+str(x+10)))
+        model_body.add(Activation(activation_fn, name="activation_"+str(x+100)))
 
         # example of boolean param
         if batch_norm_flag:
@@ -312,7 +314,7 @@ def build_model_storm(hp, *args):
                                   ordered=False)
     
     optimizer = return_optimizer_trials(hp, selected_optimizer)
-
+    
     return model_body, optimizer
 
 ############################################################################################
@@ -337,11 +339,12 @@ class MyTuner(Tuner):
         class_weights, batch_size =  args[20], args[21]
         batch_limit, batch_nums =  args[22], args[23]
         targets, nlp_flag, regular_body = args[24], args[25], args[26]
+        project_name, keras_model_type,  = args[27], args[28]
+        cat_vocab_dict, model_options = args[29], args[30]
 
         model_body, optimizer = build_model_storm(hp, batch_limit, batch_nums)
-
+     
         ##### This is the simplest way to convert a sequential model to functional model!
-
         if regular_body:
             storm_outputs = add_outputs_to_model_body(model_body, meta_outputs)
         else:
@@ -355,13 +358,19 @@ class MyTuner(Tuner):
         
         comp_model = get_compiled_model(inputs, storm_outputs, output_activation, num_predicts,
                             modeltype, optimizer, val_loss, val_metrics, cols_len, targets)
-
+        
         #opt = comp_model.optimizer
         #for var in opt.variables():
         #    var.assign(tf.zeros_like(var))
+        if len(self.trials) == 0:
+            ### Just save it once. Don't save it again and again.
+            save_model_architecture(comp_model, project_name, keras_model_type, cat_vocab_dict,
+                model_options, chart_name="model_before")
         #print('    Custom model compiled successfully. Training model next...')
         shuffle_size = 1000
-        batch_size = hp.Param('batch_size', [64, 128, 256], ordered=True)
+        batch_sizes = np.linspace(8, batch_limit,batch_nums).astype(int).tolist()
+        batch_size = hp.Param('batch_size', batch_sizes, ordered=True)
+        #print('storm batch size = %s' %batch_size)
         train_ds = train_ds.unbatch().batch(batch_size)
         train_ds = train_ds.shuffle(shuffle_size,
                         reshuffle_each_iteration=False, seed=42).prefetch(batch_size)#.repeat(5)
@@ -538,7 +547,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     if isinstance(meta_outputs, list):
         regular_body = False
     ############################################################################
-
+    
     ### check the defaults for the following!
     save_weights_only = check_keras_options(keras_options, "save_weights_only", False)
 
@@ -572,8 +581,13 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     ##################################################################################
     shuffle_size = 1000
     if num_labels <= 1:
-        y_test = np.concatenate(list(heldout_ds.map(lambda x,y: y).as_numpy_iterator()))
-        print('Single-Label: Heldout data shape: %s' %(y_test.shape,))
+        try:
+            y_test = np.concatenate(list(heldout_ds.map(lambda x,y: y).as_numpy_iterator()))
+            print('    Single-Label: Heldout data shape: %s' %(y_test.shape,))
+            max_batch_size = y_test.shape[0]
+        except:
+            max_batch_size = 48
+            pass
     else:
         iters = int(data_size/batch_size) + 1
         for inum, each_target in enumerate(target):
@@ -586,7 +600,8 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
             else:
                 each_array = np.c_[each_array, np.array(flat_list)]
         y_test = copy.deepcopy(each_array)
-        print('Multi-Label: Heldout data shape: %s' %(y_test.shape,))
+        print('    Multi-Label: Heldout data shape: %s' %(y_test.shape,))
+        max_batch_size = y_test.shape[0]
 
     if modeltype == 'Regression':
         if (y_test>=0).all() :
@@ -594,6 +609,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
             output_activation = 'softplus'
             print('Setting output activation layer as softplus since there are no negative values')
     print(' Shuffle size = %d' %shuffle_size)
+    
     train_ds = train_ds.prefetch(tf.data.AUTOTUNE).shuffle(
                             shuffle_size, reshuffle_each_iteration=False, seed=42)#.repeat()
     valid_ds = valid_ds.prefetch(tf.data.AUTOTUNE)#.repeat()
@@ -645,7 +661,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
                             max_trials, randomization_factor))
         tuner_epochs = 100  ### keep this low so you can run fast
         tuner_steps = STEPS_PER_EPOCH  ## keep this also very low
-        batch_limit = int(2 * find_batch_size(data_size))
+        batch_limit = min(max_batch_size, int(2 * find_batch_size(data_size)))
         batch_nums = int(min(5, 0.1 * batch_limit))
         print('Max. batch size = %d, number of batch sizes to try: %d' %(batch_limit, batch_nums))
 
@@ -656,7 +672,9 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
                             val_metrics, patience, val_mode, data_size,
                             learning_rate, val_monitor, callbacks_list_tuner,
                             modeltype,  class_weights, batch_size,
-                            batch_limit, batch_nums, targets, nlp_flag, regular_body)
+                            batch_limit, batch_nums, targets, nlp_flag, regular_body,
+                            project_name, keras_model_type, cat_vocab_dict,
+                            model_options)
         best_trial = tuner.get_best_trial()
         print('    best trial selected as %s' %best_trial)
         ##### get the best model parameters now. Also split it into two models ###########
@@ -856,6 +874,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     #################################################################################
     scores = []
     ls = []
+    
     print('Held out data actuals shape: %s' %(y_test.shape,))
     if verbose >= 1:
         try:

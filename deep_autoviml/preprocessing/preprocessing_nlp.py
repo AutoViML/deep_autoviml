@@ -122,7 +122,7 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
     fast_models1 = ['deep_and_wide','deep_wide','wide_deep',
                     'wide_and_deep','deep wide', 'wide deep', 'fast1',
                     'deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
-
+    
     max_tokens_zip, seq_tokens_zip, embed_tokens_zip, vocab_train_small = aggregate_nlp_dictionaries(nlp_columns, cat_vocab_dict, model_options)
 
     if len(nlp_columns) == 1:
@@ -236,21 +236,21 @@ def preprocessing_nlp(train_ds, model_options, var_df, cat_vocab_dict, keras_mod
     else:
         ####  This is for auto model option. You can ignore their models in tfhub in that case
         #### If they give the default NLP or text as input, then we would use a default model.
-        #bert_model_name = 'Swivel_20_model'
-        bert_model_name = "Auto NNLM 50 with Normalization"
-        #tfhub_handle_encoder = "https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1"
-        if os.name == 'nt':
-            tfhub_path = os.path.join(keras_model_type, 'tf_cache')
-            os.environ['TFHUB_CACHE_DIR'] = tfhub_path
-            tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
-        else:
-            tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
-        #hub_layer = hub.KerasLayer(tfhub_handle_encoder, output_shape=[20],
-        #               input_shape=[],
-        #               dtype=tf.string, trainable=False, name="Swivel_encoder")
-        hub_layer = hub.KerasLayer(tfhub_handle_encoder,
+        bert_model_name = 'Swivel_20_model'
+        #bert_model_name = "Auto NNLM 50 with Normalization"
+        tfhub_handle_encoder = "https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1"
+        #if os.name == 'nt':
+        #    tfhub_path = os.path.join(keras_model_type, 'tf_cache')
+        #    os.environ['TFHUB_CACHE_DIR'] = tfhub_path
+        #    tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
+        #else:
+        #    tfhub_handle_encoder = 'https://tfhub.dev/google/nnlm-en-dim50-with-normalization/2'
+        hub_layer = hub.KerasLayer(tfhub_handle_encoder, output_shape=[20],
                        input_shape=[],
-                       dtype=tf.string, trainable=False, name="NNLM50_encoder")
+                       dtype=tf.string, trainable=False, name="Swivel_encoder")
+        #hub_layer = hub.KerasLayer(tfhub_handle_encoder,
+        #               input_shape=[],
+        #               dtype=tf.string, trainable=False, name="NNLM50_encoder")
         print(f'    {bert_model_name} selected from: {tfhub_handle_encoder}')
     
     #### Next, we add an NLP layer to map those vocab indices into a space of dimensionality

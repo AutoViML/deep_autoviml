@@ -393,31 +393,68 @@ def predict(model_or_model_path, project_name, test_dataset,
         else:
             print('No NLP vars in data set. No preprocessing done.')
         cat_vocab_dict2 = copy.deepcopy(cat_vocab_dict)
-    ##################################################################
-    BOOLS = cat_vocab_dict2['bools']
+    ##################################################################################
+    if cat_vocab_dict2['bools_converted']:
+        BOOLS = []
+        print('Boolean cols=%s converted to strings' %BOOLS)
+    else:
+        BOOLS = cat_vocab_dict2['bools']
+        print('Boolean cols=%s not converted to strings' %BOOLS)
     #################################################################################
-    @tf.function
-    def process_boolean_features(features, target):
+    #@tf.function
+    @tf.autograph.experimental.do_not_convert
+    def process_boolean_features(features_copy):
         """
         This is how you convert all your boolean features into float variables.
         The reason you have to do this is because tf.keras does not know how to handle boolean types.
         It takes as input an ordered dict named features and returns the same in features format.
         """
-        for feature_name in features:
+        for feature_name in features_copy:
             if feature_name in BOOLS:
                 # Cast boolean feature values to string.
                 #features[feature_name] = tf.cast(features[feature_name], tf.dtypes.float32)
-                features[feature_name] = tf.dtypes.cast(features[feature_name], tf.int32)
-        return (features, target)
+                features_copy[feature_name] = tf.dtypes.cast(features_copy[feature_name], tf.int32)
+        return features_copy
     ##################################################################
     try:
+        print('    Boolean columns successfully converted to Integers')
         test_ds = test_ds.map(process_boolean_features)
-        print('Boolean column successfully processed')
     except:
-        print('Error in Boolean column processing. Continuing...')
+        print('        Error in converting Boolean columns to Integers. Continuing...')
     #################################################################################
+    bool_cols = cat_vocab_dict2['bools']
+    #@tf.function
+    @tf.autograph.experimental.do_not_convert
+    def convert_boolean_to_string_predict(features_copy):
+        """
+        This is how you convert all your boolean features into float variables.
+        The reason you have to do this is because tf.keras does not know how to handle boolean types.
+        It takes as input an ordered dict named features and returns the same in features format.
+        """
+        for feature_name in features_copy: 
+            if feature_name in bool_cols: 
+                features_copy[feature_name] = tf.where(features_copy[feature_name], 'True', 'False')
+        return features_copy
     ################## process next steps from here on  #############################
+    if cat_vocab_dict2['bools_converted']:
+        try:
+            print('Since booleans=%s have been converted to strings in Training, converting them to strings' %bool_cols)
+            test_ds = test_ds.map(convert_boolean_to_string_predict)
+        except:
+            print('    Error in converting boolean to string variables. Continuing...')
     #################################################################################
+    try:
+        ### This is merely to give hints to newbies that they may have mistakenly given different data types to train and test
+        bool_cols.sort()
+        _, _, _, _, _, bools = classify_dtypes_using_TF2_in_test(test_ds, idcols=cat_vocab_dict2['cols_delete'], verbose=0)
+        bools.sort()
+        if bool_cols == bools:
+            print('Possible Conflict: Boolean columns in train and test data were passed differently. Check your test data types.')
+        else:
+            print('Congratulations! boolean columns were passed identically in both train and test datasets.')
+    except:
+        print('Possible Conflict: Boolean columns in train and test data were passed differently. Check your test data types.')
+    ####################################################################################################################
     ## num_steps is needed to predict on whole dataset once ##
     try:
         num_steps = int(np.ceil(DS_LEN/batch_size))
@@ -437,7 +474,8 @@ def predict(model_or_model_path, project_name, test_dataset,
     try:
         y_probas = model.predict(test_ds, steps=num_steps)
     except:
-        print('predictions from model erroring. Check your model and test data and retry again.')
+        print('ERROR: Predictions from model erroring.')
+        print('    Check your model and ensure test data and their dtypes are same as train data and retry again.')
         return
     ######  Now convert the model predictions into classes #########
     try:
@@ -630,3 +668,64 @@ def predict_text(test_text_dir, model_or_model_path, cat_vocab_dict, keras_model
         print('Error: test_text_dir should be either a directory containining test folder or a single .txt file')
         return None
 ##########################################################################################################
+from collections import defaultdict
+def nested_dictionary():
+    return defaultdict(nested_dictionary)
+def find_preds(data_sample):
+    for featurex in data_sample.take(1):
+        return list(featurex.keys())
+def classify_dtypes_using_TF2_in_test(data_sample, idcols, verbose=0):
+    """
+    If you send in a batch of Ttf.data.dataset with the name of target variable(s), you will get back
+    all the features classified by type such as cats, ints, floats and nlps. This is all done using TF2.
+    """
+    print_features = False
+    nlps = []
+    nlp_char_limit = 30
+    all_ints = []
+    floats = []
+    cats = []
+    bools = []
+    int_vocab = 0
+    feats_max_min = nested_dictionary()
+    preds = find_preds(data_sample)
+    #### Take(1) always displays only one batch only if num_epochs is set to 1 or a number. Otherwise No print! ########
+    #### If you execute the below code without take, then it will go into an infinite loop if num_epochs was set to None.
+    if data_sample.element_spec[preds[0]].shape[0] is None or data_sample.element_spec[preds[0]].shape[0]:
+        for feature_batch in data_sample.take(1):
+            if verbose >= 1:
+                print(f"{target}: {label_batch[:4]}")
+            if len(feature_batch.keys()) <= 30:
+                print_features = True
+                if verbose >= 1:
+                    print("features and their max, min, datatypes in one batch of size: ",batch_size)
+                for key, value in feature_batch.items():
+                    feats_max_min[key]["dtype"] = data_sample.element_spec[key].dtype
+                    if feats_max_min[key]['dtype'] in [tf.float16, tf.float32, tf.float64]:
+                        ## no need to find vocab of floating point variables!
+                        floats.append(key)
+                    elif feats_max_min[key]['dtype'] in [tf.int16, tf.int32, tf.int64]:
+                        ### if it is an integer var, it is worth finding their vocab!
+                        all_ints.append(key)
+                        int_vocab = tf.unique(value)[0].numpy().tolist()
+                        feats_max_min[key]['size_of_vocab'] = len(int_vocab)
+                    elif feats_max_min[key]['dtype'] == 'bool':
+                        ### if it is an integer var, it is worth finding their vocab!
+                        bools.append(key)
+                        int_vocab = tf.unique(value)[0].numpy().tolist()
+                        feats_max_min[key]['size_of_vocab'] = len(int_vocab)
+                    elif feats_max_min[key]['dtype'] in [tf.string]:
+                        if tf.reduce_mean(tf.strings.length(feature_batch[key])).numpy() >= nlp_char_limit:
+                            print('%s is detected and will be treated as an NLP variable')
+                            nlps.append(key)
+                        else:
+                            cats.append(key)
+            if not print_features:
+                print('Number of variables in dataset is too numerous to print...skipping print')
+
+    ints = [ x for x in all_ints if feats_max_min[x]['size_of_vocab'] > 30 and x not in idcols]
+
+    int_cats = [ x for x in all_ints if feats_max_min[x]['size_of_vocab'] <= 30 and x not in idcols]
+
+    return cats, int_cats, ints, floats, nlps, bools
+#############################################################################################################

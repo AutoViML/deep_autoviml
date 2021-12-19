@@ -471,10 +471,6 @@ def classify_columns(df_preds, model_options={}, verbose=0):
             print(' Missing columns = %s' %left_subtract(list(train),flat_list))
     return sum_all_cols
 #################################################################################
-from collections import defaultdict
-def nested_dictionary():
-    return defaultdict(nested_dictionary)
-#########################################################################################
 import re
 WORD = re.compile(r'\w+')
 def tokenize_fast(text):
@@ -926,6 +922,10 @@ def find_latitude_keyword(lat_word, columns, sel_columns=[]):
             if lat_word not in sel_columns:
                 sel_columns.append(lat_word)
             lat_keywords[lat_word] = 'latitude'
+        elif 'latitude' in lat_word.lower():
+            if lat_word not in sel_columns:
+                sel_columns.append(lat_word)
+            lat_keywords[lat_word] = 'latitude'
         elif 'lat' in lat_word.lower().split(" "):
             if lat_word not in sel_columns:
                 sel_columns.append(lat_word)
@@ -939,6 +939,10 @@ def find_latitude_keyword(lat_word, columns, sel_columns=[]):
                 sel_columns.append(lat_word)
             lat_keywords[lat_word] = 'lat'
         elif 'lat' in lat_word.lower().split("/"):
+            if lat_word not in sel_columns:
+                sel_columns.append(lat_word)
+            lat_keywords[lat_word] = 'lat'
+        elif 'lat' in lat_word.lower():
             if lat_word not in sel_columns:
                 sel_columns.append(lat_word)
             lat_keywords[lat_word] = 'lat'
@@ -972,6 +976,10 @@ def find_longitude_keyword(lon_word, columns, sel_columns=[]):
             if lon_word not in sel_columns:
                 sel_columns.append(lon_word)
             lon_keywords[lon_word] = 'longitude'
+        elif 'longitude' in lon_word.lower():
+            if lon_word not in sel_columns:
+                sel_columns.append(lon_word)
+            lon_keywords[lon_word] = 'longitude'
         elif 'lon' in lon_word.lower().split(" "):
             if lon_word not in sel_columns:
                 sel_columns.append(lon_word)
@@ -985,6 +993,10 @@ def find_longitude_keyword(lon_word, columns, sel_columns=[]):
                 sel_columns.append(lon_word)
             lon_keywords[lon_word] = 'lon'
         elif 'lon' in lon_word.lower().split("/"):
+            if lon_word not in sel_columns:
+                sel_columns.append(lon_word)
+            lon_keywords[lon_word] = 'lon'
+        elif 'lon' in lon_word.lower():
             if lon_word not in sel_columns:
                 sel_columns.append(lon_word)
             lon_keywords[lon_word] = 'lon'
@@ -1048,8 +1060,10 @@ from collections import defaultdict
 def nested_dictionary():
     return defaultdict(nested_dictionary)
 ############################################################################################
-def classify_dtypes_using_TF2(data_sample, idcols, verbose=0):
+def classify_dtypes_using_TF2(data_sample, preds, idcols, verbose=0):
     """
+    #### This works only on train data sets since they have both features and labels. ################
+    ####  It also works in only certain types of tf.data.datasets since every TF dataset is different format.
     If you send in a batch of Ttf.data.dataset with the name of target variable(s), you will get back
     all the features classified by type such as cats, ints, floats and nlps. This is all done using TF2.
     """
@@ -1061,7 +1075,6 @@ def classify_dtypes_using_TF2(data_sample, idcols, verbose=0):
     cats = []
     int_vocab = 0
     feats_max_min = nested_dictionary()
-
     #### Take(1) always displays only one batch only if num_epochs is set to 1 or a number. Otherwise No print! ########
     #### If you execute the below code without take, then it will go into an infinite loop if num_epochs was set to None.
     if data_sample.element_spec[0][preds[0]].shape[0] is None:

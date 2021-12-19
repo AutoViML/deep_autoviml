@@ -231,7 +231,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     
     if num_labels <= 1:
         y_test = np.concatenate(list(heldout_ds.map(lambda x,y: y).as_numpy_iterator()))
-        print('Single-Label: Heldout data shape: %s' %(y_test.shape,))
+        print('    Single-Label: Heldout data shape: %s' %(y_test.shape,))
     else:
         iters = int(data_size/batch_size) + 1
         for inum, each_target in enumerate(target):
@@ -244,7 +244,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
             else:
                 each_array = np.c_[each_array, np.array(flat_list)]
         y_test = copy.deepcopy(each_array)
-        print('Multi-Label: Heldout data shape: %s' %(y_test.shape,))
+        print('    Multi-Label: Heldout data shape: %s' %(y_test.shape,))
     scores = []
     ls = []
     if verbose >= 1:

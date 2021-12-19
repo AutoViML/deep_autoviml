@@ -152,6 +152,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
     """
     start_time = time.time()
     drop_cols = var_df['cols_delete']
+    train_data_is_file = model_options['train_data_is_file']
     #########  Now that you have the variable classification dictionary, just separate them out! ##
     cats = var_df['categorical_vars']  ### these are low cardinality vars - you can one-hot encode them ##
     high_string_vars = var_df['discrete_string_vars']  ## discrete_string_vars are high cardinality vars ## embed them!
@@ -303,13 +304,15 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
 
 
     #####  If boolean variables exist, you must do this here ######
-
     if len(bools) > 0:
         bools_copy = copy.deepcopy(bools)
         try:
             for each_bool in bools_copy:
                 #### You just create the boolean input  as float since we are converting it ###
-                bool_input = keras.Input(shape=(1,), name=each_bool, dtype="float32")
+                if train_data_is_file:
+                    bool_input = keras.Input(shape=(1,), name=each_bool, dtype=tf.string)
+                else:
+                    bool_input = keras.Input(shape=(1,), name=each_bool, dtype="float32")
                 bool_input_dict[each_bool] = bool_input
                 encoded = bool_input
             all_bool_encoded.append(encoded)
@@ -602,13 +605,13 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         meta_input_categ1 = all_low_cat_encoded[0]
         meta_categ1 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ1)
         meta_categ1 = keras.layers.BatchNormalization()(meta_categ1)
-        meta_categ1 = layers.Activation(concat_activation)(meta_categ1)
+        #meta_categ1 = layers.Activation(concat_activation)(meta_categ1)
     else:
         meta_input_categ1 = layers.concatenate(all_low_cat_encoded)
         #WIDE - This Dense layer connects to input layer - Categorical Data
         meta_categ1 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ1)
         meta_categ1 = keras.layers.BatchNormalization()(meta_categ1)
-        meta_categ1 = layers.Activation(concat_activation)(meta_categ1)
+        #meta_categ1 = layers.Activation(concat_activation)(meta_categ1)
 
     skip_meta_categ2 = False
     if len(all_high_cat_encoded) == 0:
@@ -618,12 +621,12 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         meta_input_categ2 = all_high_cat_encoded[0]
         meta_categ2 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ2)
         meta_categ2 = layers.BatchNormalization()(meta_categ2)
-        meta_categ2 = layers.Activation(concat_activation)(meta_categ2)
+        #meta_categ2 = layers.Activation(concat_activation)(meta_categ2)
     else:
         meta_input_categ2 = layers.concatenate(all_high_cat_encoded)
         meta_categ2 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ2)
         meta_categ2 = layers.BatchNormalization()(meta_categ2)
-        meta_categ2 = layers.Activation(concat_activation)(meta_categ2)
+        #meta_categ2 = layers.Activation(concat_activation)(meta_categ2)
 
     skip_meta_numeric = False
     if len(all_numeric_encoded) == 0:
@@ -633,7 +636,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         meta_input_numeric = all_numeric_encoded[0]
         #meta_numeric = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_numeric)
         meta_numeric = layers.BatchNormalization()(meta_input_numeric)
-        meta_numeric = layers.Activation(concat_activation)(meta_numeric)
+        #meta_numeric = layers.Activation(concat_activation)(meta_numeric)
     else:
         #### You must concatenate these encoded outputs before sending them out!
         #DEEP - This Dense layer connects to input layer - Numeric Data
@@ -641,7 +644,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         meta_input_numeric = layers.concatenate(all_numeric_encoded)
         #meta_numeric = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_numeric)
         meta_numeric = layers.BatchNormalization()(meta_input_numeric)
-        meta_numeric = layers.Activation(concat_activation)(meta_numeric)
+        #meta_numeric = layers.Activation(concat_activation)(meta_numeric)
 
 
     ####Concatenate both Wide and Deep layers
@@ -1348,12 +1351,25 @@ def encode_nlp_inputs(inputs, CATEGORICAL_FEATURES_WITH_VOCABULARY):
     list_embedding_sizes = [8, 16, 24, 32, 48, 64, 96, 128, 256]
     for feature_name in inputs:
         vocabulary = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name]['vocab']
-        extra_oov = 3
+        extra_oov = 50
         vocab_size = int(math.sqrt(len(vocabulary)))
         best_embedding_size = closest(list_embedding_sizes, vocab_size//4000)
+        
+        lookup = StringLookup(
+            vocabulary=vocabulary,
+            mask_token=None,
+            num_oov_indices=extra_oov,
+            max_tokens=None,
+            output_mode="int",
+        )
+        # Convert the string input values into integer indices.
         encoded_feature = inputs[feature_name]
+        encoded_feature = lookup(encoded_feature)
+        #embedding_dims = int(math.sqrt(len(vocabulary)))
+        # Create an embedding layer with the specified dimensions.
         embedding = layers.Embedding(
-            input_dim=len(vocabulary)+extra_oov, output_dim=best_embedding_size)
+            input_dim=len(vocabulary)+extra_oov, output_dim=best_embedding_size
+        )
         # Convert the index values to embedding representations.
         encoded_feature = embedding(encoded_feature)
         encoded_feature = Flatten()(encoded_feature)
