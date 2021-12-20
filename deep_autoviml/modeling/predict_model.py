@@ -449,7 +449,9 @@ def predict(model_or_model_path, project_name, test_dataset,
         bool_cols.sort()
         _, _, _, _, _, bools = classify_dtypes_using_TF2_in_test(test_ds, idcols=cat_vocab_dict2['cols_delete'], verbose=0)
         bools.sort()
-        if bool_cols == bools:
+        if len(bools) == 0 and len(bool_cols) == 0:
+            pass
+        elif bool_cols == bools:
             print('Possible Conflict: Boolean columns in train and test data were passed differently. Check your test data types.')
         else:
             print('Congratulations! boolean columns were passed identically in both train and test datasets.')

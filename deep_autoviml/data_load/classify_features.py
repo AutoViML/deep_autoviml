@@ -730,17 +730,17 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     if "cat_feature_cross_flag" in model_options.keys():
         ### If they mistakenly type it as cat_feature_cross_flag then use it ####
         if model_options["cat_feature_cross_flag"]:
-            model_options["cat_feat_cross_flag"] = cat_feature_cross_flag
+            cat_feature_cross_flag = model_options["cat_feature_cross_flag"]
             print('performing feature crossing for %s variables' %cat_feature_cross_flag)
         else:
-            model_options["cat_feat_cross_flag"] = ""
+            model_options["cat_feat_cross_flag"] = cat_feature_cross_flag
             print('Not performing feature crossing for categorical nor integer variables' )
     elif "cat_feat_cross_flag" in model_options.keys():
         if model_options["cat_feat_cross_flag"]:
-            model_options["cat_feat_cross_flag"] = cat_feature_cross_flag
+            cat_feature_cross_flag = model_options["cat_feat_cross_flag"]
             print('performing feature crossing for %s variables' %cat_feature_cross_flag)
         else:
-            model_options["cat_feat_cross_flag"] = ""
+            model_options["cat_feat_cross_flag"] = cat_feature_cross_flag
             print('Not performing feature crossing for categorical nor integer variables' )
     else:
         ### If there is no input for cat_feature_cross_flag, then don't do it ###

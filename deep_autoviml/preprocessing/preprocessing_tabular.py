@@ -211,7 +211,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 print('        %s: %s' %(each_name, max_tokens_zip[each_name]))
             else:
                 continue
-
+    
     ####### CAVEAT : All the inputs and outputs should follow this same sequence below! ######
     all_date_inputs = []
     all_bool_inputs = []
@@ -220,6 +220,10 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
     all_cat_inputs = []
     all_num_inputs = []
     all_latlon_inputs = []
+    ############## CAVEAT: This is the new way of concatenating different kinds of variables together ####
+    all_new_cat_encoded = [] ## this is the new way of encoding cat vars and tying them together ###
+    all_new_numeric_encoded = [] ### This is the new way of encoding num vars and tying them together ##
+
     ############## CAVEAT: The encoded outputs should follow the same sequence as inputs above!
     all_date_encoded = []
     all_bool_encoded = []
@@ -404,16 +408,16 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 cat_input_dict[each_cat] = cat_input
                 vocab = max_tokens_zip[each_cat]
                 max_tokens = len(vocab)
-                encoded = encode_string_categorical_feature_categorical(cat_input, each_cat,
+                cat_encoded = encode_string_categorical_feature_categorical(cat_input, each_cat,
                                                                      train_ds, vocab)
                 all_cat_inputs.append(cat_input)
-                all_cat_encoded.append(encoded)
-                cat_encoded_dict[each_cat] = encoded
+                all_cat_encoded.append(cat_encoded)
+                cat_encoded_dict[each_cat] = cat_encoded
                 all_input_names.append(each_cat)
                 if verbose:
                     print('    %s number of categories = %d: after string to categorical encoding shape: %s' %(
-                                        each_cat, max_tokens, encoded.shape[1]))
-                    if encoded.shape[1] > high_cats_alert:
+                                        each_cat, max_tokens, cat_encoded.shape[1]))
+                    if cat_encoded.shape[1] > high_cats_alert:
                         print('        Alert! excessive feature dimension created. Check if necessary to have this many.')
             except:
                 print('    Error: Skipping %s since Keras Categorical preprocessing erroring' %each_cat)
@@ -442,6 +446,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 print('    Error: Skipping %s since Keras Discrete Strings (high cats) preprocessing erroring' %each_cat)
 
     ####  If the feature crosses for categorical variables are requested, then do this here ###
+    
     if cat_feature_cross_flag:
         if isinstance(cat_feature_cross_flag, str):
             if cat_feature_cross_flag in ['cat','categorical']:
@@ -459,8 +464,8 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
             print('    Performing %s feature crossing using %d variables: \n    %s' %(cat_feature_cross_flag, len(cross_cats), cross_cats))
     ##### Now you perform crosses for each kind of crosses requested ####################
     if cat_feature_cross_flag and len(cross_cats) > 1:
-        feat_cross_encoded = perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_tokens_zip, verbose)
-        all_feat_cross_encoded.append(feat_cross_encoded)
+        feat_cross_encoded = perform_new_feature_crossing(cat_input_dict, cross_cats, train_ds)
+        all_feat_cross_encoded += feat_cross_encoded
     else:
         print('    no feature crossing performed')
     ##################################################################################
@@ -561,9 +566,16 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
 
     #####  SEQUENCE OF THESE INPUTS AND OUTPUTS MUST MATCH ABOVE - we gather all outputs above into a single list
     all_inputs = all_bool_inputs + all_date_inputs + all_int_inputs + all_int_cat_inputs + all_cat_inputs + all_num_inputs + all_latlon_inputs
-    all_encoded = all_bool_encoded + all_date_encoded+all_int_bool_encoded+all_int_encoded+all_int_cat_encoded+all_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+lat_lon_paired_encoded
-    all_low_cat_encoded = all_int_bool_encoded+all_int_encoded+all_int_cat_encoded  ## these are integer outputs ####
-    all_numeric_encoded = all_bool_encoded + all_date_encoded+all_cat_encoded+all_high_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+all_latlon_encoded+lat_lon_paired_encoded## these are all float ##
+    all_encoded = all_bool_encoded+all_high_cat_encoded+all_date_encoded+all_int_bool_encoded+all_int_encoded+all_int_cat_encoded+all_cat_encoded+all_feat_cross_encoded+all_num_encoded+all_latlon_encoded+lat_lon_paired_encoded
+    ###### This is new way of processing categorical and numeric variables #########
+    all_low_cat_encoded = all_int_bool_encoded+all_cat_encoded+all_int_encoded+all_int_cat_encoded  ## these are integer outputs ####
+    all_numeric_encoded = all_num_encoded+all_bool_encoded+all_date_encoded+all_high_cat_encoded+all_feat_cross_encoded+all_latlon_encoded+lat_lon_paired_encoded## these are all float ##
+    
+    ###### This is new way of processing categorical and numeric variables #########
+    #all_low_cat_encoded = all_int_bool_encoded + all_cat_encoded + all_int_cat_encoded 
+    #all_numeric_encoded = all_num_encoded + all_latlon_encoded + lat_lon_paired_encoded + all_feat_cross_encoded
+
+    
     ###### This is where we determine the size of different layers #########
     data_size = model_options['DS_LEN']
     if len(all_numeric_encoded) == 0:
@@ -596,7 +608,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
     concat_kernel_initializer = "he_normal"
     concat_activation = 'relu'
     concat_layer_neurons = dense_layer1
-
+    
     ####Concatenate all categorical features( Categorical input ) #########
     if len(all_low_cat_encoded) == 0:
         skip_meta_categ1 = True
@@ -604,14 +616,10 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
     elif len(all_low_cat_encoded) == 1:
         meta_input_categ1 = all_low_cat_encoded[0]
         meta_categ1 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ1)
-        meta_categ1 = keras.layers.BatchNormalization()(meta_categ1)
-        #meta_categ1 = layers.Activation(concat_activation)(meta_categ1)
     else:
         meta_input_categ1 = layers.concatenate(all_low_cat_encoded)
         #WIDE - This Dense layer connects to input layer - Categorical Data
         meta_categ1 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ1)
-        meta_categ1 = keras.layers.BatchNormalization()(meta_categ1)
-        #meta_categ1 = layers.Activation(concat_activation)(meta_categ1)
 
     skip_meta_categ2 = False
     if len(all_high_cat_encoded) == 0:
@@ -621,12 +629,10 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         meta_input_categ2 = all_high_cat_encoded[0]
         meta_categ2 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ2)
         meta_categ2 = layers.BatchNormalization()(meta_categ2)
-        #meta_categ2 = layers.Activation(concat_activation)(meta_categ2)
     else:
         meta_input_categ2 = layers.concatenate(all_high_cat_encoded)
         meta_categ2 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ2)
         meta_categ2 = layers.BatchNormalization()(meta_categ2)
-        #meta_categ2 = layers.Activation(concat_activation)(meta_categ2)
 
     skip_meta_numeric = False
     if len(all_numeric_encoded) == 0:
@@ -634,19 +640,16 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         meta_numeric = None
     elif len(all_numeric_encoded) == 1:
         meta_input_numeric = all_numeric_encoded[0]
-        #meta_numeric = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_numeric)
-        meta_numeric = layers.BatchNormalization()(meta_input_numeric)
-        #meta_numeric = layers.Activation(concat_activation)(meta_numeric)
+        meta_numeric = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_numeric)
+        meta_numeric = layers.BatchNormalization()(meta_numeric)
     else:
         #### You must concatenate these encoded outputs before sending them out!
         #DEEP - This Dense layer connects to input layer - Numeric Data
-        #meta_numeric = layers.BatchNormalization()(meta_input_numeric)
         meta_input_numeric = layers.concatenate(all_numeric_encoded)
-        #meta_numeric = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_numeric)
-        meta_numeric = layers.BatchNormalization()(meta_input_numeric)
-        #meta_numeric = layers.Activation(concat_activation)(meta_numeric)
+        meta_numeric = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_numeric)
+        meta_numeric = layers.BatchNormalization()(meta_numeric)
 
-
+    
     ####Concatenate both Wide and Deep layers
     #### in the end, you copy it into another variable called all_features so that you can easily remember name
     all_encoded_dict = list(zip([skip_meta_categ1, skip_meta_categ2, skip_meta_numeric],
@@ -761,7 +764,9 @@ def encode_binning_numeric_feature_categorical(feature, name, dataset, bins_lat,
     encoded_feature = index(feature)
 
     # Create a CategoryEncoding for our integer indices
-    encoder = CategoryEncoding(num_tokens=bins_num+1, output_mode="binary")
+    lat_bins = 21
+    #encoder = CategoryEncoding(num_tokens=bins_num+1, output_mode="binary")
+    encoder = CategoryEncoding(num_tokens=lat_bins, output_mode="binary")
 
     # Prepare a dataset of indices
     feature_ds = feature_ds.map(index)
@@ -803,11 +808,21 @@ def encode_string_categorical_feature_categorical(feature_input, name, dataset, 
     feature_ds = dataset.map(lambda x, y: x[name])
     feature_ds = feature_ds.map(lambda x: tf.expand_dims(x, -1))
 
+    ### turn it into an index first ###
+    encoded_feature = index(feature_input)
+
+    # Create a CategoryEncoding for our integer indices
+    lat_bins = 10
+    encoder = CategoryEncoding(num_tokens=lat_bins, output_mode="binary")
+
+    # Prepare a dataset of indices
+    feature_ds = feature_ds.map(index)
+
     # Learn the set of possible string values and assign them a fixed integer index
-    index.adapt(feature_ds)
+    encoder.adapt(feature_ds)
 
     # Turn the string input into integer indices
-    encoded_feature = index(feature_input)
+    encoded_feature = encoder(encoded_feature)
 
     return encoded_feature
 
@@ -894,6 +909,46 @@ def encode_cat_feature_crosses_numeric(encoded_input1, encoded_input2, dataset, 
     cat_cross_cat1_cat2 = tf.keras.layers.Embedding(
                         (bins_num + 1) , 10) (hash_cross_cat1_cat2)
     cat_cross_cat1_cat2 = tf.reduce_sum(cat_cross_cat1_cat2, axis=-2)
+
+    return cat_cross_cat1_cat2
+###########################################################################################
+def encode_cat_feature_crosses(encoded_input1, encoded_input2, dataset, bins_num=64):
+    """
+    This function does feature crosses of two categorical features sent in as encoded inputs.
+    DO NOT SEND in RAW KERAS.INPUTs = they won't work here. This function takes those that are encoded.
+    It then creates a feature cross, hashes the resulting categories and then category encodes them.
+    The resulting output can be directly used an encoded variable for building pipelines.
+
+    Inputs:
+    ----------
+    encoded_input1: This must be an encoded input - create a Keras.input variable first.
+             Then do a StringLookup column on it and then a CategoryEncoding of it. Now you
+             can feed that encoded variable into this as the first input.
+    encoded_input1: This must be an encoded input - Similar to above: create a Keras.input variable first.
+             Then do a StringLookup column on it and then a CategoryEncoding of it. Now you
+             can feed that encoded variable into this as the second input.
+    dataset: this is the variable holding the tf.data.Dataset of your data. Can be any kind of dataset.
+            for example: it can be a batched or a prefetched dataset.
+            Warning: You must be careful to set num_epochs when creating this dataset.
+                   If num_epochs=None, this function will loop forever. If you set it to a number,
+                   it will stop after that many epochs. So be careful!
+    bins_num: this is the number of bins you want to use in the hashing of the column
+            Typically this can be 64. But you can make it smaller or larger.
+
+
+    Outputs:
+    -----------
+    cat_cross_cat1_cat2: a keras.Tensor. You can use this tensor in keras models for training.
+               The Tensor has a shape of (None, 1) -  None indicates it is batched.
+    CategoryEncoding output dtype is float32 even if output is binary or count.
+    """
+    ###########   Categorical cross of two categorical features is done here    #########
+    cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.CategoryCrossing()(
+                                                [encoded_input1, encoded_input2])
+    hash_cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.Hashing(num_bins=bins_num)(
+                                                cross_cat1_cat2)
+    cat_cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.CategoryEncoding(
+                                        num_tokens = bins_num)(hash_cross_cat1_cat2)
 
     return cat_cross_cat1_cat2
 ###########################################################################################
@@ -1474,6 +1529,15 @@ def encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEA
     all_features = layers.concatenate(encoded_features)
     return all_features
 ################################################################################
+from itertools import combinations
+def perform_new_feature_crossing(cat_input_dict, cross_cats, dataset):
+    combos = combinations(cross_cats, 2)
+    combos_encoded_list = []
+    for cat1, cat2 in combos:
+        cat_combo_encoded = encode_cat_feature_crosses(cat_input_dict[cat1], cat_input_dict[cat2], dataset, bins_num=64)
+        combos_encoded_list.append(cat_combo_encoded)
+    return combos_encoded_list
+##################################################################################
 def perform_feature_crossing(cat_input_dict, cross_cats, cats, floats, max_tokens_zip, verbose=0):
 
     high_cats_alert = 50 ### set this number to alery you when a variable has high dimensions. Should it?

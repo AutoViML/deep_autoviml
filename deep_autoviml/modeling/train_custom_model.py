@@ -644,7 +644,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
         tune_mode = val_mode
     if tuner.lower() == "storm":
         ########   S T O R M   T U N E R   D E F I N E D     H E R E ###########
-        randomization_factor = 0.50
+        randomization_factor = 0.25
         tuner = MyTuner(project_dir=trials_saved_path,
                     build_fn=build_model_storm,
                     objective_direction=tune_mode,
