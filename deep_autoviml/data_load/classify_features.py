@@ -831,11 +831,15 @@ def find_latitude_longitude_columns_in_df(df, verbose=0):
     lats, lat_keywords = find_latitude_columns(df, verbose)
     lons, lon_keywords = find_longitude_columns(df, verbose)
     if len(lats) > 0 and len(lons) > 0:
-        if len(lats) >= 1:
+        if len(lats) > 1:
             for each_lat in lats:
                 for each_lon in lons:
                     if lat_keywords[each_lat] == lon_keywords[each_lon]:
                         matched_pairs.append((each_lat, each_lon))
+        elif len(lats) == 1 and len(lons) == 1:
+            each_lat = lats[0]
+            each_lon = lons[0]
+            matched_pairs.append((each_lat, each_lon))
     if len(matched_pairs) > 0 and verbose:
         print('Matched pairs of latitudes and longitudes: %s' %matched_pairs)
     return lats, lons, matched_pairs
@@ -849,17 +853,16 @@ def find_latitude_columns(df, verbose=0):
         for lat_word in columns:
             lati_keyword = find_latitude_keyword(lat_word, columns, sel_columns)
             if not lati_keyword == '':
-                lat_keywords[lat_word] = lat_word.replace(lati_keyword,'')
+                if lati_keyword == lat_word:
+                    lat_keywords[lat_word] = lati_keyword
+                else:
+                    lat_keywords[lat_word] = lat_word.replace(lati_keyword,'')
     ###### This is where we find whether they are truly latitudes ############
     print('    possible latitude columns in dataset: %s' %sel_columns)
     sel_columns_copy = copy.deepcopy(sel_columns)
     for sel_col in sel_columns_copy:
         if not lat_keywords[sel_col]:
             sel_columns.remove(sel_col)
-    if len(sel_columns) == 0:
-        print('        after further analysis, no latitude columns found')
-    else:
-        print('        after further analysis, selected latitude columns = %s' %sel_columns)
      #### If there are any more columns left, then do further analysis #######
     if len(sel_columns) > 0:
         sel_cols_float = df[sel_columns].select_dtypes(include='float').columns.tolist()
@@ -892,6 +895,11 @@ def find_latitude_columns(df, verbose=0):
                             lat_keywords[lat_word] = sel_column.replace(lati_keyword,'')
                 else:
                     sel_columns.remove(sel_column)
+    ### after everything what is left is shown here ####
+    if len(sel_columns) == 0:
+        print('        after further analysis, no latitude columns found')
+    else:
+        print('        after further analysis, selected latitude columns = %s' %sel_columns)
     return sel_columns, lat_keywords
 
 def find_latitude_keyword(lat_word, columns, sel_columns=[]):
@@ -1011,17 +1019,16 @@ def find_longitude_columns(df, verbose=0):
         for lon_word in columns:
             long_keyword = find_longitude_keyword(lon_word, columns, sel_columns)
             if not long_keyword == '':
-                lon_keywords[lon_word] = lon_word.replace(long_keyword,'')
+                if lon_word == long_keyword:
+                    lon_keywords[lon_word] = long_keyword
+                else:
+                    lon_keywords[lon_word] = lon_word.replace(long_keyword,'')
     #####  This is where we test whether they are indeed longitude columns ####
     print('    possible longitude columns in dataset: %s' %sel_columns)
     sel_columns_copy = copy.deepcopy(sel_columns)
     for sel_col in sel_columns_copy:
         if not lon_keywords[sel_col]:
             sel_columns.remove(sel_col)
-    if len(sel_columns) == 0:
-        print('        after further analysis, no longitude columns found')
-    else:
-        print('        after further analysis, selected longitude columns = %s' %sel_columns)
     ###### This is where we find whether they are truly longitudes ############
     if len(sel_columns) > 0:
         sel_cols_float = df[sel_columns].select_dtypes(include='float').columns.tolist()
@@ -1054,6 +1061,11 @@ def find_longitude_columns(df, verbose=0):
                             lon_keywords[lon_word] = sel_column.replace(long_keyword,'')
                 else:
                     sel_columns.remove(sel_column)
+    ### this is where we finally can select columns ##
+    if len(sel_columns) == 0:
+        print('        after further analysis, no longitude columns found')
+    else:
+        print('        after further analysis, selected longitude columns = %s' %sel_columns)
     return sel_columns, lon_keywords
 ###########################################################################################
 from collections import defaultdict

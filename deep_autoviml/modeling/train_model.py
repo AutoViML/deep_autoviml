@@ -228,31 +228,35 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     #################################################################################
     ########     P R E D I C T   O N   H E L D   O U T  D A T A   H E R E      ######
     #################################################################################
-    
-    if num_labels <= 1:
-        y_test = np.concatenate(list(heldout_ds.map(lambda x,y: y).as_numpy_iterator()))
-        print('    Single-Label: Heldout data shape: %s' %(y_test.shape,))
-    else:
-        iters = int(data_size/batch_size) + 1
-        for inum, each_target in enumerate(target):
-            add_ls = []
-            for feats, labs in heldout_ds.take(iters): 
-                add_ls.append(list(labs[each_target].numpy()))
-            flat_list = [item for sublist in add_ls for item in sublist]
-            if inum == 0:
-                each_array = np.array(flat_list)
-            else:
-                each_array = np.c_[each_array, np.array(flat_list)]
-        y_test = copy.deepcopy(each_array)
-        print('    Multi-Label: Heldout data shape: %s' %(y_test.shape,))
-    scores = []
-    ls = []
-    if verbose >= 1:
-        try:
-            print_one_row_from_tf_label(heldout_ds)
-        except:
-            print('could not print samples from heldout ds labels')
-    ###########################################################################
+    try:
+        if num_labels <= 1:
+            y_test = np.concatenate(list(heldout_ds.map(lambda x,y: y).as_numpy_iterator()))
+            print('    Single-Label: Heldout data shape: %s' %(y_test.shape,))
+        else:
+            iters = int(data_size/batch_size) + 1
+            for inum, each_target in enumerate(target):
+                add_ls = []
+                for feats, labs in heldout_ds.take(iters): 
+                    add_ls.append(list(labs[each_target].numpy()))
+                flat_list = [item for sublist in add_ls for item in sublist]
+                if inum == 0:
+                    each_array = np.array(flat_list)
+                else:
+                    each_array = np.c_[each_array, np.array(flat_list)]
+            y_test = copy.deepcopy(each_array)
+            print('    Multi-Label: Heldout data shape: %s' %(y_test.shape,))
+        scores = []
+        ls = []
+        if verbose >= 1:
+            try:
+                print_one_row_from_tf_label(heldout_ds)
+            except:
+                print('could not print samples from heldout ds labels')
+        ###########################################################################
+    except:
+        print('Model erroring on heldout_ds predictions. Returning with model and artifacts dictionary.')
+        return deep_model, cat_vocab_dict
+        
     y_probas = deep_model.predict(heldout_ds)
     
     if isinstance(target, str):
