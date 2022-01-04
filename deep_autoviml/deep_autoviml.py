@@ -272,7 +272,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         print(deep_model.summary())
         return deep_model, cat_vocab_dict
     elif keras_model_type.lower() in ['text', 'text classification', "text_classification"]:
-        ###############   Now do special image processing here ###################################
+        ###############   Now do special text processing here ###################################
         text_alt = True ### This means you use the text directory option
         if 'text_directory' in model_options.keys():
             print('    text directory given as %s' %model_options['text_directory'])
@@ -300,6 +300,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             print('\nSplitting train into 80+20 percent: train and validation data')
             valid_ds = full_ds.enumerate().filter(is_valid).map(recover)
             train_ds = full_ds.enumerate().filter(is_train).map(recover)
+
+        
         ###################  P R E P R O C E S S    T E X T   #########################
         try:
             deep_model = preprocessing_text(train_ds, keras_model_type, model_options)

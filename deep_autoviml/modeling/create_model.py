@@ -27,7 +27,7 @@ np.set_printoptions(precision=3, suppress=True)
 from collections import defaultdict
 ############################################################################################
 # data pipelines and feature engg here
-from deep_autoviml.models import basic, dnn, reg_dnn, dnn_drop, giant_deep, cnn1, cnn2
+from deep_autoviml.models import basic, dnn, reg_dnn, dnn_drop, giant_deep, cnn1, cnn2, lstm1
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_fast_inputs, create_fast_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_all_inputs, create_all_inputs
 from deep_autoviml.preprocessing.preprocessing_tabular import encode_num_inputs, encode_auto_inputs
@@ -259,6 +259,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
         return model_body, keras_options
     ##########################   This is for non-auto models #####################################
     if isinstance(use_my_model, str) :
+        print("models  "+keras_model_type.lower())
         if use_my_model == "":
             if keras_model_type.lower() in ['basic', 'simple', 'default','sample model']:
                 ##########  Now that we have setup the layers correctly, we can build some more hidden layers
@@ -282,6 +283,11 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                     model_body = cnn1.model
                 else:
                     model_body = cnn2.model
+            elif keras_model_type.lower() in ['lstm', 'seqq2seq']:
+                ##########  Now that we have setup the layers correctly, we can build some more hidden layers
+                # Conv1D + global max pooling
+                    model_body = lstm1.model
+                    print("LSTMED")
             ###### You have to do this for all prebuilt models ####################
             if keras_model_type.lower() in prebuilt_models:
                 print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)
