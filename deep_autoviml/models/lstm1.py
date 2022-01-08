@@ -36,8 +36,11 @@ from tensorflow.keras.layers import GlobalMaxPooling1D, Dropout, Conv1D
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 ############################################################################################
 
-
-model = Sequential()
-model.add(LSTM(128))
-model.add(Dense(128))
-model.add(Activation('softmax'))
+def make_lstm(vocab_size):
+    print("Magic "+str(vocab_size))
+    model = Sequential()
+    model.add(Embedding(vocab_size, 400, input_length=1))
+    model.add(LSTM(400,return_sequences=True))
+    model.add(LSTM(400))
+    model.add(Dense(1, activation='softmax'))
+    return model

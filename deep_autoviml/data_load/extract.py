@@ -51,6 +51,9 @@ np.random.seed(42)
 tf.random.set_seed(42)
 from tensorflow.keras import layers
 from tensorflow import keras
+
+from keras.preprocessing.text import Tokenizer
+
 ############################################################################################
 #### probably the most handy function of all!
 def left_subtract(l1,l2):
@@ -1159,6 +1162,40 @@ def is_test(x, y):
     return x % 2 == 0
 def is_train(x, y):
     return not is_test(x, y)
+##################################################################################
+
+def load_train_txt(train_data_or_file, target, project_name, keras_options, model_options,
+                  keras_model_type, verbose=0):
+
+    text = open(train_data_or_file).read().lower()
+    
+    words = re.compile(r'\w+').findall(text)
+    #words = tokenizer.tokenize(text)
+
+
+
+    tokenizer = Tokenizer() # creating object of Tokenizer()
+    tokenizer.fit_on_texts([words])
+    encoded = tokenizer.texts_to_sequences([words])[0]
+    
+    sequences = list()
+    for i in range(1, len(encoded)):
+        sequences.append(encoded[i-1:i+1])
+    print('Total Sequences: %d' % len(sequences))
+    sequences = np.array(sequences) # Converting list to numpy array
+
+
+    vocab_size = len(tokenizer.word_index) + 1
+    print('Vocabulary Size: %d' % vocab_size)
+
+
+    X, Y = sequences[:,0],sequences[:,1]
+    train_data = None
+    valid_data = None
+    cat_vocab_dict = dict()
+    cat_vocab_dict['target_variables'] =  "target"
+    cat_vocab_dict['project_name'] = project_name
+    return X, Y, cat_vocab_dict, vocab_size
 ##################################################################################
 def load_text_data(text_directory, project_name, keras_options, model_options,
                         verbose=0):

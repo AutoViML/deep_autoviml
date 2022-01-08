@@ -85,7 +85,7 @@ from .data_load.classify_features import EDA_classify_features
 from .data_load.extract import find_problem_type, transform_train_target
 from .data_load.extract import load_train_data, load_train_data_file
 from .data_load.extract import load_train_data_frame, load_image_data
-from .data_load.extract import load_text_data
+from .data_load.extract import load_text_data, load_train_txt
 
 # keras preprocessing
 from .preprocessing.preprocessing import perform_preprocessing
@@ -108,6 +108,10 @@ from .utilities.utilities import print_one_row_from_tf_dataset
 from .utilities.utilities import print_one_row_from_tf_label
 from .utilities.utilities import check_if_GPU_exists, plot_history
 from .utilities.utilities import save_model_architecture
+
+
+from .models import basic, dnn, reg_dnn, dnn_drop, giant_deep, cnn1, cnn2, lstm1
+
 
 #############################################################################################
 ### Split raw_train_set into train and valid data sets first
@@ -314,7 +318,26 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                                             project_name, save_model_flag)
         print(deep_model.summary())
         return deep_model, cat_vocab_dict
+    elif keras_model_type.lower() in ['next word prediction', "next_word_prediction"]:
 
+        ################   T E X T    C L A S S I F I C A T I O N   #########
+
+        X, Y, cat_vocab_dict, vocab_size = load_train_txt(
+                            train_data_or_file, target, project_name, keras_options_copy,
+                                model_options_copy, keras_model_type, verbose=verbose)
+        print('Loaded text classification file or dataframe using input given:')
+        ############## Split train into train and validation datasets here ###############
+
+        
+        ###################  P R E P R O C E S S    T E X T   #########################
+
+        
+        model = lstm1.make_lstm(vocab_size)
+        print(model.summary())
+
+        model.compile(loss='binary_crossentropy', optimizer='adam',metrics=['acc'])
+        model.fit(X, Y, epochs=200,batch_size=48, verbose=2)
+        return model, cat_vocab_dict
     shuffle_flag = False
     ####   K E R A S    O P T I O N S   - THESE CAN BE OVERRIDDEN by your input keras_options dictionary ####
     keras_options_defaults = {}
