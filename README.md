@@ -132,6 +132,9 @@ deep_autoviml requires only a single line of code to get started. You can howeve
 - `save_model_flag`: must be True or False. The model will be saved in keras model format.
 - `use_my_model`: This is where "bring your own model" (BYOM) option comes into play. This BYOM model must be a keras Sequential model with NO input layers and output layers! You can define it and send it as input here. We will add input and preprocessing layers to it automatically. Your custom defined model must contain only hidden layers (Dense, Conv1D, Conv2D, etc.), and dropouts, activations, etc. The default for this argument is "" (empty string) which means we will build your model. If you provide your custom model object here, we will use it instead.
 - `verbose`: must be 0, 1 or 2. Can also be True or False. You can see more and more outputs as you increase the verbose level. If you want to see a chart of your model, use verbose = 2. But you must have graphviz and pydot installed in your machine to see the model plot.
+-`use_mlflow`: This is used to enabling MLflow lifecycle and tracking. This is False be default. MLflow is useed to manage the ML lifecycle, including experimentation, reproducibility, deployment, and a central model registry.
+-`mlflow_exp_name`: MLflow experiment name. Default value is 'autoviml'.
+-`mlflow_run_name`: User has flexibilty to use custom run name.Default value is'first_run'.
 
 ## Image
 ![image_deep](deep_7.jpg)

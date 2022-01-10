@@ -502,6 +502,10 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     distributed_values = (deep_model, cat_vocab_dict)
     if use_mlflow:
         mlflow.end_run()
+        print("""#######################################################
+        Please start Mlflow locally to track machine learning lifecycle and use as below
+        http://localhost:5000/ 
+        ####################################################### """)
     return distributed_values
 
 ############################################################################################
