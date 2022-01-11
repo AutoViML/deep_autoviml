@@ -43,7 +43,7 @@ setuptools.setup(
         "tensorflow==2.5.2",
         "pandas",
         "matplotlib",
-        "numpy==1.19.2",
+        "numpy==1.21",
         "scikit-learn>=0.23.1",
         "regex",
         "emoji",
@@ -51,7 +51,8 @@ setuptools.setup(
         "optuna",
         "tensorflow_hub==0.12.0",
         "tensorflow-text==2.5.0",
-        "xlrd"
+        "xlrd",
+        "mlflow==1.22.0",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
