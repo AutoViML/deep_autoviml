@@ -51,6 +51,7 @@ from tensorflow.keras import regularizers
 from tensorflow.keras.models import Model, load_model
 import tensorflow_hub as hub
 import tensorflow_text as text
+import mlflow
 
 #############################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
@@ -130,7 +131,9 @@ def left_subtract(l1,l2):
 ##############################################################################################
 def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep_autoviml",
                                 save_model_flag=True, model_options={}, keras_options={},
-                                 use_my_model='', model_use_case='', verbose=0):
+                                 use_my_model='', model_use_case='', verbose=0,
+                                 use_mlflow=False,mlflow_exp_name='autoviml',mlflow_run_name='first_run'
+                                 ):
     """
     ####################################################################################
     ####                          Deep AutoViML                                     ####
@@ -217,12 +220,25 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 It is a placeholder for future purposes. At the moment, leave it as empty string.
     verbose = 1 will give you more charts and outputs. verbose 0 will run silently
                 with minimal outputs.
+    use_mlflow = This is used to enabling MLflow lifecycle and tracking. This is False be default.
+                 MLflow is useed to manage the ML lifecycle, including experimentation, reproducibility,
+                  deployment, and a central model registry.
+    mlflow_exp_name = MLflow experiment name.
+    mlflow_run_name = User has flexibilty to use custom run name.
+
+    
     """
     my_strategy = check_if_GPU_exists(1)
     ########    C H E CK   T Y P E    O F    K E R A S    M O D E L        #####################
     print() #### create a new line that's all ###
     model_options_copy = copy.deepcopy(model_options)
     keras_options_copy = copy.deepcopy(keras_options)
+
+    #############MLFLOW Check####################################
+    if use_mlflow:
+        mlflow.set_experiment(mlflow_exp_name)
+        mlflow.start_run(run_name=mlflow_run_name)
+        mlflow.tensorflow.autolog(every_n_iter=1)
 
     if isinstance(project_name,str):
         if project_name == '':
@@ -484,10 +500,16 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             except:
                 print('Cannot save plot. Install pydot and graphviz if you want plots saved.')
     distributed_values = (deep_model, cat_vocab_dict)
+    if use_mlflow:
+        mlflow.end_run()
+        print("""#######################################################
+        Please start Mlflow locally to track machine learning lifecycle and use as below
+        http://localhost:5000/ 
+        ####################################################### """)
     return distributed_values
 
 ############################################################################################
 def get_save_folder(save_dir):
     run_id = time.strftime("model_%Y_%m_%d-%H_%M_%S")
     return os.path.join(save_dir, run_id)
-######################################################################################
+############################################################################################

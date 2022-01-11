@@ -8,8 +8,8 @@
 [![Build Status](https://travis-ci.org/joemccann/dillinger.svg?branch=master)](https://github.com/AutoViML)
 ## Table of Contents
 <ul>
-<li><a href="#Motivation">Motivation</a></li>
-<li><a href="#InnerWorking">How it works</a></li>
+<li><a href="#motivation">Motivation</a></li>
+<li><a href="#features">How it works</a></li>
 <li><a href="#technology">Technology</a></li>
 <li><a href="#install">Install</a></li>
 <li><a href="#usage">Usage</a></li>
@@ -21,6 +21,8 @@
 <li><a href="#contributing">Contributing</a></li>
 <li><a href="#license">License</a></li>
 </ul>
+## Update (Jan 2022): Now with mlflow!
+You can now add `mlflow` experiment tracking to all your deep_autoviml runs. [mlflow](https://mlflow.org/) is a popular python library for experiment tracking and MLOps in general. See more details below under `mlflow`.
 
 ## Motivation
 ✨ deep_autoviml is a powerful new deep learning library with a very simple design goal:  ✨
@@ -38,13 +40,13 @@ deep autoviml is primarily meant for sophisticated data engineers, data scientis
 1. Instead, you can "bring your own model" ("BYOM" option) model to attach keras data pipelines to your model.
 1. Additionally, you can choose any Tensorflow Hub model (TFHub) to custom train on your data. Just look for instructions below in <a href="#tips">"Tips for using deep_autoviml"</a> section.
 1. There are 4 ways to build your model quickly or slowly depending on your needs:
-<li>fast: a quick model that uses only dense layers (deep layers)</li>
-<li>fast1: a deep and wide model that uses both deep and wide layers </li>
-<li>fast2: a deep and cross model that crosses some variables (hence deep and cross) </li>
-<li>auto: This will try out multiple combinations of dense layers and optimize them using either Optuna or Storm-Tuner. This will take the longest time </li>
+- fast: a quick model that uses only dense layers (deep layers)
+- fast1: a deep and wide model that uses both deep and wide layers. This is slightly slower than `fast` model.
+- fast2: a deep and cross model that crosses some variables (hence deep and cross). This is about the same speed as 'fast1` model.
+- auto: This uses `Optuna` or `Storm-Tuner` to perform combinations of dense layers and select best architecture. This will take the longest time.
 
 ![why_deep](deep_2.jpg)
-## InnerWorking
+## Features
 These are the main features that distinguish deep_autoviml from other libraries:
 - It uses keras preprocessing layers which are more intuitive, and are included inside your model to simplify deployment
 - The pipeline is available to you to use as inputs in your own functional model (if you so wish - you must specify that option in the input - see below for "pipeline")
@@ -57,7 +59,6 @@ These are the main features that distinguish deep_autoviml from other libraries:
 ![how_it_works](deep_1.jpg)
 
 ## Technology
-
 deep_autoviml uses the latest in tensorflow (2.4.1+) td.data.Datasets and tf.keras preprocessing technologies: the Keras preprocessing layers enable you to encapsulate feature engineering and preprocessing into the model itself. This makes the process for training and predictions the same: just feed input data (in the form of files or dataframes) and the model will take care of all preprocessing before predictions. 
 
 To perform its preprocessing on the model itself, deep_autoviml uses [tensorflow](https://www.tensorflow.org/) (TF 2.4.1+ and later versions) and [tf.keras](https://www.tensorflow.org/api_docs/python/tf/keras) experimental preprocessing layers: these layers are part of your saved model. They become part of the model's computational graph that can be optimized and executed on any device including GPU's and TPU's. By packaging everything as a single unit, we save the effort in reimplementing the preprocessing logic on the production server. The new model can take raw tabular data with numeric and categorical variables or strings text directly without any preprocessing. This avoids missing or incorrect configuration for the preprocesing_layer during production.
@@ -67,7 +68,6 @@ In addition, to select the best hyper parameters for the model, it uses a new op
 ![how_deep](deep_4.jpg)
 
 ## Install
-
 deep_autoviml requires [tensorflow](https://www.tensorflow.org/api_docs/python/tf) v2.4.1+ and [storm-tuner](https://github.com/ben-arnao/StoRM)  to run. Don't worry! We will install these libraries when you install deep_autoviml.
 
 ```
@@ -85,7 +85,6 @@ pip install git+https://github.com/AutoViML/deep_autoviml.git
 ```
 
 ## Usage
-
 ![deep_usage](deep_5.jpg)
 deep_autoviml can be invoked with a simple import and run statement:
 
@@ -98,7 +97,8 @@ Load a data set (any .csv or .gzip or .gz or .txt file) into deep_autoviml and i
 ```
 model, cat_vocab_dict = deepauto.fit(train, target, keras_model_type="auto",
             project_name="deep_autoviml", keras_options={}, model_options={}, 
-            save_model_flag=True, use_my_model='', model_use_case='', verbose=0)
+            save_model_flag=True, use_my_model='', model_use_case='', verbose=0,
+            use_mlflow=False, mlflow_exp_name='autoviml', mlflow_run_name='first_run')
 ```
 
 Once deep_autoviml writes your saved model and cat_vocab_dict files to disk in the project_name directory, you can load it from anywhere (including cloud) for predictions like this using the model and cat_vocab_dict generated above:
@@ -132,6 +132,11 @@ deep_autoviml requires only a single line of code to get started. You can howeve
 - `save_model_flag`: must be True or False. The model will be saved in keras model format.
 - `use_my_model`: This is where "bring your own model" (BYOM) option comes into play. This BYOM model must be a keras Sequential model with NO input layers and output layers! You can define it and send it as input here. We will add input and preprocessing layers to it automatically. Your custom defined model must contain only hidden layers (Dense, Conv1D, Conv2D, etc.), and dropouts, activations, etc. The default for this argument is "" (empty string) which means we will build your model. If you provide your custom model object here, we will use it instead.
 - `verbose`: must be 0, 1 or 2. Can also be True or False. You can see more and more outputs as you increase the verbose level. If you want to see a chart of your model, use verbose = 2. But you must have graphviz and pydot installed in your machine to see the model plot.
+-`use_mlflow`: default = False. Use for MLflow lifecycle tracking. You can set it to True. MLflow is an open source python library useed to manage ML lifecycle, including experimentation, reproducibility, deployment, and a central model registry.
+Once the model training (via `fit` method) is done, you need to run MLflow locally from your working directory. Run below command on command line. This will start MLflow UI on port 5000 (http://localhost:5000/) and user can manage and visualize the end-to-end machine learning lifecycle.<br>
+`$ mlflow ui`
+-`mlflow_exp_name`:  Default value is 'autoviml'. MLflow experiment name. You can change this to any string you want.
+-`mlflow_run_name`: Default value is'first_run'. Each run under an experiment can have a unique run name. You can change this.
 
 ## Image
 ![image_deep](deep_7.jpg)
