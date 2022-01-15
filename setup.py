@@ -37,13 +37,14 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="deep_autoviml",
-    version="0.0.78.dev1",
+    version="0.0.78.dev2",
     author="Ram Seshadri",
     # author_email="author@example.com",
     description="Automatically Build Deep Learning Models and Pipelines fast!",
     long_description=long_description,
     long_description_content_type="text/markdown",
     license='Apache License 2.0',
+    license_files=("LICENSE",),
     url="https://github.com/AutoViML/deep_autoviml",
     packages = [
         "deep_autoviml",
