@@ -1,0 +1,17 @@
+emoji
+ipython
+jupyter
+matplotlib
+mlflow==1.22.0
+numpy==1.19.2
+optuna
+pandas
+regex
+scikit-learn>=0.23.1
+storm-tuner>=0.0.8
+tensorflow==2.5.2
+tensorflow_hub==0.12.0
+xlrd
+
+[text]
+tensorflow-text==2.5.0
