@@ -2,7 +2,7 @@ ipython
 jupyter
 tensorflow==2.5.2
 pandas
-numpy==1.21
+numpy==1.19.2
 matplotlib
 scikit-learn>=0.23.1
 regex

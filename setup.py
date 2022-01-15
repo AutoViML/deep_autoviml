@@ -21,7 +21,7 @@ base_packages = [
         "tensorflow==2.5.2",
         "pandas",
         "matplotlib",
-        "numpy==1.21",
+        "numpy==1.19.2",
         "scikit-learn>=0.23.1",
         "regex",
         "emoji",
