@@ -28,7 +28,6 @@ np.set_printoptions(precision=3, suppress=True)
 ############################################################################################
 # TensorFlow ≥2.4 is required
 import tensorflow as tf
-import tensorflow_text as text
 
 np.random.seed(42)
 tf.random.set_seed(42)

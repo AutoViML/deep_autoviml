@@ -50,7 +50,6 @@ from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
 from tensorflow.keras.models import Model, load_model
 import tensorflow_hub as hub
-import tensorflow_text as text
 import mlflow
 
 #############################################################################################

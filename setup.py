@@ -15,12 +15,29 @@
 ############################################################################################
 import setuptools
 
+base_packages = [
+        "ipython",
+        "jupyter",
+        "tensorflow==2.5.2",
+        "pandas",
+        "matplotlib",
+        "numpy==1.21",
+        "scikit-learn>=0.23.1",
+        "regex",
+        "emoji",
+        "storm-tuner>=0.0.8",
+        "optuna",
+        "tensorflow_hub==0.12.0",
+        "xlrd",
+        "mlflow==1.22.0",
+    ]
+
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name="deep_autoviml",
-    version="0.0.77",
+    version="0.0.78",
     author="Ram Seshadri",
     # author_email="author@example.com",
     description="Automatically Build Deep Learning Models and Pipelines fast!",
@@ -37,23 +54,10 @@ setuptools.setup(
         "deep_autoviml.utilities",
     ],
     include_package_data=True,
-    install_requires=[
-        "ipython",
-        "jupyter",
-        "tensorflow==2.5.2",
-        "pandas",
-        "matplotlib",
-        "numpy==1.21",
-        "scikit-learn>=0.23.1",
-        "regex",
-        "emoji",
-        "storm-tuner>=0.0.8",
-        "optuna",
-        "tensorflow_hub==0.12.0",
-        "tensorflow-text==2.5.0",
-        "xlrd",
-        "mlflow==1.22.0",
-    ],
+    install_requires=base_packages,
+    extras_require={
+        "text": ["tensorflow-text==2.5.0",]
+        },
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",
