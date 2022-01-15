@@ -44,6 +44,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     license='Apache License 2.0',
+    license_files=("LICENSE",),
     url="https://github.com/AutoViML/deep_autoviml",
     packages = [
         "deep_autoviml",
