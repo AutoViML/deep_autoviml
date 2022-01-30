@@ -54,7 +54,7 @@ from tensorflow.keras import regularizers
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import TimeseriesGenerator
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
-
+from sklearn.model_selection import train_test_split
 
 
 ############################################################################################
@@ -348,10 +348,14 @@ def predict(model_or_model_path, project_name, test_dataset,
                 keepdims=False, separator=' ')
         return y
     ################################################################
-    if keras_model_type.lower() in ['predict time series', 'time series', "time_series" "predict_time_series"]:        
-        test_generator = load_test_timeseries(
+    feature_data = None
+    target_data = None
+    if keras_model_type.lower() in ['predict time series', 'time series', "time_series" "predict_time_series"]:   
+        
+        scaler = MinMaxScaler()     
+        test_generator, feature_data, target_data = load_test_timeseries(
                             test_dataset, cat_vocab_dict['target_variables'], project_name, cat_vocab_dict['keras_options'],
-                                cat_vocab_dict['model_options'], keras_model_type, verbose=verbose)
+                                cat_vocab_dict['model_options'], keras_model_type, scaler, verbose=verbose)
 
     elif isinstance(test_dataset, str):
         test_ds, cat_vocab_dict2, test_small = load_test_data(test_dataset, project_name=project_name,
@@ -491,15 +495,26 @@ def predict(model_or_model_path, project_name, test_dataset,
     num_classes = cat_vocab_dict2['num_classes']    
     ####### save the predictions only upto input size ###
     ########  This is where we start predictions on test data set ##############
-    try:
-        if keras_model_type.lower() in ['predict time series', 'time series', "time_series" "predict_time_series"]:        
-            y_probas = model.predict(test_generator, steps=num_steps)
-        else:
-            y_probas = model.predict(test_ds, steps=num_steps)
-    except:
-        print('ERROR: Predictions from model erroring.')
-        print('    Check your model and ensure test data and their dtypes are same as train data and retry again.')
-        return
+    #try:
+    if keras_model_type.lower() in ['predict time series', 'time series', "time_series" "predict_time_series"]:        
+        predictions = model.predict_generator(test_generator)
+
+        df_pred=pd.concat([pd.DataFrame(predictions), pd.DataFrame(feature_data[:,1:][cat_vocab_dict['model_options']["length"]:])],axis=1)
+        #df_pred=pd.concat([pd.DataFrame(predictions), pd.DataFrame(x_test[:,1:][win_length:])],axis=1)
+
+        rev_trans=scaler.inverse_transform(df_pred)
+        df = pd.read_csv(test_dataset)
+
+        y_probas=df[cat_vocab_dict['model_options']['features']][predictions.shape[0]*-1:]
+
+        y_probas[str(cat_vocab_dict['target_variables'])+'_pred']=rev_trans[:,0]
+
+    else:
+        y_probas = model.predict(test_ds, steps=num_steps)
+    #except:
+    #    print('ERROR: Predictions from model erroring.')
+    #    print('    Check your model and ensure test data and their dtypes are same as train data and retry again.')
+    #    return
     ######  Now convert the model predictions into classes #########
     try:
         y_test_preds_list = convert_predictions_from_model(y_probas, cat_vocab_dict2, DS_LEN)
@@ -514,22 +529,18 @@ def predict(model_or_model_path, project_name, test_dataset,
     return y_test_preds_list
 ############################################################################################
 
-def load_test_timeseries(train_data_or_file, target, project_name, keras_options, model_options,
-                  keras_model_type, verbose=0):
+def load_test_timeseries(test_data_or_file, target, project_name, keras_options, model_options,
+                  keras_model_type,scaler , verbose=0):
 
 
-    if '.csv' in  train_data_or_file:
-        df = pd.read_csv(train_data_or_file)
-        scaler = MinMaxScaler()
-        feature_data = scaler.fit_transform(df[model_options['features']]) 
+    df = pd.read_csv(test_data_or_file)
+    feature_data = scaler.fit_transform(df[model_options['features']]) 
 
-        target_data = scaler.fit_transform(df[target].to_numpy().reshape(-1, 1)) 
+    target_data = feature_data[:,df.columns.get_loc(target)]
 
+    test_generator = TimeseriesGenerator(feature_data, target_data, length=model_options['length'], sampling_rate=1, batch_size=model_options['batch_size'])
 
-        test_generator = TimeseriesGenerator(feature_data, target_data, length=model_options['length'], sampling_rate=model_options['sampling_rate'], batch_size=model_options['batch_size'], stride=model_options['stride'])
-
-        return test_generator
-
+    return test_generator, feature_data, target_data
 
 ############################################################################################
 

@@ -1176,7 +1176,8 @@ def load_train_timeseries(train_data_or_file, target, project_name, keras_option
 
     feature_data = scaler.fit_transform(df[model_options['features']]) 
 
-    target_data = scaler.fit_transform(df[target].to_numpy().reshape(-1, 1)) 
+    
+    target_data = feature_data[:,df.columns.get_loc(target)]
 
     x_train, x_test, y_train, y_test = train_test_split(feature_data, target_data, test_size=model_options['test_size'], random_state=123, shuffle = False)
     train_generator = TimeseriesGenerator(x_train, y_train, length=model_options['length'], sampling_rate=model_options['sampling_rate'], batch_size=model_options['batch_size'], stride=model_options['stride'])
