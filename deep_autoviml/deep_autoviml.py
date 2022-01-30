@@ -325,7 +325,10 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         print(deep_model.summary())
         return deep_model, cat_vocab_dict
     elif keras_model_type.lower() in ['predict time series', 'time series', "time_series" "predict_time_series"]:
-
+        """
+        Author: Adarsh C
+        contact: chekodu.adarsh@gmail.com
+        """
         ############### Get the features columns ###################################
         if 'features' in model_options.keys():
             print(str(model_options['features'])+", features will be considered")

@@ -538,13 +538,14 @@ def load_test_timeseries(test_data_or_file, target, project_name, keras_options,
     This Function loads the testing data in csv format and converts into tensoflow TimeseriesGenerator.
 
     """
+
+    # Source:   https://github.com/srivatsan88/End-to-End-Time-Series/blob/master/Multivariate_Time_Series_Modeling_using_LSTM.ipynb
+    # Source_Author: https://github.com/srivatsan88
+    
     df = pd.read_csv(test_data_or_file)
     feature_data = scaler.fit_transform(df[model_options['features']]) 
-
     target_data = feature_data[:,df.columns.get_loc(target)]
-
     test_generator = TimeseriesGenerator(feature_data, target_data, length=model_options['window_length'], sampling_rate=1, batch_size=keras_options['batch_size'])
-
     return test_generator, feature_data, target_data
 
 ############################################################################################
