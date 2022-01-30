@@ -531,14 +531,19 @@ def predict(model_or_model_path, project_name, test_dataset,
 
 def load_test_timeseries(test_data_or_file, target, project_name, keras_options, model_options,
                   keras_model_type,scaler , verbose=0):
+    """
+    Author: Adarsh C
+    contact: chekodu.adarsh@gmail.com
 
+    This Function loads the testing data in csv format and converts into tensoflow TimeseriesGenerator.
 
+    """
     df = pd.read_csv(test_data_or_file)
     feature_data = scaler.fit_transform(df[model_options['features']]) 
 
     target_data = feature_data[:,df.columns.get_loc(target)]
 
-    test_generator = TimeseriesGenerator(feature_data, target_data, length=model_options['length'], sampling_rate=1, batch_size=model_options['batch_size'])
+    test_generator = TimeseriesGenerator(feature_data, target_data, length=model_options['window_length'], sampling_rate=1, batch_size=keras_options['batch_size'])
 
     return test_generator, feature_data, target_data
 

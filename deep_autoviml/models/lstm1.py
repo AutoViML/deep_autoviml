@@ -37,8 +37,20 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 ############################################################################################
 
 def make_lstm(model_options):
+    '''
+    Author: Adarsh C
+    Date created: 30/01/2022
+    Date last modified: 30/01/2022
+    contact: chekodu.adarsh@gmail.com
+    Inputs:
+    model_options: contains important model hyper parameters
+    '''
+
+    # Source:   https://github.com/srivatsan88/End-to-End-Time-Series/blob/master/Multivariate_Time_Series_Modeling_using_LSTM.ipynb
+    # Source_Author: https://github.com/srivatsan88
+    
     model = tf.keras.Sequential()
-    model.add(LSTM(128, input_shape= (model_options['length'], len(model_options['features'])), return_sequences=True))
+    model.add(LSTM(128, input_shape= (model_options['window_length'], len(model_options['features'])), return_sequences=True))
     model.add(LeakyReLU(alpha=0.5))
     model.add(LSTM(128, return_sequences=True))
     model.add(LeakyReLU(alpha=0.5)) 

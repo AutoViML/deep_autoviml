@@ -283,11 +283,6 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
                     model_body = cnn1.model
                 else:
                     model_body = cnn2.model
-            elif keras_model_type.lower() in ['lstm']:
-                ##########  Now that we have setup the layers correctly, we can build some more hidden layers
-                # Conv1D + global max pooling
-                    model_body = lstm1.model
-                    print("LSTMED")
             ###### You have to do this for all prebuilt models ####################
             if keras_model_type.lower() in prebuilt_models:
                 print('Adding inputs and outputs to a pre-built %s model...' %keras_model_type)

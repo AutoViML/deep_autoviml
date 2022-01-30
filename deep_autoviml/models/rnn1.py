@@ -38,8 +38,16 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 
 
 def make_rnn(model_options):
+    '''
+    Author: Adarsh C
+    Date created: 30/01/2022
+    Date last modified: 30/01/2022
+    contact: chekodu.adarsh@gmail.com
+    Inputs:
+    model_options: contains important model hyper parameters
+    '''
     model = tf.keras.Sequential()
-    model.add(SimpleRNN(128, input_shape= (model_options['length'], len(model_options['features'])), return_sequences=True))
+    model.add(SimpleRNN(128, input_shape= (model_options['window_length'], len(model_options['features'])), return_sequences=True))
     model.add(LeakyReLU(alpha=0.5))
     model.add(SimpleRNN(128, return_sequences=True))
     model.add(LeakyReLU(alpha=0.5)) 

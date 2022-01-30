@@ -218,6 +218,12 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             "image_channels": default is "" (empty string). Needed only for image use case. Number of channels.
             'save_model_path': default is project_name/keras_model_type/datetime-hour-min/
                         If you provide your own model path as a string, it will save it there.
+            "features": list: list of features from thhe input time series data (to be considered for timeseries prediciton).
+            "window_length": window length for the time series data (to be considered for timeseries prediciton).
+            "sampling_rate": sampling rate for te time series data (to be considered for timeseries prediciton).
+            "stride": stride for the time series (to be considered for timeseries prediciton)).
+            "validation_size": train and validation split ratio (to be considered for timeseries prediciton).
+            "prebuilt-model": select the pre build model from "lstm". "gru", "rnn" ( to be considered for timeseries prediciton).
     model_use_case: default is "" (empty string). If "pipeline", you will get back pipeline only, not model.
                 It is a placeholder for future purposes. At the moment, leave it as empty string.
     verbose = 1 will give you more charts and outputs. verbose 0 will run silently
@@ -349,17 +355,24 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             return
          
         print(model.summary())
-        
+                        
+        ###################  Training the Pre-Built model #########################
+
         model.compile(loss='binary_crossentropy', optimizer=keras_options_copy['optimizer'],metrics=['acc'])
 
-        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
-                                                            patience=2,
-                                                            mode='min')
+        if keras_options_copy["early_stopping"]:
+            early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+                                                                patience=2,
+                                                                mode='min')
                                                             
-        model.fit(train_generator, epochs=keras_options_copy['epochs'],batch_size=keras_options_copy['batch_size'], 
-                    validation_data=valid_generator, 
-                    shuffle=False,
-                    callbacks=[early_stopping])
+            model.fit(train_generator, epochs=keras_options_copy['epochs'],batch_size=keras_options_copy['batch_size'], 
+                        validation_data=valid_generator, 
+                        shuffle=False,
+                        callbacks=[early_stopping])
+        else:
+            model.fit(train_generator, epochs=keras_options_copy['epochs'],batch_size=keras_options_copy['batch_size'], 
+                        validation_data=valid_generator, 
+                        shuffle=False)
 
         cat_vocab_dict['train_generator'] = train_generator
         cat_vocab_dict['valid_generator'] = valid_generator

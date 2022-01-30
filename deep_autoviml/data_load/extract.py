@@ -1169,6 +1169,15 @@ def is_train(x, y):
 def load_train_timeseries(train_data_or_file, target, project_name, keras_options, model_options,
                   keras_model_type, verbose=0):
 
+    """
+    Author: Adarsh C
+    contact: chekodu.adarsh@gmail.com
+
+    This Function loads the trainging data in csv format and converts into tensoflow TimeseriesGenerator. Before the conversion it splits the data for training and validation.
+
+    """
+    # Source:   https://github.com/srivatsan88/End-to-End-Time-Series/blob/master/Multivariate_Time_Series_Modeling_using_LSTM.ipynb
+    # Source_Author: https://github.com/srivatsan88
 
     df = pd.read_csv(train_data_or_file)  # Currently supports only .csv
     
@@ -1179,9 +1188,9 @@ def load_train_timeseries(train_data_or_file, target, project_name, keras_option
     
     target_data = feature_data[:,df.columns.get_loc(target)]
 
-    x_train, x_test, y_train, y_test = train_test_split(feature_data, target_data, test_size=model_options['test_size'], random_state=123, shuffle = False)
-    train_generator = TimeseriesGenerator(x_train, y_train, length=model_options['length'], sampling_rate=model_options['sampling_rate'], batch_size=model_options['batch_size'], stride=model_options['stride'])
-    valid_generator = TimeseriesGenerator(x_test, y_test, length=model_options['length'], sampling_rate=model_options['sampling_rate'], batch_size=model_options['batch_size'], stride=model_options['stride'])
+    x_train, x_test, y_train, y_test = train_test_split(feature_data, target_data, test_size=model_options['validation_size'], random_state=123, shuffle = False)
+    train_generator = TimeseriesGenerator(x_train, y_train, length=model_options['window_length'], sampling_rate=model_options['sampling_rate'], batch_size=keras_model_type['batch_size'], stride=model_options['stride'])
+    valid_generator = TimeseriesGenerator(x_test, y_test, length=model_options['window_length'], sampling_rate=model_options['sampling_rate'], batch_size=keras_model_type['batch_size'], stride=model_options['stride'])
     
     ######################## Setting up Cat Vocab Dict #######################
     cat_vocab_dict = {}
