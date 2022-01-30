@@ -53,6 +53,8 @@ from tensorflow.keras import layers
 from tensorflow import keras
 
 from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import TimeseriesGenerator
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 ############################################################################################
 #### probably the most handy function of all!
@@ -1164,38 +1166,37 @@ def is_train(x, y):
     return not is_test(x, y)
 ##################################################################################
 
-def load_train_txt(train_data_or_file, target, project_name, keras_options, model_options,
+def load_train_timeseries(train_data_or_file, target, project_name, keras_options, model_options,
                   keras_model_type, verbose=0):
 
-    text = open(train_data_or_file).read().lower()
+
+    df = pd.read_csv(train_data_or_file)  # Currently supports only .csv
     
-    words = re.compile(r'\w+').findall(text)
-    #words = tokenizer.tokenize(text)
+    scaler = MinMaxScaler()
 
+    feature_data = scaler.fit_transform(df[model_options['features']]) 
 
+    target_data = scaler.fit_transform(df[target].to_numpy().reshape(-1, 1)) 
 
-    tokenizer = Tokenizer() # creating object of Tokenizer()
-    tokenizer.fit_on_texts([words])
-    encoded = tokenizer.texts_to_sequences([words])[0]
+    x_train, x_test, y_train, y_test = train_test_split(feature_data, target_data, test_size=model_options['test_size'], random_state=123, shuffle = False)
+    train_generator = TimeseriesGenerator(x_train, y_train, length=model_options['length'], sampling_rate=model_options['sampling_rate'], batch_size=model_options['batch_size'], stride=model_options['stride'])
+    valid_generator = TimeseriesGenerator(x_test, y_test, length=model_options['length'], sampling_rate=model_options['sampling_rate'], batch_size=model_options['batch_size'], stride=model_options['stride'])
     
-    sequences = list()
-    for i in range(1, len(encoded)):
-        sequences.append(encoded[i-1:i+1])
-    print('Total Sequences: %d' % len(sequences))
-    sequences = np.array(sequences) # Converting list to numpy array
-
-
-    vocab_size = len(tokenizer.word_index) + 1
-    print('Vocabulary Size: %d' % vocab_size)
-
-
-    X, Y = sequences[:,0],sequences[:,1]
-    train_data = None
-    valid_data = None
-    cat_vocab_dict = dict()
-    cat_vocab_dict['target_variables'] =  "target"
+    ######################## Setting up Cat Vocab Dict #######################
+    cat_vocab_dict = {}
+    cat_vocab_dict['modeltype'] = 'Timeseries'
+    cat_vocab_dict['target_variables'] = target
     cat_vocab_dict['project_name'] = project_name
-    return X, Y, cat_vocab_dict, vocab_size
+    cat_vocab_dict['model_options'] = model_options
+    cat_vocab_dict['keras_options'] = keras_options
+    cat_vocab_dict['nlp_vars'] = ""
+    cat_vocab_dict['bools'] = False
+    cat_vocab_dict['bools_converted'] = False
+    cat_vocab_dict['num_labels'] = ""
+    cat_vocab_dict['num_classes']  = ""
+
+    return train_generator, valid_generator, cat_vocab_dict
+
 ##################################################################################
 def load_text_data(text_directory, project_name, keras_options, model_options,
                         verbose=0):

@@ -54,6 +54,7 @@ import tensorflow_text as text
 
 #############################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
+from sklearn.model_selection import train_test_split
 from IPython.core.display import Image, display
 import pickle
 #############################################################################################
@@ -85,7 +86,7 @@ from .data_load.classify_features import EDA_classify_features
 from .data_load.extract import find_problem_type, transform_train_target
 from .data_load.extract import load_train_data, load_train_data_file
 from .data_load.extract import load_train_data_frame, load_image_data
-from .data_load.extract import load_text_data, load_train_txt
+from .data_load.extract import load_text_data, load_train_timeseries
 
 # keras preprocessing
 from .preprocessing.preprocessing import perform_preprocessing
@@ -110,7 +111,7 @@ from .utilities.utilities import check_if_GPU_exists, plot_history
 from .utilities.utilities import save_model_architecture
 
 
-from .models import basic, dnn, reg_dnn, dnn_drop, giant_deep, cnn1, cnn2, lstm1
+from .models import basic, dnn, reg_dnn, dnn_drop, giant_deep, cnn1, cnn2, lstm1, gru1, rnn1
 
 
 #############################################################################################
@@ -247,7 +248,6 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         os.makedirs(save_logs_path, exist_ok = True)
 
     print('Model and logs being saved in %s' %save_model_path)
-
     if keras_model_type.lower() in ['image', 'images', "image_classification"]:
         ###############   Now do special image processing here ###################################
         if 'image_directory' in model_options.keys():
@@ -318,25 +318,51 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                                             project_name, save_model_flag)
         print(deep_model.summary())
         return deep_model, cat_vocab_dict
-    elif keras_model_type.lower() in ['next word prediction', "next_word_prediction"]:
+    elif keras_model_type.lower() in ['predict time series', 'time series', "time_series" "predict_time_series"]:
 
-        ################   T E X T    C L A S S I F I C A T I O N   #########
+        ############### Get the features columns ###################################
+        if 'features' in model_options.keys():
+            print(str(model_options['features'])+", features will be considered")
+        else:
+            print(' Must provide the features')
+            return 
+        ################   Load time series data   #########
 
-        X, Y, cat_vocab_dict, vocab_size = load_train_txt(
+        train_generator, valid_generator, cat_vocab_dict = load_train_timeseries(
                             train_data_or_file, target, project_name, keras_options_copy,
                                 model_options_copy, keras_model_type, verbose=verbose)
-        print('Loaded text classification file or dataframe using input given:')
-        ############## Split train into train and validation datasets here ###############
+        
 
         
-        ###################  P R E P R O C E S S    T E X T   #########################
+        ###################  Choosing the Pre-Built model #########################
+        model = None
+        if model_options['prebuilt-model'].lower() == "lstm":
+            model = lstm1.make_lstm(model_options_copy)
 
-        
-        model = lstm1.make_lstm(vocab_size)
+        elif model_options['prebuilt-model'].lower() == "rnn":
+            model = rnn1.make_rnn(model_options_copy)
+
+        elif model_options['prebuilt-model'].lower() == "gru":
+            model = gru1.make_gru(model_options_copy)
+        else:
+            print("Must choose lstm, gru, rnn in model_options['prebuilt-model'] ")
+            return
+         
         print(model.summary())
+        
+        model.compile(loss='binary_crossentropy', optimizer=keras_options_copy['optimizer'],metrics=['acc'])
 
-        model.compile(loss='binary_crossentropy', optimizer='adam',metrics=['acc'])
-        model.fit(X, Y, epochs=200,batch_size=48, verbose=2)
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+                                                            patience=2,
+                                                            mode='min')
+                                                            
+        model.fit(train_generator, epochs=keras_options_copy['epochs'],batch_size=keras_options_copy['batch_size'], 
+                    validation_data=valid_generator, 
+                    shuffle=False,
+                    callbacks=[early_stopping])
+
+        cat_vocab_dict['train_generator'] = train_generator
+        cat_vocab_dict['valid_generator'] = valid_generator
         return model, cat_vocab_dict
     shuffle_flag = False
     ####   K E R A S    O P T I O N S   - THESE CAN BE OVERRIDDEN by your input keras_options dictionary ####

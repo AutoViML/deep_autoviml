@@ -50,6 +50,13 @@ from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
 
+
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import TimeseriesGenerator
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
+
+
 ############################################################################################
 # data pipelines
 from deep_autoviml.data_load.classify_features import classify_features_using_pandas
@@ -291,6 +298,8 @@ def load_model_dict(model_or_model_path, cat_vocab_dict, project_name, keras_mod
             else:
                 if modeltype == 'Regression':
                     model = tf.keras.models.load_model(os.path.join(model_or_model_path))
+                if modeltype == "Timeseries":                    
+                    model = tf.keras.models.load_model(os.path.join(model_or_model_path))
                 else:
                     model = tf.keras.models.load_model(os.path.join(model_or_model_path),
                             custom_objects={'BalancedSparseCategoricalAccuracy': BalancedSparseCategoricalAccuracy})
@@ -310,6 +319,9 @@ def predict(model_or_model_path, project_name, test_dataset,
     start_time2 = time.time()
     model, cat_vocab_dict = load_model_dict(model_or_model_path, cat_vocab_dict, project_name, keras_model_type)
     ##### load the test data set here #######
+
+    
+
     if keras_model_type.lower() in ['nlp', 'text']:
         NLP_VARS = cat_vocab_dict['predictors_in_train']
     else:
@@ -336,7 +348,12 @@ def predict(model_or_model_path, project_name, test_dataset,
                 keepdims=False, separator=' ')
         return y
     ################################################################
-    if isinstance(test_dataset, str):
+    if keras_model_type.lower() in ['predict time series', 'time series', "time_series" "predict_time_series"]:        
+        test_generator = load_test_timeseries(
+                            test_dataset, cat_vocab_dict['target_variables'], project_name, cat_vocab_dict['keras_options'],
+                                cat_vocab_dict['model_options'], keras_model_type, verbose=verbose)
+
+    elif isinstance(test_dataset, str):
         test_ds, cat_vocab_dict2, test_small = load_test_data(test_dataset, project_name=project_name,
                                 cat_vocab_dict=cat_vocab_dict, verbose=verbose)
         ### You have to load only the NLP or text variables into dataset. otherwise, it will fail during predict
@@ -393,7 +410,7 @@ def predict(model_or_model_path, project_name, test_dataset,
                 print('    combined NLP or text vars: %s into a single combined_nlp_text successfully' %NLP_VARS)
         else:
             print('No NLP vars in data set. No preprocessing done.')
-        cat_vocab_dict2 = copy.deepcopy(cat_vocab_dict)
+    cat_vocab_dict2 = copy.deepcopy(cat_vocab_dict)
     ##################################################################################
     if cat_vocab_dict2['bools_converted']:
         BOOLS = []
@@ -475,7 +492,10 @@ def predict(model_or_model_path, project_name, test_dataset,
     ####### save the predictions only upto input size ###
     ########  This is where we start predictions on test data set ##############
     try:
-        y_probas = model.predict(test_ds, steps=num_steps)
+        if keras_model_type.lower() in ['predict time series', 'time series', "time_series" "predict_time_series"]:        
+            y_probas = model.predict(test_generator, steps=num_steps)
+        else:
+            y_probas = model.predict(test_ds, steps=num_steps)
     except:
         print('ERROR: Predictions from model erroring.')
         print('    Check your model and ensure test data and their dtypes are same as train data and retry again.')
@@ -493,6 +513,27 @@ def predict(model_or_model_path, project_name, test_dataset,
     print('Time taken in mins for predictions = %0.0f' %((time.time()-start_time2)/60))
     return y_test_preds_list
 ############################################################################################
+
+def load_test_timeseries(train_data_or_file, target, project_name, keras_options, model_options,
+                  keras_model_type, verbose=0):
+
+
+    if '.csv' in  train_data_or_file:
+        df = pd.read_csv(train_data_or_file)
+        scaler = MinMaxScaler()
+        feature_data = scaler.fit_transform(df[model_options['features']]) 
+
+        target_data = scaler.fit_transform(df[target].to_numpy().reshape(-1, 1)) 
+
+
+        test_generator = TimeseriesGenerator(feature_data, target_data, length=model_options['length'], sampling_rate=model_options['sampling_rate'], batch_size=model_options['batch_size'], stride=model_options['stride'])
+
+        return test_generator
+
+
+############################################################################################
+
+
 def convert_predictions_from_model(y_probas, cat_vocab_dict, DS_LEN):
     y_test_preds_list = []
     target = cat_vocab_dict['target_variables']

@@ -30,20 +30,20 @@ from tensorflow.keras import regularizers
 from tensorflow.keras.layers import Reshape, MaxPooling1D, MaxPooling2D
 from tensorflow.keras.layers import AveragePooling2D, AveragePooling1D
 from tensorflow.keras import Model, Sequential
-from tensorflow.keras.layers import Embedding, Reshape, Dropout, Dense, LSTM, LeakyReLU
+from tensorflow.keras.layers import Embedding, Reshape, Dropout, Dense, GRU, LeakyReLU
 from tensorflow.keras.layers import Activation, Dense, Embedding, GlobalAveragePooling1D
 from tensorflow.keras.layers import GlobalMaxPooling1D, Dropout, Conv1D
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 ############################################################################################
 
-def make_lstm(model_options):
+def make_gru(model_options):
     model = tf.keras.Sequential()
-    model.add(LSTM(128, input_shape= (model_options['length'], len(model_options['features'])), return_sequences=True))
+    model.add(GRU(128, input_shape= (model_options['length'], len(model_options['features'])), return_sequences=True))
     model.add(LeakyReLU(alpha=0.5))
-    model.add(LSTM(128, return_sequences=True))
+    model.add(GRU(128, return_sequences=True))
     model.add(LeakyReLU(alpha=0.5)) 
     model.add(Dropout(0.3)) 
-    model.add(LSTM(64, return_sequences=False))
+    model.add(GRU(64, return_sequences=False))
     model.add(Dropout(0.3)) 
     model.add(Dense(1))
     return model
