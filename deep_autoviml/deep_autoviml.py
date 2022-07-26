@@ -193,6 +193,11 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             Another option would be to inform autoviml about  encoding in  CSV file for it to
                     read such as 'latin-1' by setting {"csv_encoding": 'latin-1'}
             Other examples:
+            "nlp_char_limit": default 50. Beyond this max limit of chars in column, it 
+                            will be considered NLP column and treated as such.
+            "variable_cat_limit": default 30. if a variable has more than this limit, it 
+                            will NOT be treated as a categorical variable.
+            "DS_LEN": default "". Number of rows in dataset. You can leave it "" to calculate automatically.
             "csv_encoding": default='utf-8'. You can change to 'latin-1', 'iso-8859-1', 'cp1252', etc.
             "cat_feat_cross_flag": if you want to cross categorical features such as A*B, B*C...
             "sep" : default = "," comma but you can override it. Separator used in read_csv.
@@ -205,6 +210,9 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                     We will figure out single label or multi-label problem based on your target
                             being string or list.
             "header": default = 0 ### this is the header row for pandas to read
+            "compression": None => you can set it to zip or other file compression formats if your data is compressed
+            "csv_encoding": default 'utf-8'. But you can set it to any other csv encoding format your data is in
+            "label_encode_flag": False. But you can set it to True if you want it encoded.
             "max_trials": default = 30 ## number of Storm Tuner trials ### Lower this for faster processing.
             "tuner": default = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
             "embedding_size": default = 50 ## this is the NLP embedding size minimum
@@ -260,7 +268,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     print('Model and logs being saved in %s' %save_model_path)
 
     if keras_model_type.lower() in ['image', 'images', "image_classification"]:
-        ###############   Now do special image processing here ###################################
+        ###############   Now do special IMAGE processing here ###################################
         if 'image_directory' in model_options.keys():
             print('    Image directory given as %s' %model_options['image_directory'])
             image_dir = model_options["image_directory"]
@@ -287,7 +295,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         print(deep_model.summary())
         return deep_model, cat_vocab_dict
     elif keras_model_type.lower() in ['text', 'text classification', "text_classification"]:
-        ###############   Now do special image processing here ###################################
+        ###############   Now do special TEXT processing here ###################################
         text_alt = True ### This means you use the text directory option
         if 'text_directory' in model_options.keys():
             print('    text directory given as %s' %model_options['text_directory'])
@@ -363,8 +371,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                 print('    %s : %s' %(key, keras_options_copy[key]))
                 keras_options[key] = keras_options_copy[key]
 
-    list_of_model_options = ["idcols","modeltype","sep","cat_feat_cross_flag", "model_use_case",
-                            "nlp_char_limit", "variable_cat_limit", "csv_encoding", "header",
+    list_of_model_options = ["idcols","modeltype","sep","cat_feat_cross_flag", "model_use_case", "label_encode_flag",
+                            "nlp_char_limit", "variable_cat_limit", "compression", "csv_encoding", "header",
                             "max_trials","tuner", "embedding_size", "tf_hub_model", "image_directory",
                             'image_height', 'image_width', "image_channels", "save_model_path"]
 
@@ -378,6 +386,8 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     model_options_defaults["nlp_char_limit"] = 30
     model_options_defaults["variable_cat_limit"] = 30
     model_options_defaults["csv_encoding"] = 'utf-8'
+    model_options_defaults['compression'] = None ## is is needed in case to read Zip files
+    model_options_defaults["label_encode_flag"] = '' ## User can set it to True or False depending on their need.
     model_options_defaults["header"] = 0 ### this is the header row for pandas to read
     model_options_defaults["max_trials"] = 30 ## number of Storm Tuner trials ###
     model_options_defaults['tuner'] = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
@@ -446,7 +456,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             #### There may be other use cases for model_use_case in future hence leave this empty for now #
 
     #### you must create a functional model here
-    print('\nCreating a new Functional model here...')
+    print('\nCreating a new Functional keras model now...')
     print('''
 #################################################################################
 ###########     C R E A T I N G    A    K E R A S       M O D E L    ############
@@ -483,7 +493,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                         keras_options, model_options, var_df, cat_vocab_dict, project_name, save_model_flag, verbose)
     else:
         #### This is used only for custom auto models and is out of the strategy scope #######
-        print('Building and training an automatic model using %s Tuner...' %model_options['tuner'])
+        print('Building and training a(n) %s model using %s Tuner...' %(keras_model_type, model_options['tuner']))
         deep_model, cat_vocab_dict = train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs,
                                          batched_data, target, keras_model_type, keras_options,
                                          model_options, var_df, cat_vocab_dict, project_name,
@@ -509,6 +519,6 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 
 ############################################################################################
 def get_save_folder(save_dir):
-    run_id = time.strftime("model_%Y_%m_%d-%H_%M_%S")
+    run_id = time.strftime("model_%Y_%m_%d_%H_%M_%S")
     return os.path.join(save_dir, run_id)
 ############################################################################################

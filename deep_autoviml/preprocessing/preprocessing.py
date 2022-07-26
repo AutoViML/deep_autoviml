@@ -24,7 +24,7 @@ import functools
 # Make numpy values easier to read.
 np.set_printoptions(precision=3, suppress=True)
 from collections import defaultdict
-
+import os
 ############################################################################################
 # data pipelines and feature engg here
 from deep_autoviml.preprocessing.preprocessing_tabular import preprocessing_tabular
@@ -65,6 +65,7 @@ from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
 from tensorflow.keras.layers import Dense, LSTM, GRU, Input, concatenate, Embedding
 from tensorflow.keras.layers import Reshape, Activation, Flatten
+import tensorflow_hub as hub
 
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
 from IPython.core.display import Image, display
@@ -183,24 +184,38 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
     nlp_names = []
     embedding = []
     ##################  All other Features are Proprocessed Here  ################
-    fast_models = ['fast','deep_and_wide','deep_wide','wide_deep', 'mixed_nlp',
+    ### make sure you include mixed_nlp and combined_nlp in this list since you want it separated 
+    fast_models = ['fast','deep_and_wide','deep_wide','wide_deep', "mixed_nlp","combined_nlp",
                     'wide_and_deep','deep wide', 'wide deep', 'fast1',
                     'deep_and_cross', 'deep_cross', 'deep cross', 'fast2',"text"]
     ##############################################################################
     meta_outputs = []
     print('Preprocessing non-NLP layers for %s Keras model...' %keras_model_type)
-
+    
     if not keras_model_type.lower() in fast_models:
-        ################################################################################
-        ############ T H I S   I S   F O R  "A U T O"  M O D E L S    O N L Y  #########
-        ################################################################################
+        ############################################################################################
+        ############  I N  "A U T O"  M O D E L S  we use Lat and Lon with NLP right here  #########
+        ############################################################################################
         if len(lats+lons) > 0:
-            print('    starting categorical, float and integer layer preprocessing...')
+            print('    Now combine all numeric and non-numeric vars into a Deep only model...')
             meta_outputs, meta_inputs, meta_names = preprocessing_tabular(train_ds, var_df,
                                                         cat_feat_cross_flag, model_options,
                                                         cat_vocab_dict, keras_model_type, verbose)
-            print('    All Non-NLP feature preprocessing for %s completed.' %keras_model_type)
+            print('    All Non-NLP feature preprocessing completed.')
             ### this is the order in which columns have been trained ###
+            if len(nlps) > 0:
+                print('Starting NLP string column layer preprocessing...')
+                nlp_inputs = create_nlp_inputs(nlps)
+                max_tokens_zip, seq_tokens_zip, embed_tokens_zip, vocab_train_small = aggregate_nlp_dictionaries(nlps, cat_vocab_dict, model_options)
+                nlp_encoded = encode_nlp_inputs(nlp_inputs, cat_vocab_dict)
+                ### we call nlp_outputs as embedding in this section of the program ####
+                print('NLP Preprocessing completed.')
+                #merged = [meta_outputs, nlp_encoded]
+                merged = layers.concatenate([nlp_encoded, meta_outputs])
+                print('    combined categorical+numeric with nlp outputs successfully for %s model...' %keras_model_type)
+                nlp_inputs = list(nlp_inputs.values())
+            else:
+                merged = meta_outputs
             final_training_order = nlp_names + meta_names
             ### find their dtypes - remember to use element_spec[0] for train data sets!
             ds_types = dict([(col_name, train_ds.element_spec[0][col_name].dtype) for col_name in final_training_order ])
@@ -209,48 +224,61 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                 print('Inferred column names, layers and types (double-check for duplicates and correctness!): \n%s' %col_type_tuples)
             print('    %s model loaded and compiled successfully...' %keras_model_type)
         else:
-            ####### Now combine all vars into a complete auto deep and wide model ##############
+            ############################################################################################
+            #### In "auto" vs. "mixed_nlp", the NLP processings are different. Numeric process is same.
+            ####  Here both NLP and NON-NLP varas are combined with embedding to form a deep wide model #
+            ############################################################################################
+            print('    Now combine all numeric+cat+NLP vars into a Deep and Wide model')
             ##  Since we are processing NLPs separately we need to remove them from inputs ###
             if len(NON_NLP_VARS) == 0:
-                print('    Non-NLP vars is zero in this dataset. No tabular preprocesing needed...')
+                print('    There are zero non-NLP variables in this dataset. No non-NLP preprocesing needed...')
                 meta_inputs = []
             else:
-                ####  Here both NLP and NON-NLP varas are combined with embedding to form a deep wide model #
                 FEATURE_NAMES = left_subtract(FEATURE_NAMES, nlps)
                 dropout_rate = 0.1
                 hidden_units = [dense_layer2, dense_layer3]
                 inputs = create_fast_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
                 #all_inputs = dict(zip(meta_names,meta_inputs))
+                #### In auto models we want "wide" to be short. Hence use_embedding to be True.
                 wide = encode_auto_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
-                                hidden_units, use_embedding=False)
+                                hidden_units, use_embedding=True)
                 wide = layers.BatchNormalization()(wide)
                 deep = encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
                                 use_embedding=True)
+                deep = layers.BatchNormalization()(deep)
                 meta_inputs = list(inputs.values()) ### convert input layers to a list
                 #### If there are NLP vars in dataset, you must combine the nlp_outputs ##
+                print('    All Non-NLP feature preprocessing completed.')
                 if len(nlps) > 0:
                     print('Starting NLP string column layer preprocessing...')
                     nlp_inputs = create_nlp_inputs(nlps)
                     max_tokens_zip, seq_tokens_zip, embed_tokens_zip, vocab_train_small = aggregate_nlp_dictionaries(nlps, cat_vocab_dict, model_options)
                     nlp_encoded = encode_nlp_inputs(nlp_inputs, cat_vocab_dict)
                     ### we call nlp_outputs as embedding in this section of the program ####
-                    print('    NLP Preprocessing completed.')
+                    print('NLP preprocessing completed.')
                     merged = [wide, deep, nlp_encoded]
-                    print('    %s combined wide, deep and nlp outputs successfully...' %keras_model_type)
+                    print('    Combined wide, deep and nlp outputs successfully')
                     nlp_inputs = list(nlp_inputs.values())
                 else:
                     merged = [wide, deep]
                     print('    %s combined wide and deep  successfully...' %keras_model_type)
-                return nlp_inputs, meta_inputs, merged, embedding
-    elif keras_model_type.lower() == 'mixed_nlp':
+        ### if NLP_outputs is NOT a list, it means there is some NLP variable in the data set
+        if not isinstance(merged, list):
+            print('Shape of output from all preprocessing layers before model training = %s' %(merged.shape,))
+        return nlp_inputs, meta_inputs, merged, embedding
+    elif keras_model_type.lower() in ['mixed_nlp', 'combined_nlp']:
         ### this is similar to auto models but uses TFHub models for NLP preprocessing #####
         if len(NON_NLP_VARS) == 0:
             print('    Non-NLP vars is zero in this dataset. No tabular preprocesing needed...')
             meta_inputs = []
         else:
+            ############################################################################################
+            #### In "auto" vs. "mixed_nlp", the NLP processings are different. Numeric process is same.
+            ############################################################################################
+            print('    Now combine all numeric and non-numeric vars into a Deep and Wide model...')
             ####  Here both NLP and NON-NLP varas are combined with embedding to form a deep wide model #
             FEATURE_NAMES = left_subtract(FEATURE_NAMES, nlps)
-            dropout_rate = 0.1
+            dropout_rate = 0.5
             hidden_units = [dense_layer2, dense_layer3]
             inputs = create_fast_inputs(FEATURE_NAMES, NUMERIC_FEATURE_NAMES, FLOATS)
             #all_inputs = dict(zip(meta_names,meta_inputs))
@@ -259,20 +287,27 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             wide = layers.BatchNormalization()(wide)
             deep = encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, vocab_dict,
                             use_embedding=True)
+            deep = layers.BatchNormalization()(deep)
             meta_inputs = list(inputs.values()) ### convert input layers to a list
+            print('    All Non-NLP feature preprocessing completed.')
             #### If there are NLP vars in dataset, you use TFHub models in this case ##
             if len(nlps) > 0:
                 print('Starting NLP string column layer preprocessing...')
-                nlp_inputs, embedding, nlp_names = preprocessing_nlp(train_ds, model_options,
+                nlp_inputs, embedding, nlp_names = mixed_preprocessing_nlp(train_ds, model_options,
                                                         var_df, cat_vocab_dict,
                                                         keras_model_type, verbose)
                 ### we call nlp_outputs as embedding in this section of the program ####
                 print('    NLP Preprocessing completed.')
-                print('There are no NLP variables in this dataset for preprocessing...')
             else:
+                print('There are no NLP variables in this dataset for preprocessing...')
                 embedding = []
-            meta_outputs = layers.concatenate([wide, deep])
-            print('    %s model: combined wide, deep and NLP (with TFHub) successfully...' %keras_model_type)
+            if isinstance(embedding, list):
+                ### This means embedding is an empty list with nothing in it ###
+                meta_outputs = layers.concatenate([wide, deep])
+                print('    Combined wide, deep layers  successfully.')
+            else:
+                meta_outputs = layers.concatenate([wide, deep, embedding])
+                print('    Combined wide, deep and NLP (with TFHub) successfully.')
     else:
         meta_inputs = []
     ##### You need to send in the ouput from embedding layer to this sequence of layers ####
@@ -348,13 +383,13 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
         print('There is no numeric or cat or int variables in this data set.')
         if isinstance(nlp_outputs, list):
             ### if NLP_outputs is a list, it means there is no NLP variable in the data set
-            print('    There is no NLP variable in this data set. Returning')
+            print('There is no NLP variable in this data set. Returning')
             consolidated_outputs = meta_outputs
         else:
-            print('    %s vector dimensions from NLP variable' %(nlp_outputs.shape,))
+            print('Shape of encoded NLP variables just before training: %s' %(nlp_outputs.shape,))
             consolidated_outputs = nlp_outputs
     else:
-        print('    Shape of output from numeric+integer+cat variables before model training = %s' %(meta_outputs.shape,))
+        print('Shape of non-NLP encoded variables just before model training = %s' %(meta_outputs.shape,))
         if isinstance(nlp_outputs, list):
             ### if NLP_outputs is a list, it means there is no NLP variable in the data set
             print('    There is no NLP variable in this data set. Continuing...')
@@ -362,8 +397,72 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
             consolidated_outputs = meta_outputs
         else:
             ### if NLP_outputs is NOT a list, it means there is some NLP variable in the data set
-            print('    %s vector dimensions from NLP variable' %(nlp_outputs.shape,))
+            print('    Shape of encoded NLP variables just before training: %s' %(nlp_outputs.shape,))
             consolidated_outputs = layers.concatenate([nlp_outputs, meta_outputs])
             print('Shape of output from all preprocessing layers before model training = %s' %(consolidated_outputs.shape,))
     return nlp_inputs, meta_inputs, consolidated_outputs, nlp_outputs
 ##########################################################################################
+def mixed_preprocessing_nlp(train_ds, model_options,
+                        var_df, cat_vocab_dict,
+                        keras_model_type, verbose=0):
+    """
+    This is only for mixed NLP preprocessing of tabular and nlp datasets
+    """
+    nlp_inputs = []
+    all_nlp_encoded = []
+    all_nlp_embeddings = []
+    nlp_col_names = []
+    nlp_columns = var_df['nlp_vars']
+    nlp_columns =  list(set(nlp_columns))
+    
+    if len(nlp_columns) == 1:
+        nlp_column = nlp_columns[0]
+    elif keras_model_type.lower() == 'combined_nlp':
+        nlp_column = 'combined_nlp_text' ### this is when there are multiple nlp columns ##
+    else:
+        ### This is to keep nlp columns separate ###
+        nlp_column = ''
+
+    #### Now perform NLP preproprocessing for each nlp_column ######
+    ######### This is where we load Swivel model and process each nlp column ###
+    try:
+        bert_model_name = "Swivel-20"
+        if os.name == 'nt':
+            tfhub_path = os.path.join(keras_model_type, 'tf_cache')
+            os.environ['TFHUB_CACHE_DIR'] = tfhub_path
+            tfhub_handle_encoder = 'https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1'
+        else:
+            tfhub_handle_encoder = 'https://tfhub.dev/google/tf2-preview/gnews-swivel-20dim/1'
+        hub_layer = hub.KerasLayer(tfhub_handle_encoder,
+                       input_shape=[],
+                       dtype=tf.string, 
+                       trainable=False, name="Swivel20_encoder")
+        print(f'    {bert_model_name} selected from: {tfhub_handle_encoder}')
+        ### this is for mixed nlp models. You use Swivel to embed NLP columns fast ####
+        if len(nlp_columns) > 1:
+            copy_nlp_columns = copy.deepcopy(nlp_columns)
+            for each_nlp in copy_nlp_columns:
+                nlp_input = tf.keras.Input(shape=(), dtype=tf.string, name=each_nlp)
+                nlp_inputs.append(nlp_input)
+                x = hub_layer(nlp_input)
+                all_nlp_encoded.append(x)
+                nlp_col_names.append(each_nlp)
+        else:
+            nlp_input = tf.keras.Input(shape=(), dtype=tf.string, name=nlp_column)
+            x = hub_layer(nlp_input)
+            ###  Now we combine all inputs and outputs in one place here ###########
+            nlp_inputs.append(nlp_input)
+            all_nlp_encoded.append(x)
+            nlp_col_names.append(nlp_column)
+    except:
+        print('    Error: Skipping %s for keras layer preprocessing...' %nlp_column)
+    ### we gather all outputs above into a single list here called all_features!
+    if len(all_nlp_encoded) == 0:
+        print('There are no NLP string variables in this dataset to preprocess!')
+    elif len(all_nlp_encoded) == 1:
+        all_nlp_embeddings = all_nlp_encoded[0]
+    else:
+        all_nlp_embeddings = layers.concatenate(all_nlp_encoded)
+
+    return nlp_inputs, all_nlp_embeddings, nlp_col_names
+#################################################################################

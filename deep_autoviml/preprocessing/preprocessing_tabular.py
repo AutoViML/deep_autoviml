@@ -327,7 +327,7 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         except:
             print('    Error: Skipping %s since Keras Bolean preprocessing is erroring' %each_bool)
 
-    ######  This is where we handle Boolean Integer variables - we just combine them ##################
+    ######  This is where we handle Boolean + Integer variables - we just combine them ##################
     int_bools_copy = copy.deepcopy(int_bools)
     if len(int_bools_copy) > 0:
         for each_int in int_bools_copy:
@@ -361,16 +361,24 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 else:
                     nums_bin = max(20, int(max_tokens_zip[each_int]/40))
                 int_input = keras.Input(shape=(1,), name=each_int, dtype="int32")
-                encoded = encode_any_integer_to_hash_categorical(int_input, each_int,
-                                                                        train_ds, nums_bin)
+                if (max_tokens_zip[each_int] >= high_cats_alert):
+                    encoded = encode_any_integer_to_hash_categorical(int_input, each_int,
+                                                                            train_ds, nums_bin)
+                    if verbose:
+                        print('    %s encoded: %d categories, %d bins. After integer HASH encoding shape = %s' %(each_int,
+                                                max_tokens_zip[each_int], nums_bin, encoded.shape[1]))
+                else:
+                    encoded = encode_categorical_and_integer_features(int_input, each_int,
+                                                                            train_ds, is_string=False)
+                    if verbose:
+                        print('    %s encoded: %d categories. After integer encoding shape: %s' %(each_int,
+                                                max_tokens_zip[each_int], encoded.shape[1]))
                 all_int_inputs.append(int_input)
                 all_int_encoded.append(encoded)
                 all_input_names.append(each_int)
                 if verbose:
-                    print('    %s number of categories = %d and bins = %d: after integer hash encoding shape: %s' %(each_int,
-                                            max_tokens_zip[each_int], nums_bin, encoded.shape[1]))
-                    if (encoded.shape[1] >= high_cats_alert) or (max_tokens_zip[each_int] >= high_cats_alert):
-                        print('        Alert! excessive feature trap. Should this not be a float variable?? %s' %each_int)
+                    if (encoded.shape[1] >= high_cats_alert):
+                        print('        High Dims Alert! Convert %s to float??' %each_int)
             except:
                 print('    Error: Skipping %s since Keras Integer preprocessing erroring' %each_int)
 
@@ -384,16 +392,19 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 int_input = keras.Input(shape=(1,), name=each_int, dtype="int32")
                 cat_input_dict[each_int] = int_input
                 vocab = max_tokens_zip[each_int]
-                encoded = encode_integer_to_categorical_feature(int_input, each_int,
-                                                                        train_ds, vocab)
+                #encoded = encode_integer_to_categorical_feature(int_input, each_int,
+                #                                                        train_ds, vocab)
+                encoded = encode_categorical_and_integer_features(int_input, each_int,
+                                                                        train_ds, is_string=False)
                 all_int_cat_inputs.append(int_input)
                 all_int_cat_encoded.append(encoded)
                 all_input_names.append(each_int)
                 if verbose:
-                    print('    %s number of categories = %d: after integer categorical encoding shape: %s' %(
-                                        each_int, len(vocab), encoded.shape[1]))
+                    print('    %s encoded: %d categories. After integer encoding shape: %s' %(each_int,
+                                         len(vocab), encoded.shape[1]))
                     if encoded.shape[1] > high_cats_alert:
-                        print('        Alert! excessive feature dimension created. Check if necessary to have this many.')
+                        if verbose:
+                            print('        High Dims Alert! Convert %s to float??' %each_int)
             except:
                 print('    Error: Skipping %s since Keras Integer Categorical preprocessing erroring' %each_int)
 
@@ -408,8 +419,10 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 cat_input_dict[each_cat] = cat_input
                 vocab = max_tokens_zip[each_cat]
                 max_tokens = len(vocab)
-                cat_encoded = encode_string_categorical_feature_categorical(cat_input, each_cat,
-                                                                     train_ds, vocab)
+                cat_encoded = encode_categorical_and_integer_features(cat_input, each_cat,
+                                                                     train_ds, is_string=True)
+                #cat_encoded = encode_string_categorical_feature_categorical(cat_input, each_cat,
+                #                                                     train_ds, vocab)
                 all_cat_inputs.append(cat_input)
                 all_cat_encoded.append(cat_encoded)
                 cat_encoded_dict[each_cat] = cat_encoded
@@ -418,7 +431,8 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                     print('    %s number of categories = %d: after string to categorical encoding shape: %s' %(
                                         each_cat, max_tokens, cat_encoded.shape[1]))
                     if cat_encoded.shape[1] > high_cats_alert:
-                        print('        Alert! excessive feature dimension created. Check if necessary to have this many.')
+                        if verbose:
+                            print('        High Dims Alert! Convert %s to float??' %each_int)
             except:
                 print('    Error: Skipping %s since Keras Categorical preprocessing erroring' %each_cat)
 
@@ -487,9 +501,9 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
                 all_num_encoded.append(encoded)
                 num_only_encoded.append(encoded)
                 all_input_names.append(each_num)
-                print('    %s numeric column left as is for feature preprocessing' %each_num)
+                print('    %s numeric column left as is since float' %each_num)
             except:
-                print('    Error: Skipping %s since Keras Float preprocessing erroring' %each_num)
+                print('    Error: Skipping %s due to Keras float preprocessing error' %each_num)
 
 
     # Latitude and Longitude Numerical features are Binned first and then Category Encoded #######
@@ -617,9 +631,16 @@ def preprocessing_tabular(train_ds, var_df, cat_feature_cross_flag, model_option
         meta_input_categ1 = all_low_cat_encoded[0]
         meta_categ1 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ1)
     else:
-        meta_input_categ1 = layers.concatenate(all_low_cat_encoded)
-        #WIDE - This Dense layer connects to input layer - Categorical Data
-        meta_categ1 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ1)
+        int_list = [x for x in all_low_cat_encoded if x.dtype in [np.int8, np.int16, np.int32, np.int64]]
+        float_list = [ x for x in all_low_cat_encoded if x.dtype in [np.float32, np.float64]]
+        if len(float_list) == len(all_low_cat_encoded):
+            ### All of them are floats ###
+            all_high_cat_encoded += float_list
+        else:
+            meta_input_categ1 = layers.concatenate(int_list)
+            all_high_cat_encoded += float_list
+            #WIDE - This Dense layer connects to input layer - Categorical Data
+            meta_categ1 = layers.Dense(concat_layer_neurons, kernel_initializer=concat_kernel_initializer)(meta_input_categ1)
 
     skip_meta_categ2 = False
     if len(all_high_cat_encoded) == 0:
@@ -779,6 +800,22 @@ def encode_binning_numeric_feature_categorical(feature, name, dataset, bins_lat,
     return encoded_feature
 
 ###########################################################################################
+def encode_categorical_and_integer_features(feature, name, dataset, is_string):
+    lookup_class = StringLookup if is_string else IntegerLookup
+    # Create a lookup layer which will turn strings into integer indices
+    lookup = lookup_class(output_mode="binary")
+
+    # Prepare a Dataset that only yields our feature
+    feature_ds = dataset.map(lambda x, y: x[name])
+    feature_ds = feature_ds.map(lambda x: tf.expand_dims(x, -1))
+
+    # Learn the set of possible string values and assign them a fixed integer index
+    lookup.adapt(feature_ds)
+
+    # Turn the string input into integer indices
+    encoded_feature = lookup(feature)
+    return encoded_feature
+##############################################################################
 def encode_string_categorical_feature_categorical(feature_input, name, dataset, vocab):
     """
     Inputs:
@@ -796,7 +833,7 @@ def encode_string_categorical_feature_categorical(feature_input, name, dataset, 
     Outputs:
     -----------
     encoded_feature: a keras.Tensor. You can use this tensor in keras models for training.
-               The Tensor has a shape of (None, 1) - None indicates that it has not been
+               The Tensor has a shape of (None, 1) - None indicates that it is not batched.
     When the output_mode = "binary" or "count", the output is in float otherwise it is integer.
     """
     extra_oov = 3
@@ -1076,7 +1113,8 @@ def encode_any_feature_to_embed_categorical(feature_input, name, dataset, vocabu
     # Learn the set of possible string values and assign them a fixed integer index
     #lookup.adapt(feature_ds)
     encoded_feature = lookup(feature_input)
-    embedding_dims = int(math.sqrt(len(vocabulary)))
+    #embedding_dims = int(math.sqrt(len(vocabulary)))
+    embedding_dims = int(max(2, math.log(len(vocabulary), 2)))
     # Create an embedding layer with the specified dimensions.
     embedding = tf.keras.layers.Embedding(
         input_dim=len(vocabulary)+extra_oov, output_dim=embedding_dims
@@ -1281,18 +1319,32 @@ def encode_auto_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FE
     numeric_encoded = []
     text_encoded = []
     encoded_features = []
-
+    #### In "auto" model, "wide" part is short. Hence we use "count" with "embedding" flag.
     for feature_name in inputs:
         vocabulary = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name]
         extra_oov = 3
         if feature_name in CATEGORICAL_FEATURE_NAMES:
             cat_encoded.append('')
             cat_len = len(vocabulary)
-            encoded_feature = inputs[feature_name]
-            encoded_feature = tf.keras.layers.experimental.preprocessing.StringLookup(
-                            vocabulary=vocabulary, mask_token=None, oov_token = '~UNK~')(encoded_feature)
-            cat_encoded[-1] = tf.keras.layers.experimental.preprocessing.CategoryEncoding(
-                            num_tokens = cat_len + 1)(encoded_feature)
+            lookup = StringLookup(vocabulary=vocabulary, 
+                                mask_token=None, 
+                                oov_token = '~UNK~')
+            if len(vocabulary) > 32:
+                # Convert the string input values into integer indices.
+                encoded_feature = inputs[feature_name]
+                encoded_feature = lookup(encoded_feature)
+                embedding_dims = int(max(2, math.log(len(vocabulary), 2)))
+                # Create an embedding layer with the specified dimensions.
+                embedding = Embedding(
+                    input_dim=len(vocabulary)+extra_oov, output_dim=embedding_dims
+                )
+                # Convert the index values to embedding representations.
+                encoded_feature = embedding(encoded_feature)
+                cat_encoded[-1] = Flatten()(encoded_feature)
+            else:
+                encoded_feature = inputs[feature_name]
+                encoded_feature = lookup(encoded_feature)
+                cat_encoded[-1] = CategoryEncoding(num_tokens = cat_len + 1)(encoded_feature)
         elif feature_name in FLOATS:
             ### you just ignore the floats in cross models ####
             numeric_encoded.append('')
@@ -1303,7 +1355,7 @@ def encode_auto_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FE
         else:
             cat_encoded.append('')
             if len(vocabulary) > 100:
-                print('    ALERT! Excessive feature dimension of %s. Should %s be a float variable?' %(
+                print('    ALERT! Excessive dimensions in %s. Should integer %s be a float variable?' %(
                                     len(vocabulary), feature_name))
                 use_embedding = True
             lookup = IntegerLookup(
@@ -1333,7 +1385,7 @@ def encode_fast_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FE
             # Create a lookup to convert string values to an integer indices.
             # Since we are not using a mask token but expecting some out of vocabulary
             # (oov) tokens, we set mask_token to None and  num_oov_indices to extra_oov.
-            if len(vocabulary) > 50:
+            if len(vocabulary) > 32:
                 use_embedding = True
             lookup = StringLookup(
                 vocabulary=vocabulary,
@@ -1346,7 +1398,8 @@ def encode_fast_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FE
                 # Convert the string input values into integer indices.
                 encoded_feature = inputs[feature_name]
                 encoded_feature = lookup(encoded_feature)
-                embedding_dims = int(math.sqrt(len(vocabulary)))
+                #embedding_dims = int(math.sqrt(len(vocabulary)))
+                embedding_dims = int(max(2, math.log(len(vocabulary), 2)))
                 # Create an embedding layer with the specified dimensions.
                 embedding = layers.Embedding(
                     input_dim=len(vocabulary)+extra_oov, output_dim=embedding_dims
@@ -1365,7 +1418,7 @@ def encode_fast_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FE
             encoded_feature = normalizer(inputs[feature_name])
         else:
             if len(vocabulary) > 100:
-                print('    ALERT! Excessive feature dimension of %s. Should %s be a float variable?' %(
+                print('    ALERT! Excessive feature dimension in %s. Should %s be a float variable?' %(
                                     len(vocabulary), feature_name))
                 use_embedding = True
             lookup = IntegerLookup(
@@ -1374,7 +1427,7 @@ def encode_fast_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FE
                 num_oov_indices=extra_oov,
                 max_tokens=None,
                 oov_token=-9999,
-                output_mode="count" if not use_embedding else "binary",
+                output_mode="count" if use_embedding else "binary",
             )
             # Use the numerical features as-is.
             encoded_feature = inputs[feature_name]
@@ -1407,8 +1460,9 @@ def encode_nlp_inputs(inputs, CATEGORICAL_FEATURES_WITH_VOCABULARY):
     for feature_name in inputs:
         vocabulary = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name]['vocab']
         extra_oov = 50
-        vocab_size = int(math.sqrt(len(vocabulary)))
-        best_embedding_size = closest(list_embedding_sizes, vocab_size//4000)
+        #vocab_size = int(math.sqrt(len(vocabulary)))
+        #best_embedding_size = closest(list_embedding_sizes, vocab_size//4000)
+        best_embedding_size = int(max(2, math.log(len(vocabulary), 2)))
         
         lookup = StringLookup(
             vocabulary=vocabulary,
@@ -1483,7 +1537,7 @@ def encode_num_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEA
 ####################################################################################################
 def encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEATURES_WITH_VOCABULARY,
                          use_embedding=False):
-
+    #### This is a new version intended to reduce dimensions #################
     encoded_features = []
     for feature_name in inputs:
         vocabulary = CATEGORICAL_FEATURES_WITH_VOCABULARY[feature_name]
@@ -1492,7 +1546,7 @@ def encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEA
             # Create a lookup to convert string values to an integer indices.
             # Since we are not using a mask token but expecting some out of vocabulary
             # (oov) tokens, we set mask_token to None and  num_oov_indices to extra_oov.
-            if len(vocabulary) > 50:
+            if len(vocabulary) > 32:
                 use_embedding = True
             lookup = StringLookup(
                 vocabulary=vocabulary,
@@ -1505,7 +1559,7 @@ def encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEA
                 # Convert the string input values into integer indices.
                 encoded_feature = inputs[feature_name]
                 encoded_feature = lookup(encoded_feature)
-                embedding_dims = int(math.sqrt(len(vocabulary)))
+                embedding_dims = int(max(2, math.log(len(vocabulary), 2)))
                 # Create an embedding layer with the specified dimensions.
                 embedding = layers.Embedding(
                     input_dim=len(vocabulary)+extra_oov, output_dim=embedding_dims
@@ -1525,8 +1579,24 @@ def encode_all_inputs(inputs, CATEGORICAL_FEATURE_NAMES, FLOATS, CATEGORICAL_FEA
             encoded_feature = normalizer(inputs[feature_name])
             #encoded_feature = inputs[feature_name]
         encoded_features.append(encoded_feature)
+    ###################
+    int_list = [x for x in encoded_features if x.dtype in [np.int8, np.int16, np.int32, np.int64]]
+    float_list = [ x for x in encoded_features if x.dtype in [np.float32, np.float64]]
+    if len(int_list) > 0:
+        all_int_features = layers.concatenate(int_list)
+        meta_int1 = layers.Dense(32)(all_int_features)
+    if len(float_list) > 0:
+        all_float_features = layers.concatenate(float_list)
+        meta_float1 = layers.Dense(32)(all_float_features)
+    #### You can add a Dense layer if needed here ###########
+    if len(int_list) > 0:
+        if len(float_list) > 0:
+            all_features = layers.concatenate([meta_int1, meta_float1])
+        else:
+            all_features = layers.concatenate([meta_int1])
+    else:
+        all_features = layers.concatenate([meta_float1])
     ##### This is where are float encoded features are combined ###
-    all_features = layers.concatenate(encoded_features)
     return all_features
 ################################################################################
 from itertools import combinations

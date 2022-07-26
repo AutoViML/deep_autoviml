@@ -120,6 +120,10 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     patience = check_keras_options(keras_options, "patience", 10)
     optimizer = keras_options['optimizer']
     class_weights = check_keras_options(keras_options, "class_weight", {})
+    if not isinstance(model_options["label_encode_flag"], str):
+        if not model_options["label_encode_flag"]:
+            print('    removing class weights since label_encode_flag is set to False which means classes can be anything.')
+            class_weights = {}
     print('    class_weights: %s' %class_weights)
     cols_len = len([item for sublist in list(var_df.values()) for item in sublist])
     print('    original datasize = %s, initial batchsize = %s' %(data_size, batch_size))

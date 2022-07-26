@@ -913,6 +913,7 @@ def get_callbacks(val_mode, val_monitor, patience, learning_rate, save_weights_o
     callbacks_dict['tensor_board'] = tb
     callbacks_dict['print'] = pr
     callbacks_dict['reducer'] = rlr
+    callbacks_dict['rlr'] = rlr
     callbacks_dict['decay'] = lr_decay_cb
 
     return callbacks_dict, tensorboard_logpath
@@ -925,14 +926,14 @@ def get_chosen_callback(callbacks_dict, keras_options):
         lr_scheduler = callbacks_dict['onecycle2']
     elif keras_options['lr_scheduler'] == 'onecycle':
         lr_scheduler = callbacks_dict['onecycle']
-    elif keras_options['lr_scheduler'] == 'reducer':
+    elif keras_options['lr_scheduler'] in ['reducer', 'rlr']:
         lr_scheduler = callbacks_dict['reducer']
     elif keras_options['lr_scheduler'] == 'decay':
         lr_scheduler = callbacks_dict['decay']
     elif keras_options['lr_scheduler'] == "scheduler":
         lr_scheduler = callbacks_dict['scheduler']
     else:
-        lr_scheduler = callbacks_dict['scheduler']
+        lr_scheduler = callbacks_dict['rlr']
     return lr_scheduler
 ################################################################################################
 def get_chosen_callback2(callbacks_dict, keras_options):
@@ -948,8 +949,8 @@ def get_chosen_callback2(callbacks_dict, keras_options):
     elif keras_options['lr_scheduler'] == 'decay':
         lr_scheduler = callbacks_dict['lr_decay_cb']
     else:
-        lr_scheduler = callbacks_dict['lr_sched']
-        keras_options['lr_scheduler'] = "lr_sched"
+        lr_scheduler = callbacks_dict['rlr']
+        keras_options['lr_scheduler'] = "rlr"
     return lr_scheduler
 ################################################################################################
 import math

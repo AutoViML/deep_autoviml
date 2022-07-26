@@ -52,6 +52,7 @@ from tensorflow.keras import utils
 from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
+from tensorflow.keras.layers import LeakyReLU
 #####################################################################################
 from deep_autoviml.modeling.create_model import return_optimizer
 from deep_autoviml.utilities.utilities import get_model_defaults, get_compiled_model
@@ -150,17 +151,17 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     #K.clear_session()
     #reset_keras()
     #tf.keras.backend.reset_uids()
-
-    n_layers = trial.suggest_int("n_layers", 1, 4)
+    ### Keep the number of layers slightly higher to increase model complexity ##
+    n_layers = trial.suggest_int("n_layers", 2, 8)
     #num_hidden = trial.suggest_categorical("n_units", [32, 48, 64, 96, 128])
     num_hidden = trial.suggest_categorical("n_units", [50, 100, 150, 200, 250, 300, 350, 400, 450, 500])
     #weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
-    weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-7,1e-6, 1e-5,1e-4, 1e-3,1e-2, 1e-1)
+    weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-7,1e-6, 1e-5,1e-4, 1e-3)
     use_bias = trial.suggest_categorical("use_bias", [True, False])
     batch_norm = trial.suggest_categorical("batch_norm", [True, False])
     add_noise = trial.suggest_categorical("add_noise", [True, False])
-    dropout = trial.suggest_float("dropout", 0, 0.5)
-    activation_fn = trial.suggest_categorical("activation", ['relu', 'tanh', 'elu', 'selu'])
+    dropout = trial.suggest_float("dropout", 0.5, 0.9)
+    activation_fn = trial.suggest_categorical("activation", ['relu', 'elu', 'selu'])
     kernel_initializer = trial.suggest_categorical("kernel_initializer",
                                  ['glorot_uniform','he_normal','lecun_normal','he_uniform'])
     kernel_size = num_hidden
@@ -183,7 +184,7 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
             model.add(BatchNormalization(name="opt_batchnorm_"+str(i)))
 
         if add_noise:
-            model.add(GaussianNoise(trial.suggest_float("adam_learning_rate", 1e-5, 1e-1, log=True)))
+            model.add(GaussianNoise(trial.suggest_float("adam_learning_rate", 1e-7, 1e-3, log=True)))
 
         model.add(Dropout(dropout, name="opt_drop_"+str(i)))
 
@@ -198,13 +199,13 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     else:
         optimizer_selected = trial.suggest_categorical("optimizer", optimizer_options)
     if optimizer_selected == "Adam":
-        kwargs["learning_rate"] = trial.suggest_float("adam_learning_rate", 1e-5, 1e-1, log=True)
+        kwargs["learning_rate"] = trial.suggest_float("adam_learning_rate", 1e-7, 1e-3, log=True)
         kwargs["epsilon"] = trial.suggest_float(
             "adam_epsilon", 1e-14, 1e-4, log=True
         )
     elif optimizer_selected == "SGD":
         kwargs["learning_rate"] = trial.suggest_float(
-            "sgd_opt_learning_rate", 1e-5, 1e-2, log=True
+            "sgd_opt_learning_rate", 1e-7, 1e-3, log=True
         )
         kwargs["momentum"] = trial.suggest_float("sgd_opt_momentum", 0.8, 0.95)
 
@@ -224,27 +225,27 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
 def build_model_storm(hp, *args):
     #### Before every sequential model definition you need to clear the Keras backend ##
     keras.backend.clear_session()
-
+    
     ######  we need to use the batch_size in a few small sizes ####
     if len(args) == 2:
         batch_limit, batch_nums = args[0], args[1]
-        batch_size = hp.Param('batch_size', [32, 48, 64, 96, 128, 256],
+        batch_size = hp.Param('batch_size', [32, 64, 128, 256, 512, 1024, 2048],
                  ordered=True)
     elif len(args) == 1:
         batch_size = args[0]
-        hp.Param('batch_size', [batch_size])
+        batch_size = hp.Param('batch_size', [batch_size])
     else:
-        hp.Param('batch_size', [32])
+        batch_size = hp.Param('batch_size', [64])
 
     num_layers = hp.Param('num_layers', [1, 2, 3], ordered=True)
     ##### Now let us build the model body ###############
     model_body = Sequential([])
 
     # example of model-wide unordered categorical parameter
-    activation_fn = hp.Param('activation', ['tanh','relu', 'selu', 'elu'])
+    activation_fn = hp.Param('activation', ['relu', 'selu', 'elu'])
     use_bias = hp.Param('use_bias', [True, False])
     #weight_decay = hp.Param("weight_decay", np.logspace(-8, -3))
-    weight_decay = hp.Param("weight_decay", [1e-8, 1e-7,1e-6, 1e-5,1e-4, 1e-3,1e-2, 1e-1])
+    weight_decay = hp.Param("weight_decay", [1e-8, 1e-7,1e-6, 1e-5,1e-4])
 
     batch_norm = hp.Param("batch_norm", [True, False])
     kernel_initializer = hp.Param("kernel_initializer",
@@ -275,14 +276,14 @@ def build_model_storm(hp, *args):
         # this param will not affect the configuration hash, if this block of code isn't executed
         # this is to ensure we do not test configurations that are functionally the same
         # but have different values for unused parameters
-        model_body.add(Dropout(hp.Param('dropout_value', [0.1, 0.2, 0.3, 0.4, 0.5], ordered=True),
+        model_body.add(Dropout(hp.Param('dropout_value', [0.5, 0.6, 0.7, 0.8, 0.9], ordered=True),
                                         name="dropout_0"))
 
     kernel_size =  hp.values['kernel_size_' + str(0)]
     if dropout_flag:
         dropout_value = hp.values['dropout_value']
     else:
-        dropout_value =  0.00
+        dropout_value =  0.5
     batch_norm_flag = hp.values['use_batch_norm']
     # example of inline ordered parameter
     num_copy = copy.deepcopy(num_layers)
@@ -367,10 +368,12 @@ class MyTuner(Tuner):
             save_model_architecture(comp_model, project_name, keras_model_type, cat_vocab_dict,
                 model_options, chart_name="model_before")
         #print('    Custom model compiled successfully. Training model next...')
+        batch_numbers = [32, 64, 128, 256, 512, 1024, 2048, 4096]
         shuffle_size = 1000
-        batch_sizes = np.linspace(8, batch_limit,batch_nums).astype(int).tolist()
-        batch_size = hp.Param('batch_size', batch_sizes, ordered=True)
-        #print('storm batch size = %s' %batch_size)
+        batch_sizes = batch_numbers[:batch_nums]
+        #print('storm batch sizes = %s' %batch_sizes)
+        batch_size = np.random.choice(batch_sizes)
+        #print('    selected batch size = %s' %batch_size)
         train_ds = train_ds.unbatch().batch(batch_size)
         train_ds = train_ds.shuffle(shuffle_size,
                         reshuffle_each_iteration=False, seed=42).prefetch(batch_size)#.repeat(5)
@@ -421,22 +424,23 @@ def return_optimizer_trials(hp, hpq_optimizer):
     nadam = keras.optimizers.Nadam(lr=0.001, beta_1=0.9, beta_2=0.999)
     best_optimizer = ''
     #############################################################################
+    lr_list = [1e-2, 1e-3, 1e-4]
     if hpq_optimizer.lower() in ['adam']:
-        best_optimizer = tf.keras.optimizers.Adam(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
+        best_optimizer = tf.keras.optimizers.Adam(lr=hp.Param('init_lr', lr_list),
             epsilon=hp.Param('epsilon', [1e-6, 1e-8, 1e-10, 1e-12, 1e-14], ordered=True))
     elif hpq_optimizer.lower() in ['sgd']:
-        best_optimizer = keras.optimizers.SGD(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
+        best_optimizer = keras.optimizers.SGD(lr=hp.Param('init_lr', lr_list),
                              momentum=0.9)
     elif hpq_optimizer.lower() in ['nadam']:
-        best_optimizer = keras.optimizers.Nadam(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
+        best_optimizer = keras.optimizers.Nadam(lr=hp.Param('init_lr', lr_list),
                          beta_1=0.9, beta_2=0.999)
     elif hpq_optimizer.lower() in ['adamax']:
-        best_optimizer = keras.optimizers.Adamax(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
+        best_optimizer = keras.optimizers.Adamax(lr=hp.Param('init_lr', lr_list),
                          beta_1=0.9, beta_2=0.999)
     elif hpq_optimizer.lower() in ['adagrad']:
-        best_optimizer = keras.optimizers.Adagrad(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]))
+        best_optimizer = keras.optimizers.Adagrad(lr=hp.Param('init_lr', lr_list))
     elif hpq_optimizer.lower() in ['rmsprop']:
-        best_optimizer = keras.optimizers.RMSprop(lr=hp.Param('init_lr', [1e-2, 1e-3, 1e-4]),
+        best_optimizer = keras.optimizers.RMSprop(lr=hp.Param('init_lr', lr_list),
                          rho=0.9)
     elif hpq_optimizer.lower() in ['nesterov']:
         best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
@@ -480,6 +484,10 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     data_size = check_keras_options(keras_options, 'data_size', 10000)
     batch_size = check_keras_options(keras_options, 'batchsize', 64)
     class_weights = check_keras_options(keras_options, 'class_weight', {})
+    if not isinstance(model_options["label_encode_flag"], str):
+        if not model_options["label_encode_flag"]:
+            print('    removing class weights since label_encode_flag is set to False which means classes can be anything.')
+            class_weights = {}
     print('    Class weights: %s' %class_weights)
     num_classes = model_options["num_classes"]
     num_labels = model_options["num_labels"]
@@ -503,7 +511,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
         print('    chosen ExponentialDecay learning rate scheduler')
         expo_steps = (NUMBER_OF_EPOCHS*data_size)//batch_size
-        learning_rate = keras.optimizers.schedules.ExponentialDecay(0.01, expo_steps, 0.1)
+        learning_rate = keras.optimizers.schedules.ExponentialDecay(0.0001, expo_steps, 0.1)
     else:
         learning_rate = check_keras_options(keras_options, "learning_rate", 5e-2)
     #### The steps are actually not needed but remove them later.###
@@ -542,10 +550,21 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
                             val_loss, num_predicts, output_activation))
     ####  just use modeltype for printing that's all ###
     modeltype = cat_vocab_dict['modeltype']
-    ### set some flags for choosing the right model buy here ###################
+    
+    ############################################################################
+    ### A Regular body does not have separate NLP outputs.  ####################
+    ### However an Irregular body like fast models have separate NLP outputs. ##
+    ############################################################################
     regular_body = True
     if isinstance(meta_outputs, list):
-        regular_body = False
+        if nlp_flag:
+            if len(nlp_outputs) > 0:
+                ### This is a true nlp and we need to use nlp inputs ##
+                regular_body = False
+            else:
+                regular_body = True
+        else:
+            regular_body = False
     ############################################################################
     
     ### check the defaults for the following!
@@ -584,7 +603,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
         try:
             y_test = np.concatenate(list(heldout_ds.map(lambda x,y: y).as_numpy_iterator()))
             print('    Single-Label: Heldout data shape: %s' %(y_test.shape,))
-            max_batch_size = y_test.shape[0]
+            max_batch_size = int(min(y_test.shape[0], 4096))
         except:
             max_batch_size = 48
             pass
@@ -644,7 +663,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
         tune_mode = val_mode
     if tuner.lower() == "storm":
         ########   S T O R M   T U N E R   D E F I N E D     H E R E ###########
-        randomization_factor = 0.25
+        randomization_factor = 0.5
         tuner = MyTuner(project_dir=trials_saved_path,
                     build_fn=build_model_storm,
                     objective_direction=tune_mode,
@@ -657,14 +676,14 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
         #### This is where you find best model parameters for keras using SToRM #####
         #############################################################################
         start_time1 = time.time()
-        print('    STORM Tuner max_trials = %d, randomization factor = %0.1f' %(
+        print('    STORM Tuner max_trials = %d, randomization factor = %0.2f' %(
                             max_trials, randomization_factor))
         tuner_epochs = 100  ### keep this low so you can run fast
         tuner_steps = STEPS_PER_EPOCH  ## keep this also very low
-        batch_limit = min(max_batch_size, int(2 * find_batch_size(data_size)))
-        batch_nums = int(min(5, 0.1 * batch_limit))
+        batch_limit = min(max_batch_size, int(5 * find_batch_size(data_size)))
+        batch_nums = int(min(8, math.log(batch_limit, 3)))
         print('Max. batch size = %d, number of batch sizes to try: %d' %(batch_limit, batch_nums))
-
+        
         #### You have to make sure that inputs are unique, otherwise error ####
         tuner.search(train_ds, valid_ds, tuner_epochs, tuner_steps,
                             inputs, meta_outputs, cols_len, output_activation,
@@ -825,7 +844,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
     for each_callback in callbacks_list:
         print('    Callback added: %s' %str(each_callback).split(".")[-1])
-
+    pdb.set_trace()
     ############################    M O D E L     T R A I N I N G   ##################
     np.random.seed(42)
     tf.random.set_seed(42)

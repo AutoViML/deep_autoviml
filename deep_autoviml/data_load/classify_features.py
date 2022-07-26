@@ -217,7 +217,7 @@ def classify_columns(df_preds, model_options={}, verbose=0):
     #### If there are 30 chars are more in a discrete_string_var, it is then considered an NLP variable
     ### if a variable has more than this many chars, it will be treated like a NLP variable
 
-    max_nlp_char_size = check_model_options(model_options, "nlp_char_limit", 30)
+    max_nlp_char_size = check_model_options(model_options, "nlp_char_limit", 50)
     ### if a variable has more than this limit, it will not be treated like a cat variable #
     #### Cat_Limit defines the max number of categories a column can have to be called a categorical colum
     cat_limit = check_model_options(model_options, "variable_cat_limit", 30)
@@ -502,7 +502,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     nlps = []
     bools = []
     ### if a variable has more than this many chars, it will be treated like a NLP variable
-    nlp_char_limit = check_model_options(model_options, "nlp_char_limit", 30)
+    nlp_char_limit = check_model_options(model_options, "nlp_char_limit", 50)
     ### if a variable has more than this limit, it will not be treated like a cat variable #
     cat_limit = check_model_options(model_options, "variable_cat_limit", 30)
     ### Classify features using the previously define function #############
@@ -540,7 +540,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
     floats = []
     preds_copy = copy.deepcopy(preds)
     for key in preds_copy:
-        if data_sample[key].dtype in ['object'] or str(data_sample[key].dtype) == 'category':
+        if str(data_sample[key].dtype) in ['object', 'category']:
             if type('str') in data_sample[key].map(type).value_counts().index:
                 feats_max_min[key]["dtype"] = "string"
             elif data_sample[key].map(type).value_counts().index[0] == int:
@@ -574,7 +574,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     discrete_strings.remove(key)
                     var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
         #### This is not a mistake - you have to test it again. That way we make sure type is safe
-        if data_sample[key].dtype in ['object'] or str(data_sample[key].dtype) == 'category':
+        if str(data_sample[key].dtype) in ['object', 'category']:
             if data_sample[key].map(type).value_counts().index[0] == object or data_sample[key].map(type).value_counts().index[0] == str:
                 feats_max_min[key]["dtype"] = "string"
         elif data_sample[key].dtype in ['bool']:
@@ -627,10 +627,11 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
             feats_max_min[key]["vocab"] = vocab
             feats_max_min[key]['size_of_vocab'] = len(vocab)
         elif feats_max_min[key]['dtype'] in ['string']:
-            data_types = len(data_sample[key].fillna("missing").map(type).value_counts())
+            data_sample[[key]] = data_sample[[key]].fillna("missing")
+            data_types = len(data_sample[key].map(type).value_counts())
             if data_types > 1:
                 print('\nDATA CLEANING ALERT: Dropping %s since it has %s mixed data types.' %(key, data_types))
-                print('    Transform variable to single data type and re-run. Continuing...')
+                print('    Convert this variable to a single data type and re-run deep_autoviml.')
                 ignore_variables.append(key)
                 preds.remove(key)
                 feats_max_min['predictors_in_train'] = preds
@@ -642,7 +643,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     discrete_strings.remove(key)
                     var_df1['discrete_string_vars'] = copy.deepcopy(discrete_strings)
             if not key in ignore_variables:
-                if np.mean(data_sample[key].fillna("missing").map(len)) >= nlp_char_limit:
+                if np.max(data_sample[key].map(len)) >= nlp_char_limit:
                     ### This is for NLP variables. You want to remove duplicates #####
                     if key in dates:
                         continue
@@ -652,7 +653,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     elif key in discrete_strings:
                         discrete_strings.remove(key)
                         var_df1['discrete_string_vars'] = discrete_strings
-                    print('%s is detected and will be treated as an NLP variable' %key)
+                    print('%s is detected as an NLP variable' %key)
                     if key not in var_df1['nlp_vars']:
                         var_df1['nlp_vars'].append(key)
                     #### Now let's calculate some statistics on this NLP variable ###
@@ -663,14 +664,14 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                         ### Immediately cap the vocab size to 300,000 - don't measure its vocab!!
                         data_sample = data_sample.sample(frac=0.1, random_state=0)
                     try:
-                        vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast))
+                        vocab = np.concatenate(data_sample[key].map(tokenize_fast))
                     except:
-                        vocab = np.concatenate(data_sample[key].fillna('missing').map(tokenize_fast).values)
+                        vocab = np.concatenate(data_sample[key].map(tokenize_fast).values)
                     vocab = np.unique(vocab).tolist()
                     feats_max_min[key]["vocab"] = vocab
                     try:
-                        feats_max_min[key]['seq_length'] = int(data_sample[key].fillna("missing").map(len).max())
-                        num_words_in_each_row = data_sample[key].fillna("missing").map(lambda x: len(x.split(" "))).mean()
+                        feats_max_min[key]['seq_length'] = int(data_sample[key].map(len).max())
+                        num_words_in_each_row = data_sample[key].map(lambda x: len(x.split(" "))).mean()
                         feats_max_min[key]['size_of_vocab'] = int(num_rows_in_data*num_words_in_each_row)
                     except:
                         feats_max_min[key]['seq_length'] = len(vocab) // num_rows_in_data
@@ -679,10 +680,8 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
                     ### This is for string variables ########
                     ####  Now we select features if they are present in the data set ###
                     num_rows_in_data = model_options['DS_LEN']
-                    if data_sample[key].isnull().sum() > 0:
-                        vocab = data_sample[key].fillna("missing").unique().tolist()
-                    else:
-                        vocab = data_sample[key].unique().tolist()
+                    data_sample[[key]] = data_sample[[key]].fillna("missing")
+                    vocab = data_sample[key].unique().tolist()
                     vocab = np.unique(vocab).tolist()
                     #vocab = ['missing' if type(x) != str  else x for x in vocab]
                     feats_max_min[key]["vocab"] = vocab
@@ -748,7 +747,7 @@ def classify_features_using_pandas(data_sample, target, model_options={}, verbos
         print('Not performing feature crossing for categorical nor integer variables' )
     return data_sample, var_df1, feats_max_min
 ############################################################################################
-def EDA_classify_and_return_cols_by_type(df1, nlp_char_limit=20):
+def EDA_classify_and_return_cols_by_type(df1, nlp_char_limit=50):
     """
     EDA stands for Exploratory data analysis. This function performs EDA - hence the name
     ########################################################################################
@@ -763,7 +762,8 @@ def EDA_classify_and_return_cols_by_type(df1, nlp_char_limit=20):
     nlpcols = []
     for each_cat in cats:
         try:
-            if df1[each_cat].map(len).mean() >=nlp_char_limit:
+            df1[[each_cat]] = df1[[each_cat]].fillna('missing')
+            if df1[each_cat].map(len).max() >=nlp_char_limit:
                 nlpcols.append(each_cat)
                 catcols.remove(each_cat)
         except:
@@ -775,7 +775,7 @@ def EDA_classify_and_return_cols_by_type(df1, nlp_char_limit=20):
     floatcols = df1.select_dtypes(include='float').columns.tolist()
     return catcols, int_cats, intcols, floatcols, nlpcols
 ############################################################################################
-def EDA_classify_features(train, target, idcols, nlp_char_limit=20):
+def EDA_classify_features(train, target, idcols, nlp_char_limit=50):
     ### Test Labeler is a very important dictionary that will help transform test data same as train ####
     test_labeler = defaultdict(list)
 
@@ -1081,7 +1081,7 @@ def classify_dtypes_using_TF2(data_sample, preds, idcols, verbose=0):
     """
     print_features = False
     nlps = []
-    nlp_char_limit = 30
+    nlp_char_limit = 50
     all_ints = []
     floats = []
     cats = []
@@ -1108,7 +1108,8 @@ def classify_dtypes_using_TF2(data_sample, preds, idcols, verbose=0):
                         int_vocab = tf.unique(value)[0].numpy().tolist()
                         feats_max_min[key]['size_of_vocab'] = len(int_vocab)
                     elif feats_max_min[key]['dtype'] in [tf.string]:
-                        if tf.reduce_mean(tf.strings.length(feature_batch[key])).numpy() >= nlp_char_limit:
+                        feature_batch[[key]] = feature_batch[[key]].fillna("missing")
+                        if tf.reduce_max(tf.strings.length(feature_batch[key])).numpy() >= nlp_char_limit:
                             print('%s is detected and will be treated as an NLP variable')
                             nlps.append(key)
                         else:

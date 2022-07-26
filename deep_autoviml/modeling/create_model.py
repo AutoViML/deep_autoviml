@@ -228,7 +228,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
     fast_models2 = ['deep_and_cross', 'deep_cross', 'deep cross', 'fast2']
     nlp_models = ['bert', 'use', 'text', 'mixed_nlp']
     #### The Deep and Wide Model is a bit more complicated. So it needs some changes in inputs! ######
-    prebuilt_models = ['basic', 'simple', 'default','dnn','reg_dnn',
+    prebuilt_models = ['basic', 'simple', 'default','dnn','reg_dnn', 'deep', 'big deep',
                          'dnn_drop', 'big_deep', 'giant_deep', 'giant deep',
                         'cnn1', 'cnn','cnn2']
     ######   Just do a simple check for auto models here ####################
@@ -269,10 +269,10 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
             elif keras_model_type.lower() in ['dnn', 'simple_dnn']:
                 ##########  Now that we have setup the layers correctly, we can build some more hidden layers
                 model_body = dnn.model
-            elif keras_model_type.lower() in ['dnn_drop', 'big_deep']:
+            elif keras_model_type.lower() in ['dnn_drop', 'big_deep', 'big deep']:
                 ####################################################
                 model_body = dnn_drop.model
-            elif keras_model_type.lower() in ['giant', 'giant_deep']:
+            elif keras_model_type.lower() in ['giant', 'giant_deep', 'giant deep']:
                 ####################################################
                 model_body = giant_deep.model
             elif keras_model_type.lower() in ['cnn', 'cnn1','cnn2']:
@@ -442,6 +442,7 @@ def create_model(use_my_model, nlp_inputs, meta_inputs, meta_outputs, nlp_output
         #### This final outputs is the one that is taken into final dense layer and compiled
         print('    %s model loaded successfully. Now compiling model...' %keras_model_type)
     #############  You need to compile the non-auto models here ###############
+    
     model_body = get_compiled_model(all_inputs, model_body, output_activation, num_predicts,
                             modeltype, optimizer, val_loss, val_metrics, cols_len, targets)
     print('    %s model loaded and compiled successfully...' %keras_model_type)
