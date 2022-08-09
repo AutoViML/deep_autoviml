@@ -706,12 +706,13 @@ def load_train_data_frame(train_dataframe, target, keras_options, model_options,
 
     #### if target is changed you must send that modified target back to other processes ######
     ### usecols is basically target in a list format. Very handy to know when target is a list.
-
+    
     try:
         modeltype = model_options["modeltype"]
         if model_options["modeltype"] == '':
             ### usecols is basically target in a list format. Very handy to know when target is a list.
             modeltype, model_label, usecols = find_problem_type(train_dataframe, target, model_options, verbose)
+            model_options["modeltype"] = modeltype
         else:
             if isinstance(target, str):
                 usecols = [target]
@@ -1290,10 +1291,11 @@ def select_rows_from_file_or_frame(train_datafile, model_options, targets, nrows
     modeltype = model_options['modeltype']
     compression = model_options['compression']
     ####### we randomly sample a small dataset to classify features #####################
-    test_size = min(0.9, (1 - (nrows_limit/DS_LEN))) ### make sure there is a small train size
+    test_size = min(0.9, (1 - (nrows_limit/DS_LEN))) ### make sure there is a small train size    
     if test_size <= 0:
         test_size = 0.9
-    print('    Since number of rows > maxrows, loading a random sample of %d rows into pandas for EDA' %nrows_limit)
+    if DS_LEN > nrows_limit:
+        print('    Since number of rows > %s, loading a random sample of %d rows into pandas for EDA' %(nrows_limit, DS_LEN))
     ######  If it is a file you need to load it into a dataframe, it not leave it as is ###
     if isinstance(train_datafile, str):
         ###### load a small sample of data into a pandas dataframe ##
@@ -1306,6 +1308,7 @@ def select_rows_from_file_or_frame(train_datafile, model_options, targets, nrows
     else:
         train_small = copy.deepcopy(train_datafile)
     ####### If it is a classification problem, you need to stratify and select sample ###
+    
     if modeltype != 'Regression':
         copy_targets = copy.deepcopy(targets)
         for each_target in copy_targets:
@@ -1315,6 +1318,9 @@ def select_rows_from_file_or_frame(train_datafile, model_options, targets, nrows
         train_small, _ = train_test_split(train_small, test_size=test_size, stratify=train_small[targets])
     else:
         ### For Regression problems: load a small sample of data into a pandas dataframe ##
-        train_small = train_small.sample(n=nrows_limit, random_state=99)
+        if DS_LEN <= nrows_limit:
+            train_small = train_small.sample(n=DS_LEN, random_state=99)
+        else:
+            train_small = train_small.sample(n=nrows_limit, random_state=99)
     return train_small
 ######################################################################################

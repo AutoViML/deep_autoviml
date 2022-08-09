@@ -844,7 +844,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
     print('Model training with best hyperparameters for %d epochs' %NUMBER_OF_EPOCHS)
     for each_callback in callbacks_list:
         print('    Callback added: %s' %str(each_callback).split(".")[-1])
-    pdb.set_trace()
+    
     ############################    M O D E L     T R A I N I N G   ##################
     np.random.seed(42)
     tf.random.set_seed(42)
