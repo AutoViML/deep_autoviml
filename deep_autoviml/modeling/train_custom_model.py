@@ -155,8 +155,7 @@ def build_model_optuna(trial, inputs, meta_outputs, output_activation, num_predi
     n_layers = trial.suggest_int("n_layers", 2, 8)
     #num_hidden = trial.suggest_categorical("n_units", [32, 48, 64, 96, 128])
     num_hidden = trial.suggest_categorical("n_units", [50, 100, 150, 200, 250, 300, 350, 400, 450, 500])
-    #weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
-    weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-7,1e-6, 1e-5,1e-4, 1e-3)
+    weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
     use_bias = trial.suggest_categorical("use_bias", [True, False])
     batch_norm = trial.suggest_categorical("batch_norm", [True, False])
     add_noise = trial.suggest_categorical("add_noise", [True, False])
@@ -245,7 +244,8 @@ def build_model_storm(hp, *args):
     activation_fn = hp.Param('activation', ['relu', 'selu', 'elu'])
     use_bias = hp.Param('use_bias', [True, False])
     #weight_decay = hp.Param("weight_decay", np.logspace(-8, -3))
-    weight_decay = hp.Param("weight_decay", [1e-8, 1e-7,1e-6, 1e-5,1e-4])
+    weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
+    #weight_decay = hp.Param("weight_decay", [1e-8, 1e-7,1e-6, 1e-5,1e-4])
 
     batch_norm = hp.Param("batch_norm", [True, False])
     kernel_initializer = hp.Param("kernel_initializer",

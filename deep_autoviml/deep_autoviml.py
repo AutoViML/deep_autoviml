@@ -50,7 +50,6 @@ from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import regularizers
 from tensorflow.keras.models import Model, load_model
 import tensorflow_hub as hub
-import mlflow
 
 #############################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
@@ -243,6 +242,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
 
     #############MLFLOW Check####################################
     if use_mlflow:
+        import mlflow
         mlflow.set_experiment(mlflow_exp_name)
         mlflow.start_run(run_name=mlflow_run_name)
         mlflow.tensorflow.autolog(every_n_iter=1)
