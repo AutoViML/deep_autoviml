@@ -234,7 +234,7 @@ def build_model_storm(hp, *args):
         batch_size = args[0]
         batch_size = hp.Param('batch_size', [batch_size])
     else:
-        batch_size = hp.Param('batch_size', [64])
+        batch_size = hp.Param('batch_size', [32, 64, 128, 256, 512, 1024, 2048])
 
     num_layers = hp.Param('num_layers', [1, 2, 3], ordered=True)
     ##### Now let us build the model body ###############
@@ -243,8 +243,7 @@ def build_model_storm(hp, *args):
     # example of model-wide unordered categorical parameter
     activation_fn = hp.Param('activation', ['relu', 'selu', 'elu'])
     use_bias = hp.Param('use_bias', [True, False])
-    #weight_decay = hp.Param("weight_decay", np.logspace(-8, -3))
-    weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
+    weight_decay = hp.Param("weight_decay", np.logspace(-8, -3, 10))
     #weight_decay = hp.Param("weight_decay", [1e-8, 1e-7,1e-6, 1e-5,1e-4])
 
     batch_norm = hp.Param("batch_norm", [True, False])
