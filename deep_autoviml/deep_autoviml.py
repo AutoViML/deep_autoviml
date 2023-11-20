@@ -324,7 +324,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                                             project_name, save_model_flag)
         print(deep_model.summary())
         return deep_model, cat_vocab_dict
-    elif keras_model_type.lower() in ['predict time series', 'time series', "time_series" "predict_time_series"]:
+    elif keras_model_type.lower() in ['predict time series', 'time series', "time_series", "predict_time_series"]:
         """
         Author: Adarsh C
         contact: chekodu.adarsh@gmail.com
