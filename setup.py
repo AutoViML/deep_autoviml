@@ -20,7 +20,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="deep_autoviml",
-    version="0.0.77",
+    version="0.0.83",
     author="Ram Seshadri",
     # author_email="author@example.com",
     description="Automatically Build Deep Learning Models and Pipelines fast!",
@@ -40,17 +40,17 @@ setuptools.setup(
     install_requires=[
         "ipython",
         "jupyter",
-        "tensorflow==2.5.2",
+        "tensorflow~=2.5",
         "pandas",
         "matplotlib",
-        "numpy==1.19.2",
-        "scikit-learn>=0.23.1",
+        "numpy~=1.19.2",
+        "scikit-learn>=0.23.1, <=0.24.2",
         "regex",
         "emoji",
         "storm-tuner>=0.0.8",
         "optuna",
-        "tensorflow_hub==0.12.0",
-        "tensorflow-text==2.5.0",
+        "tensorflow_hub~=0.12.0",
+        "tensorflow-text~=2.5",
         "xlrd"
     ],
     classifiers=[

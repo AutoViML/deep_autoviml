@@ -3,9 +3,9 @@ jupyter
 tensorflow==2.7.0
 keras=2.7.0
 pandas
-numpy==1.19.2
+numpy~=1.19.2
 matplotlib
-scikit-learn>=0.23.1
+scikit-learn>=0.23.1, <=0.24.2
 regex
 storm-tuner>=0.0.8
 emoji

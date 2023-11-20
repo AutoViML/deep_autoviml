@@ -132,7 +132,7 @@ def transform_train_target(train_target, target, modeltype, model_label, cat_voc
     train_target = copy.deepcopy(train_target)
     cat_vocab_dict = copy.deepcopy(cat_vocab_dict)
     ### Just have to change the target from string to Numeric in entire dataframe! ###
-
+    
     if modeltype != 'Regression':
         if model_label == 'Multi_Label':
             target_copy = copy.deepcopy(target)
@@ -315,34 +315,50 @@ def load_train_data_file(train_datafile, target, keras_options, model_options, v
         ### if modeltype is given, then do not find the model type using this function
         _,  _, usecols = find_problem_type(train_small, target, model_options, verbose)
 
-    label_encode_flag = False
+    
     ##########  Find small details about the data to help create the right model ###
-
-    if modeltype == 'Classification' or modeltype == 'Multi_Classification':
+    label_encode_flag = model_options["label_encode_flag"]
+    if isinstance(label_encode_flag, str):
+        if modeltype == 'Classification' or modeltype == 'Multi_Classification':
+            if isinstance(target, str):
+                #### This is for Single-Label problems ########
+                if train_small[target].dtype == 'object' or str(train_small[target].dtype).lower() == 'category':
+                    label_encode_flag = True
+                elif 0 not in np.unique(train_small[target]):
+                    label_encode_flag = False 
+                    if verbose:
+                        print('    label encoding must be done since there is no zero class!')
+                target_vocab = train_small[target].unique()
+                num_classes = len(target_vocab)
+            elif isinstance(target, list):
+                #### This is for Multi-Label problems ########
+                num_classes = []
+                for each_target in target:
+                    if train_small[each_target].dtype == 'object' or str(train_small[target[0]].dtype).lower() == 'category':
+                        label_encode_flag = True
+                    elif 0 not in np.unique(train_small[each_target]):
+                        label_encode_flag = False
+                        if verbose:
+                            print('    label encoding must be done since there is no zero class!')
+                    target_vocab = train_small[each_target].unique().tolist()
+                    num_classes.append(len(target_vocab))
+        else:
+            num_classes = 1
+            target_vocab = []
+            label_encode_flag =  False
+    else:
         if isinstance(target, str):
-            #### This is for Single-Label problems ########
-            if train_small[target].dtype == 'object' or str(train_small[target].dtype).lower() == 'category':
-                label_encode_flag = True
-            elif 0 not in np.unique(train_small[target]):
-                label_encode_flag = True ### label encoding must be done since no zero class!
             target_vocab = train_small[target].unique()
             num_classes = len(target_vocab)
-        elif isinstance(target, list):
-            #### This is for Multi-Label problems ########
-            num_classes = []
-            for each_target in target:
-                if train_small[each_target].dtype == 'object' or str(train_small[target[0]].dtype).lower() == 'category':
-                    label_encode_flag = True
-                elif 0 not in np.unique(train_small[each_target]):
-                    label_encode_flag = True
-                target_vocab = train_small[each_target].unique().tolist()
-                num_classes.append(len(target_vocab))
-    else:
-        num_classes = 1
-        target_vocab = []
+        else:
+            for each_target in copy_target:
+                target_vocab = train_small[target].unique().tolist()
+                num_classes_each = len(target_vocab)
+                num_classes.append(int(num_classes_each))
+                
     #### This is where we set the model_options for num_classes and num_labels #########
     model_options['num_classes'] = num_classes
-
+    
     #############   Sample Data classifying features into variaous types ##################
     print('Loaded a small data sample of size = %s into pandas dataframe to analyze...' %(train_small.shape,))
     ### classify variables using the small dataframe ##
@@ -695,12 +711,13 @@ def load_train_data_frame(train_dataframe, target, keras_options, model_options,
 
     #### if target is changed you must send that modified target back to other processes ######
     ### usecols is basically target in a list format. Very handy to know when target is a list.
-
+    
     try:
         modeltype = model_options["modeltype"]
         if model_options["modeltype"] == '':
             ### usecols is basically target in a list format. Very handy to know when target is a list.
             modeltype, model_label, usecols = find_problem_type(train_dataframe, target, model_options, verbose)
+            model_options["modeltype"] = modeltype
         else:
             if isinstance(target, str):
                 usecols = [target]
@@ -732,37 +749,49 @@ def load_train_data_frame(train_dataframe, target, keras_options, model_options,
     cat_vocab_dict['modeltype'] = modeltype
     model_options['batch_size'] = batch_size
     ##########  Find small details about the data to help create the right model ###
-    target_transformed = False
-    if modeltype != 'Regression':
-        if isinstance(target, str):
-            #### This is for Single Label Problems ######
-            if train_small[target].dtype == 'object' or str(train_small[target].dtype).lower() == 'category':
-                target_transformed = True
-                target_vocab = train_small[target].unique()
-                num_classes = len(target_vocab)
-            else:
-                if 0 not in np.unique(train_small[target]):
-                    target_transformed = True ### label encoding must be done since no zero class!
-                    target_vocab = train_small[target].unique()
-                num_classes = len(train_small[target].value_counts())
-        elif isinstance(target, list):
-            #### This is for Multi-Label Problems #######
-            copy_target = copy.deepcopy(target)
-            num_classes = []
-            for each_target in copy_target:
-                if train_small[target[0]].dtype == 'object' or str(train_small[target[0]].dtype).lower() == 'category':
+    target_transformed = model_options["label_encode_flag"]
+    if isinstance(target_transformed, str):
+        if modeltype != 'Regression':
+            if isinstance(target, str):
+                #### This is for Single Label Problems ######
+                if train_small[target].dtype == 'object' or str(train_small[target].dtype).lower() == 'category':
                     target_transformed = True
-                    target_vocab = train_small[target].unique().tolist()
-                    num_classes_each = len(target_vocab)
+                    target_vocab = train_small[target].unique()
+                    num_classes = len(target_vocab)
                 else:
-                    if 0 not in np.unique(train_small[target[0]]):
+                    if 0 not in np.unique(train_small[target]):
                         target_transformed = True ### label encoding must be done since no zero class!
-                        target_vocab = train_small[target[0]].unique()
-                    num_classes_each = train_small[target].apply(np.unique).apply(len).max()
-                num_classes.append(int(num_classes_each))
+                        target_vocab = train_small[target].unique()
+                    num_classes = len(train_small[target].value_counts())
+            elif isinstance(target, list):
+                #### This is for Multi-Label Problems #######
+                copy_target = copy.deepcopy(target)
+                num_classes = []
+                for each_target in copy_target:
+                    if train_small[target[0]].dtype == 'object' or str(train_small[target[0]].dtype).lower() == 'category':
+                        target_transformed = True
+                        target_vocab = train_small[target].unique().tolist()
+                        num_classes_each = len(target_vocab)
+                    else:
+                        if 0 not in np.unique(train_small[target[0]]):
+                            target_transformed = True ### label encoding must be done since no zero class!
+                            target_vocab = train_small[target[0]].unique()
+                        num_classes_each = train_small[target].apply(np.unique).apply(len).max()
+                    num_classes.append(int(num_classes_each))
+        else:
+            num_classes = 1
+            target_vocab = []
+            target_transformed = False
     else:
-        num_classes = 1
-        target_vocab = []
+        if isinstance(target, str):
+            target_vocab = train_small[target].unique()
+            num_classes = len(target_vocab)
+        else:
+            for each_target in copy_target:
+                target_vocab = train_small[target].unique().tolist()
+                num_classes_each = len(target_vocab)
+                num_classes.append(int(num_classes_each))
+
     ########### find the number of labels in data ####
     if isinstance(target, str):
         num_labels = 1
@@ -777,7 +806,7 @@ def load_train_data_frame(train_dataframe, target, keras_options, model_options,
     cat_vocab_dict['num_labels'] = num_labels
     cat_vocab_dict['num_classes'] = num_classes
     cat_vocab_dict["target_transformed"] = target_transformed
-
+    
     #### once the dataframe has been classified, you can again change train_small to original dataframe ##
     train_small = copy.deepcopy(train_dataframe)
 
@@ -1059,18 +1088,23 @@ def load_train_data(train_data_or_file, target, project_name, keras_options, mod
         y[NLP_COLUMN] = tf.strings.reduce_join([features[i] for i in NLP_VARS],axis=0,
                 keepdims=False, separator=' ')
         return y
-    ################################################################
+    ######################################################################################
     ### You have to load only the NLP or text variables into dataset. 
     ###    otherwise, it will fail during predict. Yo still need to create input for them.
     ###  In mixed_NLP models, you drop original NLP vars and combine them into one NLP var.
-    if NLP_VARS and keras_model_type.lower() in ['nlp','text']:
+    ######################################################################################
+    
+    if NLP_VARS and keras_model_type.lower() in ['nlp','text', 'mixed_nlp', 'combined_nlp']:
         if keras_model_type.lower() in ['nlp', 'text']:
             train_ds = train_ds.map(lambda x, y: (process_NLP_features(x), y))
             #train_ds = train_ds.unbatch().batch(batch_size)
             print('    processed NLP or text vars: %s successfully' %NLP_VARS)
-        else:
+        elif keras_model_type.lower() in ['combined_nlp']:
             train_ds = train_ds.map(lambda x, y: (combine_nlp_text(x), y))
             print('    combined NLP or text vars: %s into a single feature successfully' %NLP_VARS)
+        else:
+            ### Mixed NLP is to keep NLP vars separate so they can be processed individually ##
+            print('    keeping NLP vars separate')
     else:
         print('     No special text preprocessing done for NLP vars.')
     ############################################################################
@@ -1305,10 +1339,11 @@ def select_rows_from_file_or_frame(train_datafile, model_options, targets, nrows
     modeltype = model_options['modeltype']
     compression = model_options['compression']
     ####### we randomly sample a small dataset to classify features #####################
-    test_size = min(0.9, (1 - (nrows_limit/DS_LEN))) ### make sure there is a small train size
+    test_size = min(0.9, (1 - (nrows_limit/DS_LEN))) ### make sure there is a small train size    
     if test_size <= 0:
         test_size = 0.9
-    print('    Since number of rows > maxrows, loading a random sample of %d rows into pandas for EDA' %nrows_limit)
+    if DS_LEN > nrows_limit:
+        print('    Since number of rows > %s, loading a random sample of %d rows into pandas for EDA' %(nrows_limit, DS_LEN))
     ######  If it is a file you need to load it into a dataframe, it not leave it as is ###
     if isinstance(train_datafile, str):
         ###### load a small sample of data into a pandas dataframe ##
@@ -1321,6 +1356,7 @@ def select_rows_from_file_or_frame(train_datafile, model_options, targets, nrows
     else:
         train_small = copy.deepcopy(train_datafile)
     ####### If it is a classification problem, you need to stratify and select sample ###
+    
     if modeltype != 'Regression':
         copy_targets = copy.deepcopy(targets)
         for each_target in copy_targets:
@@ -1330,6 +1366,9 @@ def select_rows_from_file_or_frame(train_datafile, model_options, targets, nrows
         train_small, _ = train_test_split(train_small, test_size=test_size, stratify=train_small[targets])
     else:
         ### For Regression problems: load a small sample of data into a pandas dataframe ##
-        train_small = train_small.sample(n=nrows_limit, random_state=99)
+        if DS_LEN <= nrows_limit:
+            train_small = train_small.sample(n=DS_LEN, random_state=99)
+        else:
+            train_small = train_small.sample(n=nrows_limit, random_state=99)
     return train_small
 ######################################################################################

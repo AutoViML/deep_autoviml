@@ -67,7 +67,7 @@ map_name_to_handle = {
         'https://tfhub.dev/tensorflow/talkheads_ggelu_bert_en_base/2',
 }
 
-map_hub_to_name = dict([(v,k) for (k,v) in map_name_to_handle.items()])
+map_hub_to_name = {v: k for (k,v) in map_name_to_handle.items()}
 
 map_name_to_preprocess = {
     'bert_en_uncased_L-12_H-768_A-12':
