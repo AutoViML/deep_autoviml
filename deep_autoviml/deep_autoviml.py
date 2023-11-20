@@ -53,7 +53,6 @@ import tensorflow_hub as hub
 
 #############################################################################################
 from sklearn.metrics import roc_auc_score, mean_squared_error, mean_absolute_error
-from sklearn.model_selection import train_test_split
 from IPython.core.display import Image, display
 import pickle
 #############################################################################################
@@ -85,7 +84,7 @@ from .data_load.classify_features import EDA_classify_features
 from .data_load.extract import find_problem_type, transform_train_target
 from .data_load.extract import load_train_data, load_train_data_file
 from .data_load.extract import load_train_data_frame, load_image_data
-from .data_load.extract import load_text_data, load_train_timeseries
+from .data_load.extract import load_text_data
 
 # keras preprocessing
 from .preprocessing.preprocessing import perform_preprocessing
@@ -108,10 +107,6 @@ from .utilities.utilities import print_one_row_from_tf_dataset
 from .utilities.utilities import print_one_row_from_tf_label
 from .utilities.utilities import check_if_GPU_exists, plot_history
 from .utilities.utilities import save_model_architecture
-
-
-from .models import basic, dnn, reg_dnn, dnn_drop, giant_deep, cnn1, cnn2, lstm1, gru1, rnn1
-
 
 #############################################################################################
 ### Split raw_train_set into train and valid data sets first
@@ -227,12 +222,6 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             "image_channels": default is "" (empty string). Needed only for image use case. Number of channels.
             'save_model_path': default is project_name/keras_model_type/datetime-hour-min/
                         If you provide your own model path as a string, it will save it there.
-            "features": list: list of features from thhe input time series data (to be considered for timeseries prediciton).
-            "window_length": window length for the time series data (to be considered for timeseries prediciton).
-            "sampling_rate": sampling rate for te time series data (to be considered for timeseries prediciton).
-            "stride": stride for the time series (to be considered for timeseries prediciton)).
-            "validation_size": train and validation split ratio (to be considered for timeseries prediciton).
-            "prebuilt-model": select the pre build model from "lstm". "gru", "rnn" ( to be considered for timeseries prediciton).
     model_use_case: default is "" (empty string). If "pipeline", you will get back pipeline only, not model.
                 It is a placeholder for future purposes. At the moment, leave it as empty string.
     verbose = 1 will give you more charts and outputs. verbose 0 will run silently
@@ -277,6 +266,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
         os.makedirs(save_logs_path, exist_ok = True)
 
     print('Model and logs being saved in %s' %save_model_path)
+
     if keras_model_type.lower() in ['image', 'images', "image_classification"]:
         ###############   Now do special IMAGE processing here ###################################
         if 'image_directory' in model_options.keys():
@@ -333,8 +323,6 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             print('\nSplitting train into 80+20 percent: train and validation data')
             valid_ds = full_ds.enumerate().filter(is_valid).map(recover)
             train_ds = full_ds.enumerate().filter(is_train).map(recover)
-
-        
         ###################  P R E P R O C E S S    T E X T   #########################
         try:
             deep_model = preprocessing_text(train_ds, keras_model_type, model_options)
@@ -347,62 +335,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                                             project_name, save_model_flag)
         print(deep_model.summary())
         return deep_model, cat_vocab_dict
-    elif keras_model_type.lower() in ['predict time series', 'time series', "time_series", "predict_time_series"]:
-        """
-        Author: Adarsh C
-        contact: chekodu.adarsh@gmail.com
-        """
-        ############### Get the features columns ###################################
-        if 'features' in model_options.keys():
-            print(str(model_options['features'])+", features will be considered")
-        else:
-            print(' Must provide the features')
-            return 
-        ################   Load time series data   #########
 
-        train_generator, valid_generator, cat_vocab_dict = load_train_timeseries(
-                            train_data_or_file, target, project_name, keras_options_copy,
-                                model_options_copy, keras_model_type, verbose=verbose)
-        
-
-        
-        ###################  Choosing the Pre-Built model #########################
-        model = None
-        if model_options['prebuilt-model'].lower() == "lstm":
-            model = lstm1.make_lstm(model_options_copy)
-
-        elif model_options['prebuilt-model'].lower() == "rnn":
-            model = rnn1.make_rnn(model_options_copy)
-
-        elif model_options['prebuilt-model'].lower() == "gru":
-            model = gru1.make_gru(model_options_copy)
-        else:
-            print("Must choose lstm, gru, rnn in model_options['prebuilt-model'] ")
-            return
-         
-        print(model.summary())
-                        
-        ###################  Training the Pre-Built model #########################
-
-        model.compile(loss='binary_crossentropy', optimizer=keras_options_copy['optimizer'],metrics=['acc'])
-
-        if keras_options_copy["early_stopping"]:
-            early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
-                                                                patience=2,
-                                                                mode='min')
-                                                            
-            model.fit(train_generator, epochs=keras_options_copy['epochs'],batch_size=keras_options_copy['batch_size'], 
-                        validation_data=valid_generator, 
-                        shuffle=False,
-                        callbacks=[early_stopping])
-        else:
-            model.fit(train_generator, epochs=keras_options_copy['epochs'],batch_size=keras_options_copy['batch_size'], 
-                        validation_data=valid_generator, 
-                        shuffle=False)
-
-        cat_vocab_dict['train_generator'] = train_generator
-        cat_vocab_dict['valid_generator'] = valid_generator
-        return model, cat_vocab_dict
     shuffle_flag = False
     ####   K E R A S    O P T I O N S   - THESE CAN BE OVERRIDDEN by your input keras_options dictionary ####
     keras_options_defaults = {}

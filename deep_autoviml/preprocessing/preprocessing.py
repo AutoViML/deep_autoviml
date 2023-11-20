@@ -218,7 +218,7 @@ def perform_preprocessing(train_ds, var_df, cat_vocab_dict, keras_model_type,
                 merged = meta_outputs
             final_training_order = nlp_names + meta_names
             ### find their dtypes - remember to use element_spec[0] for train data sets!
-            ds_types = {col_name: train_ds.element_spec[0][col_name].dtype for col_name in final_training_order }
+            ds_types = dict([(col_name, train_ds.element_spec[0][col_name].dtype) for col_name in final_training_order ])
             col_type_tuples = [(name,ds_types[name]) for name in final_training_order]
             if verbose >= 2:
                 print('Inferred column names, layers and types (double-check for duplicates and correctness!): \n%s' %col_type_tuples)
