@@ -212,7 +212,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
             "compression": None => you can set it to zip or other file compression formats if your data is compressed
             "csv_encoding": default 'utf-8'. But you can set it to any other csv encoding format your data is in
             "label_encode_flag": False. But you can set it to True if you want it encoded.
-            "max_trials": default = 30 ## number of Storm Tuner trials ### Lower this for faster processing.
+            "max_trials": default = 5 ## number of Storm Tuner trials ### Lower this for faster processing.
             "tuner": default = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
             "embedding_size": default = 50 ## this is the NLP embedding size minimum
             "tf_hub_model": default "" (empty string). If you want to supply TF hub model, provide URL here.
@@ -361,7 +361,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
                             "patience", "epochs", "steps_per_epoch", "optimizer",
                             "kernel_initializer", "num_layers", "class_weight",
                             "loss", "metrics", "monitor","mode", "lr_scheduler","early_stopping",
-                            "class_weight"]
+                            ]
 
     keras_options = copy.deepcopy(keras_options_defaults)
     if len(keras_options_copy) > 0:
@@ -389,7 +389,7 @@ def fit(train_data_or_file, target, keras_model_type="basic", project_name="deep
     model_options_defaults['compression'] = None ## is is needed in case to read Zip files
     model_options_defaults["label_encode_flag"] = '' ## User can set it to True or False depending on their need.
     model_options_defaults["header"] = 0 ### this is the header row for pandas to read
-    model_options_defaults["max_trials"] = 30 ## number of Storm Tuner trials ###
+    model_options_defaults["max_trials"] = 5 ## The number of Storm Tuner trials - make it small ###
     model_options_defaults['tuner'] = 'storm'  ## Storm Tuner is the default tuner. Optuna is the other option.
     model_options_defaults["embedding_size"] = "" ## this is the NLP embedding size minimum
     model_options_defaults["tf_hub_model"] = "" ## If you want to use a pretrained Hub model, provide URL here.

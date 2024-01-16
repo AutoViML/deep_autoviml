@@ -820,7 +820,11 @@ def add_outputs_to_model_body(model_body, meta_outputs):
     ##### This is the simplest way to convert a sequential model to functional!
     for num, each_layer in enumerate(model_body.layers):
         if num == 0:
-            final_outputs = each_layer(meta_outputs)
+            if isinstance(meta_outputs,list):
+                combined_input = layers.concatenate(meta_outputs, name='auto_combined_layer')
+                final_outputs = each_layer(combined_input)
+            else:
+                final_outputs = each_layer(meta_outputs)
         else:
             final_outputs = each_layer(final_outputs)
     return final_outputs

@@ -157,6 +157,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     callbacks_dict, tb_logpath = get_callbacks(val_mode, val_monitor, patience, learning_rate, 
                             save_weights_only, onecycle_steps, save_model_path)
 
+    early_stopping = check_keras_options(keras_options, "early_stopping", False)
     if keras_options['lr_scheduler'] in ['expo', 'ExponentialDecay', 'exponentialdecay']:
         if early_stopping:
             callbacks_list = [callbacks_dict['early_stop'], callbacks_dict['print']]

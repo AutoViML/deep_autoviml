@@ -45,7 +45,7 @@ model, cat_vocab_dict = deepauto.fit(train, target, keras_model_type="fast",
 		model_options=model_options, save_model_flag=True, use_my_model='',
 		model_use_case='', verbose=0)
 
-predictions = deepauto.predict(model, project_name, test_dataset=test,
+predictions = deepauto.predict(model, project_name="deep_autoviml", test_dataset=test,
                                  keras_model_type=keras_model_type, 
                                  cat_vocab_dict=cat_vocab_dict)
                                 """ %(module_type, version_number))
