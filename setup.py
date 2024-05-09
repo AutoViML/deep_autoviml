@@ -40,7 +40,7 @@ setuptools.setup(
     install_requires=[
         "ipython",
         "jupyter",
-        "tensorflow<=2.7",
+        "tensorflow>=2.8.0",
         "matplotlib>3.7.4",
         "numpy>=1.24",
         "pandas>=1.1.3, <2.0",
@@ -50,7 +50,7 @@ setuptools.setup(
         "storm-tuner>=0.0.8",
         "optuna",
         "tensorflow_hub~=0.12.0",
-        "tensorflow-text<=2.7",
+        "tensorflow-text>=2.9.0",
         "xlrd"
     ],
     classifiers=[

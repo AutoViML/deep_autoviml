@@ -22,6 +22,10 @@
 <li><a href="#license">License</a></li>
 </ul>
 
+
+## Update (May 2024): Now upgraded to tensorflow 2.12 - latest version of tensroflow!
+You can now use the latest version of tensorflow 2.8 and above to test your deep learning models thanks to deep_autoviml. Enjoy the upgrade!
+
 ## Update (Jan 2022): Now with mlflow!
 You can now add `mlflow` experiment tracking to all your deep_autoviml runs. [mlflow](https://mlflow.org/) is a popular python library for experiment tracking and MLOps in general. See more details below under `mlflow`.
 

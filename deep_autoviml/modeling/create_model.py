@@ -459,13 +459,13 @@ def return_optimizer(hpq_optimizer):
     """
     learning_rate_set = 5e-2
     ##### These are the various optimizers we use ################################
-    momentum = keras.optimizers.SGD(lr=learning_rate_set, momentum=0.9)
-    nesterov = keras.optimizers.SGD(lr=learning_rate_set, momentum=0.9, nesterov=True)
-    adagrad = keras.optimizers.Adagrad(lr=learning_rate_set)
-    rmsprop = keras.optimizers.RMSprop(lr=learning_rate_set, rho=0.9)
-    adam = keras.optimizers.Adam(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
-    adamax = keras.optimizers.Adamax(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
-    nadam = keras.optimizers.Nadam(lr=learning_rate_set, beta_1=0.9, beta_2=0.999)
+    momentum = keras.optimizers.SGD(learning_rate=learning_rate_set, momentum=0.9)
+    nesterov = keras.optimizers.SGD(learning_rate=learning_rate_set, momentum=0.9, nesterov=True)
+    adagrad = keras.optimizers.Adagrad(learning_rate=learning_rate_set)
+    rmsprop = keras.optimizers.RMSprop(learning_rate=learning_rate_set, rho=0.9)
+    adam = keras.optimizers.Adam(learning_rate=learning_rate_set, beta_1=0.9, beta_2=0.999)
+    adamax = keras.optimizers.Adamax(learning_rate=learning_rate_set, beta_1=0.9, beta_2=0.999)
+    nadam = keras.optimizers.Nadam(learning_rate=learning_rate_set, beta_1=0.9, beta_2=0.999)
     best_optimizer = ''
     #############################################################################
     #### This could be turned into a dictionary but for now leave is as is for readability ##

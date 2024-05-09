@@ -44,7 +44,7 @@ tf.random.set_seed(42)
 from tensorflow.keras import layers
 from tensorflow import keras
 from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup, Hashing
-from tensorflow.keras.layers.experimental.preprocessing import IntegerLookup, CategoryEncoding, CategoryCrossing
+from tensorflow.keras.layers.experimental.preprocessing import IntegerLookup, CategoryEncoding, HashedCrossing
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization, Discretization
 from tensorflow.keras.layers import Embedding, Flatten
 
@@ -935,7 +935,7 @@ def encode_cat_feature_crosses_numeric(encoded_input1, encoded_input2, dataset, 
     CategoryEncoding output dtype is float32 even if output is binary or count.
     """
     ###########   Categorical cross of two categorical features is done here    #########
-    cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.CategoryCrossing()(
+    cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.HashedCrossing()(
                                                 [encoded_input1, encoded_input2])
     hash_cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.Hashing(num_bins=bins_num)(
                                                 cross_cat1_cat2)
@@ -980,7 +980,7 @@ def encode_cat_feature_crosses(encoded_input1, encoded_input2, dataset, bins_num
     CategoryEncoding output dtype is float32 even if output is binary or count.
     """
     ###########   Categorical cross of two categorical features is done here    #########
-    cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.CategoryCrossing()(
+    cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.HashedCrossing()(
                                                 [encoded_input1, encoded_input2])
     hash_cross_cat1_cat2 = tf.keras.layers.experimental.preprocessing.Hashing(num_bins=bins_num)(
                                                 cross_cat1_cat2)
@@ -1028,7 +1028,7 @@ def encode_feature_crosses_lat_lon_numeric(cat_pickup_lat, cat_pickup_lon, datas
         nums_bin = max(20, int(nums_bin/40))
     ### nums_bin = (len(bins_lat) + 1) ** 2 ## this was the old one
     ###########   Categorical cross of two categorical features is done here    #########
-    cross_pick_lon_lat = tf.keras.layers.experimental.preprocessing.CategoryCrossing()(
+    cross_pick_lon_lat = tf.keras.layers.experimental.preprocessing.HashedCrossing()(
                             [cat_pickup_lat, cat_pickup_lon])
     hash_cross_pick_lon_lat = tf.keras.layers.experimental.preprocessing.Hashing(
                             num_bins=nums_bin)(cross_pick_lon_lat)

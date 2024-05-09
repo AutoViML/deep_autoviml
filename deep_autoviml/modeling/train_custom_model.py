@@ -37,7 +37,7 @@ def set_seed(seed=31415):
     os.environ['TF_DETERMINISTIC_OPS'] = '1'
 from tensorflow.keras import layers
 from tensorflow import keras
-from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup, CategoryCrossing
+from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup
 from tensorflow.keras.layers.experimental.preprocessing import IntegerLookup, CategoryEncoding
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization, Discretization, Hashing
 from tensorflow.keras.layers import Embedding, Reshape, Dropout, Dense, GaussianNoise
@@ -414,37 +414,37 @@ def return_optimizer_trials(hp, hpq_optimizer):
     hpq_optimizer: input string that stands for an optimizer such as "Adam", etc.
     """
     ##### These are the various optimizers we use ################################
-    momentum = keras.optimizers.SGD(lr=0.001, momentum=0.9)
-    nesterov = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
-    adagrad = keras.optimizers.Adagrad(lr=0.001)
-    rmsprop = keras.optimizers.RMSprop(lr=0.001, rho=0.9)
-    adam = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999)
-    adamax = keras.optimizers.Adamax(lr=0.001, beta_1=0.9, beta_2=0.999)
-    nadam = keras.optimizers.Nadam(lr=0.001, beta_1=0.9, beta_2=0.999)
+    momentum = keras.optimizers.SGD(learning_rate=0.001, momentum=0.9)
+    nesterov = keras.optimizers.SGD(learning_rate=0.001, momentum=0.9, nesterov=True)
+    adagrad = keras.optimizers.Adagrad(learning_rate=0.001)
+    rmsprop = keras.optimizers.RMSprop(learning_rate=0.001, rho=0.9)
+    adam = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999)
+    adamax = keras.optimizers.Adamax(learning_rate=0.001, beta_1=0.9, beta_2=0.999)
+    nadam = keras.optimizers.Nadam(learning_rate=0.001, beta_1=0.9, beta_2=0.999)
     best_optimizer = ''
     #############################################################################
     lr_list = [1e-2, 1e-3, 1e-4]
     if hpq_optimizer.lower() in ['adam']:
-        best_optimizer = tf.keras.optimizers.Adam(lr=hp.Param('init_lr', lr_list),
+        best_optimizer = tf.keras.optimizers.Adam(learning_rate=hp.Param('init_lr', lr_list),
             epsilon=hp.Param('epsilon', [1e-6, 1e-8, 1e-10, 1e-12, 1e-14], ordered=True))
     elif hpq_optimizer.lower() in ['sgd']:
         best_optimizer = keras.optimizers.SGD(lr=hp.Param('init_lr', lr_list),
                              momentum=0.9)
     elif hpq_optimizer.lower() in ['nadam']:
-        best_optimizer = keras.optimizers.Nadam(lr=hp.Param('init_lr', lr_list),
+        best_optimizer = keras.optimizers.Nadam(learning_rate=hp.Param('init_lr', lr_list),
                          beta_1=0.9, beta_2=0.999)
     elif hpq_optimizer.lower() in ['adamax']:
-        best_optimizer = keras.optimizers.Adamax(lr=hp.Param('init_lr', lr_list),
+        best_optimizer = keras.optimizers.Adamax(learning_rate=hp.Param('init_lr', lr_list),
                          beta_1=0.9, beta_2=0.999)
     elif hpq_optimizer.lower() in ['adagrad']:
-        best_optimizer = keras.optimizers.Adagrad(lr=hp.Param('init_lr', lr_list))
+        best_optimizer = keras.optimizers.Adagrad(learning_rate=hp.Param('init_lr', lr_list))
     elif hpq_optimizer.lower() in ['rmsprop']:
-        best_optimizer = keras.optimizers.RMSprop(lr=hp.Param('init_lr', lr_list),
+        best_optimizer = keras.optimizers.RMSprop(learning_rate=hp.Param('init_lr', lr_list),
                          rho=0.9)
     elif hpq_optimizer.lower() in ['nesterov']:
-        best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
+        best_optimizer = keras.optimizers.SGD(learning_rate=0.001, momentum=0.9, nesterov=True)
     else:
-        best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9)
+        best_optimizer = keras.optimizers.SGD(learning_rate=0.001, momentum=0.9)
     
     return best_optimizer
 #####################################################################################
@@ -715,7 +715,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
             ### In some cases, the tuner doesn't select a good config in that case ##
             best_batch = batch_size
             hpq_optimizer = 'SGD'
-            best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
+            best_optimizer = keras.optimizers.SGD(learning_rate=0.001, momentum=0.9, nesterov=True)
             optimizer_lr = 0.01
             print('    Storm Tuner is erroring. Hence picking defaults including lr = %s' %optimizer_lr)
 
@@ -799,7 +799,7 @@ def train_custom_model(nlp_inputs, meta_inputs, meta_outputs, nlp_outputs, full_
         else:
             best_outputs = add_outputs_to_auto_model_body(best_model, meta_outputs, nlp_flag)
             deep_outputs = add_outputs_to_auto_model_body(deep_model, meta_outputs, nlp_flag)
-        best_optimizer = keras.optimizers.SGD(lr=0.001, momentum=0.9, nesterov=True)
+        best_optimizer = keras.optimizers.SGD(learning_rate=0.001, momentum=0.9, nesterov=True)
         best_batch = batch_size
         optimizer_lr = best_optimizer.learning_rate.numpy()
         print('\nBest optimizer = %s and best learning_rate = %s' %(best_optimizer, optimizer_lr))

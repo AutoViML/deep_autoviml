@@ -33,7 +33,7 @@ from tensorflow import keras
 np.random.seed(42)
 tf.random.set_seed(42)
 from tensorflow.keras import layers
-from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup, CategoryCrossing
+from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup
 from tensorflow.keras.layers.experimental.preprocessing import IntegerLookup, CategoryEncoding
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization, Discretization, Hashing
 from tensorflow.keras.layers import Embedding, Reshape, Dropout, Dense

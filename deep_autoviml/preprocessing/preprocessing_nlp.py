@@ -45,7 +45,7 @@ tf.random.set_seed(42)
 from tensorflow.keras import layers
 from tensorflow import keras
 from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup, Hashing
-from tensorflow.keras.layers.experimental.preprocessing import IntegerLookup, CategoryEncoding, CategoryCrossing
+from tensorflow.keras.layers.experimental.preprocessing import IntegerLookup, CategoryEncoding
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization, Discretization
 from tensorflow.keras.layers import Embedding, Flatten
 

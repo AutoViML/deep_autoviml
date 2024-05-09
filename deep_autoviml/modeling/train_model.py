@@ -32,7 +32,7 @@ np.random.seed(42)
 tf.random.set_seed(42)
 from tensorflow.keras import layers
 from tensorflow import keras
-from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup, CategoryCrossing
+from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup
 from tensorflow.keras.layers.experimental.preprocessing import IntegerLookup, CategoryEncoding
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization, Discretization, Hashing
 from tensorflow.keras.layers import Embedding, Reshape, Dropout, Dense
@@ -144,7 +144,7 @@ def train_model(deep_model, full_ds, target, keras_model_type, keras_options,
     kernel_initializer = check_keras_options(keras_options, 'kernel_initializer', 'lecun_normal')
     activation='selu'
     print('    default initializer = %s, default activation = %s' %(kernel_initializer, activation))
-    default_optimizer = keras.optimizers.SGD(learning_rate)
+    default_optimizer = keras.optimizers.SGD(learning_rate=learning_rate)
     use_bias = check_keras_options(keras_options, 'use_bias', True)
     val_monitor = keras_options['monitor']
     val_mode = keras_options['mode']

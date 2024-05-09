@@ -36,7 +36,7 @@ def set_seed(seed=31415):
     os.environ['TF_DETERMINISTIC_OPS'] = '1'
 from tensorflow.keras import layers
 from tensorflow import keras
-from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup, CategoryCrossing
+from tensorflow.keras.layers.experimental.preprocessing import Normalization, StringLookup
 from tensorflow.keras.layers.experimental.preprocessing import IntegerLookup, CategoryEncoding
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization, Discretization, Hashing
 from tensorflow.keras.layers import Embedding, Reshape, Dropout, Dense, GaussianNoise
